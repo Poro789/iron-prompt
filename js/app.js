@@ -85,13 +85,40 @@ createApp({
     const showAiReviewModal = ref(false);
     const aiImportText = ref('');
 
-    const phases = [
-      { key: 'warmup', title: '1. 动态升温与激活', icon: '🔥', color: 'text-amber-400' },
-      { key: 'strength', title: '2. 主项力量与神经募集', icon: '🏋️', color: 'text-rose-400' },
-      { key: 'cooldown', title: '3. 静态拉伸与副交感下调', icon: '🧘', color: 'text-emerald-400' }
-    ];
+    // 阶段元数据与规范顺序（AI 处方可能引入 accessory / core 等新阶段）
+    const PHASE_ORDER = ['warmup', 'strength', 'accessory', 'core', 'cooldown'];
+    const PHASE_META = {
+      warmup:    { baseTitle: '动态升温与激活', icon: '🔥', color: 'text-amber-400' },
+      strength:  { baseTitle: '主项力量与神经募集', icon: '🏋️', color: 'text-rose-400' },
+      accessory: { baseTitle: '辅助强化与细节打磨', icon: '🎯', color: 'text-cyan-400' },
+      core:      { baseTitle: '核心稳定与抗旋转', icon: '🛡️', color: 'text-indigo-400' },
+      cooldown:  { baseTitle: '静态拉伸与副交感下调', icon: '🧘', color: 'text-emerald-400' }
+    };
 
-    const collapsedPhases = reactive({ warmup: false, strength: false, cooldown: false });
+    const phases = reactive(PHASE_ORDER.map(key => ({
+      key,
+      baseTitle: PHASE_META[key].baseTitle,
+      icon: PHASE_META[key].icon,
+      color: PHASE_META[key].color,
+      title: ''
+    })));
+
+    const renumberPhases = () => phases.forEach((p, i) => { p.title = `${i + 1}. ${p.baseTitle}`; });
+    renumberPhases();
+
+    const addPhaseIfMissing = (key) => {
+      if (phases.some(p => p.key === key)) return;
+      const meta = PHASE_META[key] || { baseTitle: key, icon: '📌', color: 'text-slate-300' };
+      const orderIdx = PHASE_ORDER.indexOf(key);
+      const entry = { key, baseTitle: meta.baseTitle, icon: meta.icon, color: meta.color, title: '' };
+      let insertAt = -1;
+      if (orderIdx >= 0) insertAt = phases.findIndex(p => PHASE_ORDER.indexOf(p.key) > orderIdx);
+      if (insertAt >= 0) phases.splice(insertAt, 0, entry); else phases.push(entry);
+      renumberPhases();
+      Object.values(plansData).forEach(plan => { if (!Array.isArray(plan.phases[key])) plan.phases[key] = []; });
+    };
+
+    const collapsedPhases = reactive({});
     const restTimer = reactive({ running: false, timeLeft: 0, timerId: null });
 
     const cueModal = reactive({ visible: false, ex: {} });
@@ -120,10 +147,18 @@ createApp({
     const plansData = reactive(JSON.parse(localStorage.getItem(STORAGE_KEY)) || INITIAL_PLANS);
     const equipment = reactive(JSON.parse(localStorage.getItem(EQUIP_KEY)) || DEFAULT_EQUIPMENT);
 
+    // 旧存档兼容：为每个计划补齐新增阶段 (accessory/core) 的空数组
+    PHASE_ORDER.forEach(key => Object.values(plansData).forEach(plan => {
+      if (plan.phases && !Array.isArray(plan.phases[key])) plan.phases[key] = [];
+    }));
+
     watch(plansData, (val) => localStorage.setItem(STORAGE_KEY, JSON.stringify(val)), { deep: true });
     watch(equipment, (val) => localStorage.setItem(EQUIP_KEY, JSON.stringify(val)), { deep: true });
 
     const activeSession = computed(() => plansData[currentPlan.value]);
+
+    // 主打卡视图只展示当前计划中有动作的阶段（空的 accessory/core 不占版面）
+    const visiblePhases = computed(() => phases.filter(p => (activeSession.value.phases[p.key] || []).length > 0));
 
     const showToast = (msg) => {
       toastMsg.value = msg;
@@ -483,35 +518,63 @@ createApp({
         if (data.coach_review) activeSession.value.coach_review = data.coach_review;
 
         if (data.prescription && Array.isArray(data.prescription)) {
+          const mapSets = (item) => (item.suggested_sets || []).map(s => ({
+            set_type: s.set_type || 'working',
+            weight: s.weight || 0,
+            value: s.value || 10,
+            rpe: s.rpe || 8,
+            done: false,
+            feedback: '',
+            prev_record: s.prev_record || `${s.weight ? s.weight + (item.mode === 'band_reps' ? '磅' : 'kg') + '×' + s.value : s.value + (item.mode === 'time' ? 's' : '次')}`
+          }));
+          let updatedCount = 0, addedCount = 0;
           data.prescription.forEach(item => {
             const targetPhase = item.phase || 'strength';
+            addPhaseIfMissing(targetPhase);
             const list = activeSession.value.phases[targetPhase];
-            if (list) {
-              const exist = list.find(e => e.name === item.name);
-              if (exist) {
-                exist.cues = item.cues || exist.cues;
-                exist.target = item.target || exist.target;
-                exist.pitfalls = item.pitfalls || exist.pitfalls;
-                exist.overload_status = item.overload_status || '';
-                exist.tempo = item.tempo || exist.tempo || [3, 1, 1];
-                exist.target_rest = item.target_rest || exist.target_rest;
-                exist.sets = (item.suggested_sets || []).map(s => ({
-                  set_type: s.set_type || 'working',
-                  weight: s.weight || 0,
-                  value: s.value || 10,
-                  rpe: s.rpe || 8,
-                  done: false,
-                  feedback: '',
-                  prev_record: s.prev_record || `${s.weight}kg×${s.value}`
-                }));
-              }
+            const exist = list.find(e => e.name === item.name);
+            if (exist) {
+              exist.mode = item.mode || exist.mode;
+              exist.cues = item.cues || exist.cues;
+              exist.target = item.target || exist.target;
+              exist.pitfalls = item.pitfalls || exist.pitfalls;
+              exist.overload_status = item.overload_status || '';
+              exist.tempo = item.tempo || exist.tempo || [3, 1, 1];
+              exist.target_rest = item.target_rest || exist.target_rest;
+              exist.sets = mapSets(item);
+              updatedCount++;
+            } else {
+              list.push({
+                name: item.name,
+                mode: item.mode || 'weight_reps',
+                overload_status: item.overload_status || '',
+                target: item.target || '',
+                cues: item.cues || '',
+                pitfalls: item.pitfalls || '',
+                tempo: item.tempo || [3, 1, 1],
+                target_rest: item.target_rest || 90,
+                sets: mapSets(item)
+              });
+              addedCount++;
             }
           });
           showConfigDrawer.value = false;
           aiImportText.value = '';
-          showToast(`🎉 成功导入 AI 处方并装载幽灵基准！`);
+          showToast(`🎉 AI 处方已装载：更新 ${updatedCount} 个动作，新增 ${addedCount} 个动作！`);
         }
       } catch(e) { alert('JSON 解析失败，请确认包含了完整的 AI 代码块'); }
+    };
+
+    // 粘贴即解析：粘贴的文本若能完整解析出处方 JSON，自动装载（解析失败则不打扰）
+    const onAiPaste = () => {
+      setTimeout(() => {
+        const t = aiImportText.value ? aiImportText.value.trim() : '';
+        if (!t.includes('"prescription"')) return;
+        const m = t.match(/```json([\s\S]*?)```/);
+        let ok = false;
+        try { JSON.parse((m ? m[1] : t).trim()); ok = true; } catch(e) {}
+        if (ok) parseAIResponse();
+      }, 50);
     };
 
     const exportJSONBackup = () => {
@@ -543,7 +606,7 @@ createApp({
     };
 
     return {
-      currentPlan, phases, collapsedPhases, activeSession, toastMsg, voiceEnabled, showConfigDrawer, configTab, showAiReviewModal, aiImportText,
+      currentPlan, phases, visiblePhases, collapsedPhases, activeSession, toastMsg, voiceEnabled, showConfigDrawer, configTab, showAiReviewModal, aiImportText,
       restTimer, tempoCoach, equipment, availableDumbbellOptions, availableBandOptions, sessionVolume,
       cueModal, editModal, weightPicker,
       openCueModal, openQuickEditModal, openWeightPicker, selectWeightFromPicker,
@@ -552,7 +615,7 @@ createApp({
       isExerciseDone, isPhaseFullyCompleted, getPhaseProgress,
       addExercise, removeExercise, addSet, addPlateSpec, removePlateSpec, addBandSpec, removeBandSpec,
       getDumbbellPlateCue, getBandStackCue,
-      generateAndCopyPrompt, parseAIResponse, exportJSONBackup, importJSONBackup
+      generateAndCopyPrompt, parseAIResponse, onAiPaste, exportJSONBackup, importJSONBackup
     };
   }
 }).mount('#app');

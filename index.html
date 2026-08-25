@@ -59,7 +59,7 @@
 
     <!-- 2. 主执行界面 (打卡流) -->
     <main class="space-y-2-5">
-      <section v-for="phase in phases" :key="phase.key" class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+      <section v-for="phase in visiblePhases" :key="phase.key" class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
         
         <!-- 阶段头部 -->
         <div @click="togglePhaseCollapse(phase.key)" 
@@ -284,7 +284,7 @@
         <!-- Tab 3: AI与数据 -->
         <div v-if="configTab === 'data'" class="space-y-3 text-xs">
           <p class="text-slate-400">粘贴 AI 回复中的 ```json 代码块：</p>
-          <textarea v-model="aiImportText" rows="4" placeholder="粘贴 AI 处方 JSON..." class="w-full p-2 font-mono"></textarea>
+          <textarea v-model="aiImportText" rows="4" placeholder="粘贴 AI 处方 JSON..." @paste="onAiPaste" class="w-full p-2 font-mono"></textarea>
           <button @click="parseAIResponse" class="w-full py-2-5 bg-rose-600 text-white rounded-xl font-bold">解析并装载 AI 处方</button>
           
           <div class="pt-2 border-t border-slate-800 flex gap-2">
