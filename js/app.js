@@ -1,8 +1,10 @@
 /* ==========================================================================
    IronPrompt Pro - 纯力量训练核心引擎
+   纯函数逻辑位于 js/core.js（window.IronPromptCore，可单测），本文件只负责 UI 状态。
    ========================================================================== */
 
 const { createApp, ref, reactive, computed, watch } = Vue;
+const Core = window.IronPromptCore;
 
 const DEFAULT_EQUIPMENT = {
   dumbbellBarWeight: 0.35,
@@ -76,24 +78,24 @@ createApp({
   setup() {
     const STORAGE_KEY = 'iron_prompt_static_v10';
     const EQUIP_KEY = 'iron_prompt_equip_v10';
+    const VOICE_KEY = 'iron_prompt_voice_v1';
+    const APP_VERSION = '1.3.0';
 
     const currentPlan = ref('A');
     const toastMsg = ref('');
-    const voiceEnabled = ref(true);
     const showConfigDrawer = ref(false);
     const configTab = ref('plan');
     const showAiReviewModal = ref(false);
     const aiImportText = ref('');
 
+    // 语音开关持久化（刷新不丢）
+    const voiceEnabled = ref(true);
+    try { if (localStorage.getItem(VOICE_KEY) === '0') voiceEnabled.value = false; } catch (e) {}
+    watch(voiceEnabled, (v) => { try { localStorage.setItem(VOICE_KEY, v ? '1' : '0'); } catch (e) {} });
+
     // 阶段元数据与规范顺序（AI 处方可能引入 accessory / core 等新阶段）
-    const PHASE_ORDER = ['warmup', 'strength', 'accessory', 'core', 'cooldown'];
-    const PHASE_META = {
-      warmup:    { baseTitle: '动态升温与激活', icon: '🔥', color: 'text-amber-400' },
-      strength:  { baseTitle: '主项力量与神经募集', icon: '🏋️', color: 'text-rose-400' },
-      accessory: { baseTitle: '辅助强化与细节打磨', icon: '🎯', color: 'text-cyan-400' },
-      core:      { baseTitle: '核心稳定与抗旋转', icon: '🛡️', color: 'text-indigo-400' },
-      cooldown:  { baseTitle: '静态拉伸与副交感下调', icon: '🧘', color: 'text-emerald-400' }
-    };
+    const PHASE_ORDER = Core.PHASE_ORDER;
+    const PHASE_META = Core.PHASE_META;
 
     const phases = reactive(PHASE_ORDER.map(key => ({
       key,
@@ -115,14 +117,14 @@ createApp({
       if (orderIdx >= 0) insertAt = phases.findIndex(p => PHASE_ORDER.indexOf(p.key) > orderIdx);
       if (insertAt >= 0) phases.splice(insertAt, 0, entry); else phases.push(entry);
       renumberPhases();
-      Object.values(plansData).forEach(plan => { if (!Array.isArray(plan.phases[key])) plan.phases[key] = []; });
+      Object.values(plansData).forEach(plan => { if (plan && !Array.isArray(plan.phases[key])) plan.phases[key] = []; });
     };
 
     const collapsedPhases = reactive({});
-    const restTimer = reactive({ running: false, timeLeft: 0, timerId: null });
 
     const cueModal = reactive({ visible: false, ex: {} });
-    const editModal = reactive({ visible: false, phaseKey: '', ex: {} });
+    // 快速编辑：草稿对象，保存才写回（支持取消）
+    const editModal = reactive({ visible: false, phaseKey: '', ex: null, draft: null });
     const weightPicker = reactive({ visible: false, ex: {}, set: {} });
 
     // 🎵 沉浸式节拍状态机
@@ -144,78 +146,80 @@ createApp({
       dynamicCue: ''
     });
 
-    const plansData = reactive(JSON.parse(localStorage.getItem(STORAGE_KEY)) || INITIAL_PLANS);
-    const equipment = reactive(JSON.parse(localStorage.getItem(EQUIP_KEY)) || DEFAULT_EQUIPMENT);
+    // ---- 本地存储：读取带校验、写入防抖 + 异常捕获 ----
+    const readStorage = (key) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        return (data && typeof data === 'object' && !Array.isArray(data)) ? data : null;
+      } catch (e) { return null; }
+    };
 
-    // 旧存档兼容：为每个计划补齐新增阶段 (accessory/core) 的空数组
-    PHASE_ORDER.forEach(key => Object.values(plansData).forEach(plan => {
-      if (plan.phases && !Array.isArray(plan.phases[key])) plan.phases[key] = [];
-    }));
+    const storedPlans = readStorage(STORAGE_KEY);
+    // 首启（空存档）与老存档统一走迁移：补齐 accessory/core 等阶段键与训练者档案（回归 R1）
+    const plansData = reactive(Core.migratePlans(
+      storedPlans ? storedPlans : JSON.parse(JSON.stringify(INITIAL_PLANS)),
+      PHASE_ORDER
+    ));
 
-    watch(plansData, (val) => localStorage.setItem(STORAGE_KEY, JSON.stringify(val)), { deep: true });
-    watch(equipment, (val) => localStorage.setItem(EQUIP_KEY, JSON.stringify(val)), { deep: true });
+    const storedEquip = readStorage(EQUIP_KEY);
+    const equipment = reactive(
+      (storedEquip && Array.isArray(storedEquip.plates) && Array.isArray(storedEquip.bands))
+        ? storedEquip
+        : JSON.parse(JSON.stringify(DEFAULT_EQUIPMENT))
+    );
+
+    let saveTimers = {};
+    let storageWarned = false;
+    const persist = (key, val) => {
+      try {
+        localStorage.setItem(key, JSON.stringify(val));
+        storageWarned = false;
+      } catch (e) {
+        if (!storageWarned) {
+          storageWarned = true;
+          showToast('⚠️ 本地存储写入失败（隐私模式或空间不足），数据仅本次会话有效');
+        }
+      }
+    };
+    const scheduleSave = (key, val) => {
+      clearTimeout(saveTimers[key]);
+      saveTimers[key] = setTimeout(() => persist(key, val), 400);
+    };
+    const flushSaves = () => {
+      Object.keys(saveTimers).forEach(k => { clearTimeout(saveTimers[k]); saveTimers[k] = null; });
+      persist(STORAGE_KEY, plansData);
+      persist(EQUIP_KEY, equipment);
+    };
+
+    watch(plansData, (val) => scheduleSave(STORAGE_KEY, val), { deep: true });
+    watch(equipment, (val) => scheduleSave(EQUIP_KEY, val), { deep: true });
 
     const activeSession = computed(() => plansData[currentPlan.value]);
 
     // 主打卡视图只展示当前计划中有动作的阶段（空的 accessory/core 不占版面）
     const visiblePhases = computed(() => phases.filter(p => (activeSession.value.phases[p.key] || []).length > 0));
 
+    // Toast：单一定时器，新消息先清旧计时
+    let toastTimer = null;
     const showToast = (msg) => {
+      clearTimeout(toastTimer);
       toastMsg.value = msg;
-      setTimeout(() => { toastMsg.value = ''; }, 3500);
+      toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3500);
     };
 
-    // --- 自由器械算力 ---
-    const availableDumbbellOptions = computed(() => {
-      const bar = parseFloat(equipment.dumbbellBarWeight) || 0;
-      const plates = equipment.plates.filter(p => p.count >= 2);
-      const map = new Map();
-
-      function solve(idx, curSum, plan) {
-        const totalW = Number((bar + curSum * 2).toFixed(2));
-        if (!map.has(totalW)) {
-          const planStr = plan.length > 0 ? plan.map(p => `${p.weight}`).join('+') : '空杆';
-          map.set(totalW, { weight: totalW, label: `单边: ${planStr}` });
-        }
-        if (idx >= plates.length) return;
-
-        const p = plates[idx];
-        const maxPerSide = Math.floor(p.count / 2);
-        for (let c = maxPerSide; c >= 0; c--) {
-          if (c > 0) plan.push({ weight: p.weight, count: c });
-          solve(idx + 1, Number((curSum + c * p.weight).toFixed(3)), plan);
-          if (c > 0) plan.pop();
-        }
-      }
-
-      solve(0, 0, []);
-      return Array.from(map.values()).sort((a, b) => a.weight - b.weight);
-    });
-
-    const availableBandOptions = computed(() => {
-      const bands = [...equipment.bands].sort((a, b) => a - b);
-      const map = new Map();
-
-      for (let i = 1; i < (1 << bands.length); i++) {
-        let sum = 0;
-        let sub = [];
-        for (let j = 0; j < bands.length; j++) {
-          if ((i >> j) & 1) { sum += bands[j]; sub.push(bands[j]); }
-        }
-        if (!map.has(sum)) {
-          map.set(sum, { weight: sum, label: `叠: ${sub.join('+')}磅` });
-        }
-      }
-      return Array.from(map.values()).sort((a, b) => a.weight - b.weight);
-    });
+    // --- 自由器械算力（core.js：DP 防爆炸 + 数值归一） ---
+    const availableDumbbellOptions = computed(() => Core.solveDumbbellOptions(equipment.dumbbellBarWeight, equipment.plates));
+    const availableBandOptions = computed(() => Core.solveBandOptions(equipment.bands));
 
     const getDumbbellPlateCue = (weight) => {
-      const found = availableDumbbellOptions.value.find(o => o.weight === weight);
+      const found = availableDumbbellOptions.value.find(o => o.weight === Core.num(weight));
       return found ? found.label : '';
     };
 
     const getBandStackCue = (weight) => {
-      const found = availableBandOptions.value.find(o => o.weight === weight);
+      const found = availableBandOptions.value.find(o => o.weight === Core.num(weight));
       return found ? found.label : '';
     };
 
@@ -224,22 +228,25 @@ createApp({
     const addBandSpec = () => equipment.bands.push(20);
     const removeBandSpec = (i) => equipment.bands.splice(i, 1);
 
-    const sessionVolume = computed(() => {
-      let total = 0;
-      activeSession.value.phases.strength.forEach(ex => {
-        if (ex.mode === 'weight_reps') {
-          ex.sets.forEach(s => {
-            if (s.done && s.set_type !== 'warmup' && s.weight > 0 && s.value > 0) total += (s.weight * s.value);
-          });
-        }
-      });
-      return total.toFixed(1);
-    });
+    // 本次训练吨位：全阶段有效正式组（core.js）
+    const sessionVolume = computed(() => Core.planVolumeKg(activeSession.value).toFixed(1));
+    // 本次训练正式组进度（桌面侧栏统计用）
+    const sessionStats = computed(() => Core.planStats(activeSession.value));
 
-    // --- 音频与真人语音 ---
-    const playTone = (freq = 880, duration = 0.15) => {
+    // --- 音频：单例 AudioContext（修复每次新建导致 ~6 次后静音） ---
+    let audioCtx = null;
+    const ensureAudio = () => {
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+      } catch (e) { return null; }
+    };
+    const playTone = (freq = 880, duration = 0.15) => {
+      if (!voiceEnabled.value) return; // 静音开关同时覆盖提示音
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      try {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
@@ -251,6 +258,7 @@ createApp({
       } catch (e) {}
     };
 
+    let speakTimer = null;
     const speakText = (text) => {
       if (!voiceEnabled.value || !('speechSynthesis' in window)) return;
       try {
@@ -258,8 +266,17 @@ createApp({
         const u = new SpeechSynthesisUtterance(text);
         u.lang = 'zh-CN';
         u.rate = 1.15;
-        window.speechSynthesis.speak(u);
-      } catch(e) {}
+        // 延迟 speak 规避 Chrome cancel→speak 竞态丢字
+        clearTimeout(speakTimer);
+        speakTimer = setTimeout(() => window.speechSynthesis.speak(u), 80);
+      } catch (e) {}
+    };
+    const cancelSpeech = () => {
+      try {
+        clearTimeout(speakTimer);
+        speakTimer = null;
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      } catch (e) {}
     };
 
     // --- 节奏控制器 ---
@@ -270,12 +287,12 @@ createApp({
       tempoCoach.currentSet = set;
       tempoCoach.exName = ex.name;
       tempoCoach.currentRep = 1;
-      tempoCoach.targetReps = set.value || 10;
+      tempoCoach.targetReps = Core.num(set.value, 10);
       tempoCoach.tempoConfig = Array.isArray(ex.tempo) ? ex.tempo : [3, 1, 1];
       tempoCoach.running = true;
 
-      if (voiceEnabled.value && ex.cues) speakText(`准备，${ex.name}。口诀：${ex.cues.slice(0, 16)}`);
-      setTempoPhase('eccentric', tempoCoach.tempoConfig[0]);
+      if (voiceEnabled.value && ex.cues) speakText(`准备，${ex.name}。口诀：${ex.cues}`);
+      setTempoPhase('eccentric', Core.num(tempoCoach.tempoConfig[0], 3));
       playTone(330, 0.15);
 
       tempoCoach.timerId = setInterval(() => {
@@ -284,27 +301,36 @@ createApp({
           playTone(330, 0.08);
         } else {
           if (tempoCoach.phaseState === 'eccentric') {
-            if (tempoCoach.tempoConfig[1] > 0) {
-              setTempoPhase('pause', tempoCoach.tempoConfig[1]);
+            if (Core.num(tempoCoach.tempoConfig[1]) > 0) {
+              setTempoPhase('pause', Core.num(tempoCoach.tempoConfig[1]));
               playTone(440, 0.1);
             } else {
-              setTempoPhase('concentric', tempoCoach.tempoConfig[2]);
+              setTempoPhase('concentric', Core.num(tempoCoach.tempoConfig[2], 1));
               playTone(880, 0.2);
             }
           } else if (tempoCoach.phaseState === 'pause') {
-            setTempoPhase('concentric', tempoCoach.tempoConfig[2]);
+            setTempoPhase('concentric', Core.num(tempoCoach.tempoConfig[2], 1));
             playTone(880, 0.2);
           } else if (tempoCoach.phaseState === 'concentric') {
             if (tempoCoach.currentRep < tempoCoach.targetReps) {
               tempoCoach.currentRep++;
-              setTempoPhase('eccentric', tempoCoach.tempoConfig[0]);
+              setTempoPhase('eccentric', Core.num(tempoCoach.tempoConfig[0], 3));
               playTone(330, 0.15);
               if (voiceEnabled.value && tempoCoach.currentRep % 3 === 0) speakText(`第${tempoCoach.currentRep}次，稳住`);
             } else {
-              stopTempoCoach();
-              playTone(1046, 0.5);
-              if (voiceEnabled.value) speakText(`整组完成！表现优秀，进入休息`);
-              handleSetCheck(tempoCoach.phaseKey, tempoCoach.currentEx, tempoCoach.currentSet);
+              // 带练结束 = 真正打卡完成（修复原「假完成」：只弹 RPE 面板不打勾）
+              const s = tempoCoach.currentSet;
+              const exRef = tempoCoach.currentEx;
+              const pk = tempoCoach.phaseKey;
+              if (s && !s.done) {
+                if (!s.rpe) s.rpe = 8;
+                stopTempoCoach(false);
+                playTone(1046, 0.5);
+                if (voiceEnabled.value) speakText(`整组完成！表现优秀，进入休息`);
+                completeSet(pk, exRef, s);
+              } else {
+                stopTempoCoach(false);
+              }
             }
           }
         }
@@ -313,7 +339,7 @@ createApp({
 
     const setTempoPhase = (state, sec) => {
       tempoCoach.phaseState = state;
-      tempoCoach.countdown = sec;
+      tempoCoach.countdown = Math.max(0, Math.round(Core.num(sec, 1)));
       const ex = tempoCoach.currentEx;
       if (state === 'eccentric') {
         tempoCoach.phaseTitle = `慢速下放 / 离心 (${sec}s)`;
@@ -333,14 +359,16 @@ createApp({
       }
     };
 
-    const stopTempoCoach = () => {
+    const stopTempoCoach = (cancelVoice = false) => {
       clearInterval(tempoCoach.timerId);
+      if (cancelVoice && tempoCoach.running) cancelSpeech();
       tempoCoach.running = false;
     };
 
     // --- 触控与两击打卡流 ---
-    const stepValue = (set, delta) => {
-      set.value = Math.max(1, (set.value || 10) + delta);
+    const stepValue = (ex, set, delta) => {
+      const step = ex.mode === 'time' ? 5 : 1; // 计时模式按 5s 步进
+      set.value = Math.max(step, (Core.num(set.value, 10) + delta * step));
     };
 
     const toggleSetType = (set) => {
@@ -365,8 +393,9 @@ createApp({
 
     const completeSet = (phaseKey, ex, set) => {
       set.done = true;
+      try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) {}
       playTone(880, 0.2);
-      if (ex.target_rest && ex.target_rest > 0) startCustomRestTimer(ex.target_rest);
+      if (ex.target_rest && Core.num(ex.target_rest) > 0) startCustomRestTimer(Core.num(ex.target_rest, 90));
 
       setTimeout(() => {
         if (isPhaseFullyCompleted(phaseKey)) {
@@ -376,30 +405,82 @@ createApp({
       }, 300);
     };
 
-    const startCustomRestTimer = (sec) => {
-      clearInterval(restTimer.timerId);
-      restTimer.timeLeft = sec;
-      restTimer.running = true;
-      restTimer.timerId = setInterval(() => {
-        if (restTimer.timeLeft > 1) {
-          restTimer.timeLeft--;
-        } else {
-          restTimer.timeLeft = 0;
-          restTimer.running = false;
-          clearInterval(restTimer.timerId);
-          playTone(880, 0.3);
-          if (voiceEnabled.value) speakText(`休息结束，准备下一组！`);
-          showToast('🔔 休息结束！请准备下一组');
-        }
-      }, 1000);
+    // 组间休息计时器：墙钟基准（修复 setInterval 累积漂移）
+    const restTimer = reactive({ running: false, timeLeft: 0, deadline: 0, timerId: null });
+
+    const tickRest = () => {
+      const left = Math.max(0, Math.ceil((restTimer.deadline - Date.now()) / 1000));
+      if (left !== restTimer.timeLeft) restTimer.timeLeft = left;
+      if (left <= 0) {
+        restTimer.running = false;
+        clearInterval(restTimer.timerId);
+        restTimer.timerId = null;
+        playTone(880, 0.3);
+        if (voiceEnabled.value) speakText(`休息结束，准备下一组！`);
+        showToast('🔔 休息结束！请准备下一组');
+      }
     };
 
-    const stopRestTimer = () => { clearInterval(restTimer.timerId); restTimer.running = false; restTimer.timeLeft = 0; };
-    const adjustRestTimer = (d) => restTimer.timeLeft = Math.max(0, restTimer.timeLeft + d);
-    const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+    const startCustomRestTimer = (sec) => {
+      clearInterval(restTimer.timerId);
+      const s = Math.max(1, Math.round(Core.num(sec, 90)));
+      restTimer.deadline = Date.now() + s * 1000;
+      restTimer.timeLeft = s;
+      restTimer.running = true;
+      restTimer.timerId = setInterval(tickRest, 250);
+    };
+
+    const stopRestTimer = () => {
+      clearInterval(restTimer.timerId);
+      restTimer.timerId = null;
+      restTimer.running = false;
+      restTimer.timeLeft = 0;
+      restTimer.deadline = 0;
+    };
+
+    const adjustRestTimer = (d) => {
+      if (!restTimer.running) return;
+      restTimer.deadline += d * 1000;
+      restTimer.timeLeft = Math.max(0, Math.ceil((restTimer.deadline - Date.now()) / 1000));
+    };
+
+    const startManualRest = () => { if (!restTimer.running) startCustomRestTimer(90); };
+
+    const formatTime = Core.formatTime;
 
     const openCueModal = (ex) => { cueModal.ex = ex; cueModal.visible = true; };
-    const openQuickEditModal = (phaseKey, ex) => { editModal.phaseKey = phaseKey; editModal.ex = ex; editModal.visible = true; };
+
+    // 快速编辑：草稿模式，保存才写回真实对象
+    const openQuickEditModal = (phaseKey, ex) => {
+      editModal.phaseKey = phaseKey;
+      editModal.ex = ex;
+      editModal.draft = {
+        name: ex.name,
+        mode: ex.mode || 'weight_reps',
+        cues: ex.cues || '',
+        target: ex.target || '',
+        pitfalls: ex.pitfalls || '',
+        tempo: Array.isArray(ex.tempo) ? ex.tempo.slice() : [3, 1, 1],
+        target_rest: Core.num(ex.target_rest, 90)
+      };
+      editModal.visible = true;
+    };
+    const saveQuickEdit = () => {
+      const d = editModal.draft;
+      const ex = editModal.ex;
+      editModal.visible = false;
+      if (!d || !ex) return;
+      ex.name = String(d.name || '新动作').trim() || '新动作';
+      ex.mode = d.mode;
+      ex.cues = d.cues || '';
+      ex.target = d.target || '';
+      ex.pitfalls = d.pitfalls || '';
+      ex.tempo = [Math.max(0, Math.round(Core.num(d.tempo[0], 3))), Math.max(0, Math.round(Core.num(d.tempo[1], 1))), Math.max(0, Math.round(Core.num(d.tempo[2], 1)))];
+      ex.target_rest = Math.max(0, Math.round(Core.num(d.target_rest, 90)));
+      showToast('✅ 已保存微调');
+    };
+    const cancelQuickEdit = () => { editModal.visible = false; };
+
     const openWeightPicker = (ex, set) => {
       if (ex.mode === 'bodyweight_reps' || ex.mode === 'time') return;
       weightPicker.ex = ex;
@@ -425,21 +506,68 @@ createApp({
         sets: [{ set_type: 'working', weight: 5.35, value: 10, rpe: 8, done: false, feedback: '' }]
       });
     };
-    const removeExercise = (k, i) => activeSession.value.phases[k].splice(i, 1);
+    const removeExercise = (k, i) => {
+      if (confirm('删除该动作？此操作不可撤销。')) activeSession.value.phases[k].splice(i, 1);
+    };
     const addSet = (ex) => {
       const last = ex.sets[ex.sets.length - 1];
       ex.sets.push({
         set_type: 'working',
-        weight: last ? last.weight : 5.35,
-        value: last ? last.value : 10,
-        rpe: last ? last.rpe : 8,
+        weight: last ? (last.weight != null ? last.weight : undefined) : 5.35,
+        value: last ? (last.value != null ? last.value : 10) : 10,
+        rpe: last ? (last.rpe != null ? last.rpe : 8) : 8,
         done: false,
         feedback: '',
         prev_record: last?.prev_record || ''
       });
     };
 
+    // A/B 切换：停止带练（含语音），避免跨计划串扰
+    const switchPlan = (p) => {
+      if (p === currentPlan.value) return;
+      stopTempoCoach(true);
+      currentPlan.value = p;
+      showToast(`已切换到 ${p} 日计划`);
+    };
+
+    // 🌅 新训练日：清空 A/B 两日全部打卡状态（保留负荷/次数/RPE 记录）
+    const startNewDay = () => {
+      if (!confirm('开始新训练日？\n\nA/B 两日所有已打卡（✓）状态将被清空，训练吨位归零；动作、负荷与 RPE 记录保留。')) return;
+      let n = 0;
+      Object.values(plansData).forEach(plan => {
+        if (!plan || typeof plan.phases !== 'object' || !plan.phases) return;
+        Object.values(plan.phases).forEach(list => {
+          (Array.isArray(list) ? list : []).forEach(ex => {
+            (Array.isArray(ex.sets) ? ex.sets : []).forEach(s => {
+              if (s.done) { s.done = false; n++; }
+            });
+          });
+        });
+      });
+      Object.keys(collapsedPhases).forEach(k => delete collapsedPhases[k]);
+      stopRestTimer();
+      stopTempoCoach(true); // 回归 R2：重置时停止进行中的带练，避免结束后重新打勾
+      showToast(`🌅 新训练日开始！已重置 ${n} 组打卡`);
+    };
+
     // --- Prompt 生成与 AI 处方解析 ---
+    const copyToClipboard = async (text) => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    };
+
     const generateAndCopyPrompt = async () => {
       const s = activeSession.value;
       const validDumbbells = availableDumbbellOptions.value.map(o => `${o.weight}kg(${o.label})`).join(' | ');
@@ -448,7 +576,7 @@ createApp({
       let md = `# Role\n你是一位拥有 NSCA-CSCS (美国体能协会体能专家认证) 的顶级力量与体能教练。请根据以下学员的【${currentPlan.value} 日全流程训练打卡记录】，进行深度复盘推演并输出下阶段处方。\n\n`;
       md += `## 1. 训练者状态与硬件物理库存约束\n`;
       md += `- 训练日: **${currentPlan.value} 日** | 今日有效正式组做功吨位: **${sessionVolume.value} kg**\n`;
-      md += `- 体重: ${s.athlete.bodyweight}kg | 准备度打分: ${s.athlete.readiness}/5\n`;
+      md += `- 体重: ${Core.num(s.athlete.bodyweight)}kg | 准备度打分: ${Core.num(s.athlete.readiness)}/5\n`;
       md += `- ⚠️ **物理硬件严格约束 (你给出的重量建议必须严格从此列表中选择，严禁编造无法拼出的重量)**:\n`;
       md += `  - 物理可用哑铃重量: ${validDumbbells}\n`;
       md += `  - 物理可用拉力绳磅数: ${validBands}\n\n`;
@@ -456,13 +584,13 @@ createApp({
       md += `## 2. 今日打卡实录\n`;
       for (const ph of phases) {
         md += `### ${ph.title}\n`;
-        const list = s.phases[ph.key];
+        const list = s.phases[ph.key] || [];
         if (!list.length) { md += `*(无记录)*\n\n`; continue; }
         list.forEach(ex => {
           md += `**动作: ${ex.name}** | 模式: ${ex.mode} | 节奏: [${ex.tempo ? ex.tempo.join('-') : '3-1-1'}] | 口诀: ${ex.cues || '无'}\n`;
           ex.sets.forEach((set, i) => {
             const w = ex.mode === 'bodyweight_reps' ? '自重' : (ex.mode === 'time' ? `${set.value}s` : `${set.weight}${ex.mode === 'band_reps' ? '磅' : 'kg'} × ${set.value}次`);
-            md += `  - 组 ${i + 1} [${set.set_type === 'warmup' ? '热身' : '正式'}]: ${w} | RPE: ${set.rpe || 8} | ${set.done ? '完成' : '未完成'}\n`;
+            md += `  - 组 ${i + 1} [${set.set_type === 'warmup' ? '热身' : '正式'}]: ${w} | RPE: ${Core.num(set.rpe, 8)} | ${set.done ? '完成' : '未完成'}\n`;
           });
         });
         md += `\n`;
@@ -503,119 +631,189 @@ createApp({
 }
 \`\`\``;
 
-      try {
-        await navigator.clipboard.writeText(md);
-        showToast(`✅ 已复制带【硬件物理约束与推演指令】的 Prompt！`);
-      } catch(e) { showToast('复制失败，请检查剪贴板权限'); }
+      const ok = await copyToClipboard(md);
+      showToast(ok ? '✅ 已复制带【硬件物理约束与推演指令】的 Prompt！' : '❌ 复制失败，请检查剪贴板权限');
     };
 
     const parseAIResponse = () => {
+      const text = (aiImportText.value || '').trim();
+      if (!text) { showToast('请先粘贴 AI 回复'); return; }
+      const match = text.match(/```json([\s\S]*?)```/);
+      const rawJson = match ? match[1].trim() : text;
+      let data;
       try {
-        const match = aiImportText.value.match(/```json([\s\S]*?)```/);
-        const rawJson = match ? match[1].trim() : aiImportText.value.trim();
-        const data = JSON.parse(rawJson);
+        data = JSON.parse(rawJson);
+      } catch (e) {
+        showToast('❌ JSON 解析失败，请确认粘贴了完整的 AI 代码块');
+        return;
+      }
 
-        if (data.coach_review) activeSession.value.coach_review = data.coach_review;
+      const normTempo = (t) => Array.isArray(t) ? t.map(v => Math.max(0, Math.round(Core.num(v, 1)))) : null;
 
-        if (data.prescription && Array.isArray(data.prescription)) {
-          const mapSets = (item) => (item.suggested_sets || []).map(s => ({
-            set_type: s.set_type || 'working',
-            weight: s.weight || 0,
-            value: s.value || 10,
-            rpe: s.rpe || 8,
-            done: false,
-            feedback: '',
-            prev_record: s.prev_record || `${s.weight ? s.weight + (item.mode === 'band_reps' ? '磅' : 'kg') + '×' + s.value : s.value + (item.mode === 'time' ? 's' : '次')}`
-          }));
-          let updatedCount = 0, addedCount = 0;
-          data.prescription.forEach(item => {
-            const targetPhase = item.phase || 'strength';
-            addPhaseIfMissing(targetPhase);
-            const list = activeSession.value.phases[targetPhase];
-            const exist = list.find(e => e.name === item.name);
-            if (exist) {
-              exist.mode = item.mode || exist.mode;
-              exist.cues = item.cues || exist.cues;
-              exist.target = item.target || exist.target;
-              exist.pitfalls = item.pitfalls || exist.pitfalls;
-              exist.overload_status = item.overload_status || '';
-              exist.tempo = item.tempo || exist.tempo || [3, 1, 1];
-              exist.target_rest = item.target_rest || exist.target_rest;
-              exist.sets = mapSets(item);
-              updatedCount++;
-            } else {
-              list.push({
-                name: item.name,
-                mode: item.mode || 'weight_reps',
-                overload_status: item.overload_status || '',
-                target: item.target || '',
-                cues: item.cues || '',
-                pitfalls: item.pitfalls || '',
-                tempo: item.tempo || [3, 1, 1],
-                target_rest: item.target_rest || 90,
-                sets: mapSets(item)
-              });
-              addedCount++;
-            }
-          });
-          showConfigDrawer.value = false;
-          aiImportText.value = '';
-          showToast(`🎉 AI 处方已装载：更新 ${updatedCount} 个动作，新增 ${addedCount} 个动作！`);
-        }
-      } catch(e) { alert('JSON 解析失败，请确认包含了完整的 AI 代码块'); }
+      let reviewLoaded = false;
+      if (data.coach_review && typeof data.coach_review === 'object' && !Array.isArray(data.coach_review)) {
+        activeSession.value.coach_review = {
+          summary: '',
+          volume_analysis: '',
+          motivation_highlight: '',
+          ...data.coach_review
+        };
+        reviewLoaded = true;
+      }
+
+      if (data.prescription && Array.isArray(data.prescription)) {
+        let updatedCount = 0, addedCount = 0, skippedCount = 0;
+        data.prescription.forEach(item => {
+          if (!item || !item.name) { skippedCount++; return; }
+          const targetPhase = Core.normalizePhaseKey(item.phase, phases.map(p => p.key));
+          addPhaseIfMissing(targetPhase);
+          const list = activeSession.value.phases[targetPhase];
+          const exist = list.find(e => e.name === item.name);
+          let sets = Core.mapPrescriptionSets(item);
+          if (!sets.length) {
+            // 空处方动作：补一个默认正式组，避免产生永远无法完成的卡片
+            sets = [{
+              set_type: 'working',
+              weight: item.mode === 'weight_reps' ? 5.35 : 0,
+              value: item.mode === 'time' ? 30 : 10,
+              rpe: 8, done: false, feedback: '', prev_record: ''
+            }];
+          }
+          if (exist) {
+            exist.mode = item.mode || exist.mode;
+            exist.cues = item.cues || exist.cues;
+            exist.target = item.target || exist.target;
+            exist.pitfalls = item.pitfalls || exist.pitfalls;
+            exist.overload_status = (item.overload_status != null && item.overload_status !== '') ? item.overload_status : (exist.overload_status || '');
+            exist.tempo = normTempo(item.tempo) || (exist.tempo || [3, 1, 1]);
+            exist.target_rest = item.target_rest != null ? item.target_rest : exist.target_rest;
+            exist.sets = sets;
+            updatedCount++;
+          } else {
+            list.push({
+              name: item.name,
+              mode: item.mode || 'weight_reps',
+              overload_status: item.overload_status || '',
+              target: item.target || '',
+              cues: item.cues || '',
+              pitfalls: item.pitfalls || '',
+              tempo: normTempo(item.tempo) || [3, 1, 1],
+              target_rest: item.target_rest != null ? item.target_rest : 90,
+              sets
+            });
+            addedCount++;
+          }
+        });
+        showConfigDrawer.value = false;
+        aiImportText.value = '';
+        showToast(`🎉 AI 处方已装载：更新 ${updatedCount} 个 / 新增 ${addedCount} 个动作${skippedCount ? `（跳过 ${skippedCount} 条无效）` : ''}${reviewLoaded ? '，复盘看板已更新' : ''}！`);
+      } else if (reviewLoaded) {
+        aiImportText.value = '';
+        showToast('🏆 AI 复盘已装载（顶部胶囊条已更新）');
+      } else {
+        showToast('❌ 未在回复中找到 coach_review 或 prescription 字段');
+      }
     };
 
-    // 粘贴即解析：粘贴的文本若能完整解析出处方 JSON，自动装载（解析失败则不打扰）
+    // 粘贴即解析：粘贴的文本若能完整解析出 AI 数据，自动装载（解析失败则不打扰）
     const onAiPaste = () => {
       setTimeout(() => {
-        const t = aiImportText.value ? aiImportText.value.trim() : '';
-        if (!t.includes('"prescription"')) return;
+        const t = (aiImportText.value || '').trim();
+        if (!t.includes('"prescription"') && !t.includes('"coach_review"')) return;
         const m = t.match(/```json([\s\S]*?)```/);
         let ok = false;
-        try { JSON.parse((m ? m[1] : t).trim()); ok = true; } catch(e) {}
+        try { JSON.parse((m ? m[1] : t).trim()); ok = true; } catch (e) {}
         if (ok) parseAIResponse();
       }, 50);
     };
 
     const exportJSONBackup = () => {
-      const fullBackup = { version: '5.0', exportedAt: new Date().toISOString(), equipment, plansData };
+      const fullBackup = { version: APP_VERSION, exportedAt: new Date().toISOString(), equipment, plansData };
       const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      a.href = url;
       a.download = `IronPrompt_Backup_${new Date().toISOString().split('T')[0]}.json`;
       a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
       showToast('📦 全量备份已导出！');
     };
 
     const importJSONBackup = (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files && e.target.files[0];
+      e.target.value = ''; // 允许连续重选同一文件
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (evt) => {
+        let data;
         try {
-          const data = JSON.parse(evt.target.result);
-          if (data.plansData && data.equipment) {
-            Object.assign(equipment, data.equipment);
-            Object.assign(plansData, data.plansData);
-            showToast('🎉 数据已完全恢复！');
-            showConfigDrawer.value = false;
+          data = JSON.parse(evt.target.result);
+        } catch (err) {
+          showToast('❌ 备份文件解析失败：不是有效的 JSON');
+          return;
+        }
+        const check = Core.validateBackup(data);
+        if (!check.ok) {
+          showToast('❌ 备份文件无效：' + check.problems.join('、'));
+          return;
+        }
+        if (!confirm('还原备份将覆盖当前全部数据（A/B 计划 + 器械库存），继续？')) return;
+
+        // 器械：整组替换，避免残留旧键
+        Object.keys(equipment).forEach(k => delete equipment[k]);
+        Object.assign(equipment, data.equipment);
+
+        // 计划：合并当前与备份中的全部阶段键（含自定义阶段）后统一迁移
+        const keySet = new Set(phases.map(p => p.key));
+        Object.values(data.plansData).forEach(plan => {
+          if (plan && plan.phases && typeof plan.phases === 'object') {
+            Object.keys(plan.phases).forEach(k => keySet.add(k));
           }
-        } catch (err) { alert('JSON 解析失败'); }
+        });
+        const migrated = Core.migratePlans(data.plansData, [...keySet]);
+        Object.keys(plansData).forEach(k => delete plansData[k]);
+        Object.assign(plansData, migrated);
+        [...keySet].forEach(k => addPhaseIfMissing(k));
+
+        showConfigDrawer.value = false;
+        showToast('🎉 数据已完全恢复！');
       };
       reader.readAsText(file);
     };
 
+    // 键盘：Esc 关闭最上层弹窗；R 开始/停止组间休息（输入框聚焦时忽略）
+    const onKeydown = (e) => {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (e.key === 'Escape') {
+        if (weightPicker.visible) weightPicker.visible = false;
+        else if (editModal.visible) editModal.visible = false;
+        else if (cueModal.visible) cueModal.visible = false;
+        else if (showAiReviewModal.value) showAiReviewModal.value = false;
+        else if (showConfigDrawer.value) showConfigDrawer.value = false;
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        if (restTimer.running) { stopRestTimer(); showToast('⏱ 休息计时已停止'); }
+        else { startManualRest(); showToast('⏱ 组间休息 90s 开始'); }
+      }
+    };
+    window.addEventListener('keydown', onKeydown);
+    window.addEventListener('pagehide', flushSaves);
+
     return {
-      currentPlan, phases, visiblePhases, collapsedPhases, activeSession, toastMsg, voiceEnabled, showConfigDrawer, configTab, showAiReviewModal, aiImportText,
-      restTimer, tempoCoach, equipment, availableDumbbellOptions, availableBandOptions, sessionVolume,
+      currentPlan, switchPlan, phases, visiblePhases, collapsedPhases, activeSession, toastMsg, voiceEnabled, showConfigDrawer, configTab, showAiReviewModal, aiImportText,
+      restTimer, tempoCoach, equipment, availableDumbbellOptions, availableBandOptions, sessionVolume, sessionStats,
+      appVersion: APP_VERSION,
       cueModal, editModal, weightPicker,
-      openCueModal, openQuickEditModal, openWeightPicker, selectWeightFromPicker,
+      openCueModal, openQuickEditModal, saveQuickEdit, cancelQuickEdit, openWeightPicker, selectWeightFromPicker,
       stepValue, toggleSetType, handleSetCheck, selectRpe,
-      startTempoCoach, stopTempoCoach, stopRestTimer, adjustRestTimer, formatTime, togglePhaseCollapse,
+      startTempoCoach, stopTempoCoach, stopRestTimer, adjustRestTimer, startManualRest, formatTime, togglePhaseCollapse,
       isExerciseDone, isPhaseFullyCompleted, getPhaseProgress,
       addExercise, removeExercise, addSet, addPlateSpec, removePlateSpec, addBandSpec, removeBandSpec,
       getDumbbellPlateCue, getBandStackCue,
-      generateAndCopyPrompt, parseAIResponse, onAiPaste, exportJSONBackup, importJSONBackup
+      generateAndCopyPrompt, parseAIResponse, onAiPaste, exportJSONBackup, importJSONBackup,
+      startNewDay
     };
   }
 }).mount('#app');

@@ -2,194 +2,288 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="IronPrompt Pro — 纯力量训练系统：A/B 日计划打卡、组间休息计时、沉浸式节拍带练、AI 复盘处方闭环。纯前端零后端，移动端优先，桌面端双栏工作台。">
+  <meta name="theme-color" content="#020617">
+  <meta property="og:title" content="IronPrompt Pro - 纯力量训练系统">
+  <meta property="og:description" content="A/B 日计划打卡 · 节拍带练 · AI 复盘处方闭环 · 纯前端零后端">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8F%8B%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <title>IronPrompt Pro - 纯力量训练系统</title>
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-  <div id="app" v-cloak class="container">
+  <div id="app" v-cloak>
+    <div class="container">
 
-    <!-- 1. 顶部极窄状态栏 -->
-    <header class="mb-2 border border-slate-800 px-3 py-2 rounded-2xl sticky-header flex justify-between items-center shadow-lg">
-      <div class="flex items-center gap-2">
-        <div class="flex bg-slate-950 p-0-5 rounded-lg border border-slate-800">
-          <button @click="currentPlan = 'A'" 
-                  :class="currentPlan === 'A' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'"
-                  class="px-2-5 py-1 rounded text-xs">A日</button>
-          <button @click="currentPlan = 'B'" 
-                  :class="currentPlan === 'B' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'"
-                  class="px-2-5 py-1 rounded text-xs">B日</button>
+      <!-- 桌面品牌栏（≥768px 显示） -->
+      <div class="page-brand">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-black text-white">🏋️ IronPrompt Pro</span>
+          <span class="text-xs font-mono text-slate-500 bg-slate-950 border border-slate-800 px-1-5 py-0-5 rounded">{{ appVersion }}</span>
         </div>
-        <span class="text-xs bg-slate-950 border border-slate-800 text-amber-300 px-2 py-1 rounded font-mono font-bold">
-          {{ sessionVolume }} kg
-        </span>
+        <span class="text-xs text-slate-500">纯力量训练系统 · 数据仅存于本机浏览器</span>
       </div>
 
-      <!-- 组间休息表 -->
-      <div v-if="restTimer.running || restTimer.timeLeft > 0" class="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-rose-900">
-        <span class="text-xs font-mono font-bold" :class="restTimer.timeLeft <= 5 ? 'text-rose-500 animate-ping' : 'text-emerald-400'">
-          ⏱️ {{ formatTime(restTimer.timeLeft) }}
-        </span>
-        <button @click="adjustRestTimer(15)" class="text-xs text-slate-400">+15s</button>
-        <button @click="stopRestTimer" class="text-xs text-slate-500 hover:text-rose-400 ml-1">✕</button>
-      </div>
+      <!-- 桌面双栏布局容器（≥1024px 生效网格） -->
+      <div class="desktop-layout">
 
-      <div class="flex items-center gap-1-5">
-        <button @click="voiceEnabled = !voiceEnabled" 
-                class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs"
-                :class="voiceEnabled ? 'bg-indigo-950 border-indigo-700 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-500'">
-          {{ voiceEnabled ? '🗣️' : '🔇' }}
-        </button>
-        <button @click="showConfigDrawer = true" class="w-7 h-7 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-200">
-          ⚙️
-        </button>
-      </div>
-    </header>
+        <!-- 1. 顶部极窄状态栏 -->
+        <header class="d-head mb-2 border border-slate-800 px-3 py-2 rounded-2xl sticky-header flex justify-between items-center shadow-lg">
+          <div class="flex items-center gap-2">
+            <div class="flex bg-slate-950 p-0-5 rounded-lg border border-slate-800">
+              <button @click="switchPlan('A')"
+                      :class="currentPlan === 'A' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'"
+                      class="px-2-5 py-1 rounded text-xs" :aria-pressed="currentPlan === 'A'">A日</button>
+              <button @click="switchPlan('B')"
+                      :class="currentPlan === 'B' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'"
+                      class="px-2-5 py-1 rounded text-xs" :aria-pressed="currentPlan === 'B'">B日</button>
+            </div>
+            <span class="text-xs bg-slate-950 border border-slate-800 text-amber-300 px-2 py-1 rounded font-mono font-bold" title="本次训练有效正式组吨位">
+              {{ sessionVolume }} kg
+            </span>
+          </div>
 
-    <!-- 🏆 AI 诊断胶囊条 -->
-    <div v-if="activeSession.coach_review" 
-         @click="showAiReviewModal = true"
-         class="mb-2 bg-slate-900 border border-rose-900 px-3 py-1-5 rounded-xl flex items-center justify-between text-xs cursor-pointer">
-      <div class="flex items-center gap-1-5 truncate text-rose-300">
-        <span>🏆</span>
-        <span class="truncate font-medium">{{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}</span>
-      </div>
-      <span class="text-xs text-slate-500 font-mono shrink-0 ml-2">详情 &gt;</span>
-    </div>
+          <!-- 组间休息表 -->
+          <div v-if="restTimer.running || restTimer.timeLeft > 0" class="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-rose-900">
+            <span class="text-xs font-mono font-bold" :class="restTimer.timeLeft <= 5 ? 'text-rose-500 animate-ping' : 'text-emerald-400'">
+              ⏱️ {{ formatTime(restTimer.timeLeft) }}
+            </span>
+            <button @click="adjustRestTimer(15)" class="text-xs text-slate-400">+15s</button>
+            <button @click="stopRestTimer" class="text-xs text-slate-500 hover:text-rose-400 ml-1" aria-label="停止休息计时">✕</button>
+          </div>
 
-    <!-- 2. 主执行界面 (打卡流) -->
-    <main class="space-y-2-5">
-      <section v-for="phase in visiblePhases" :key="phase.key" class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
-        
-        <!-- 阶段头部 -->
-        <div @click="togglePhaseCollapse(phase.key)" 
-             class="bg-slate-800 px-3 py-2 border-b border-slate-800 flex justify-between items-center cursor-pointer">
           <div class="flex items-center gap-1-5">
-            <span class="text-xs text-slate-400">{{ collapsedPhases[phase.key] ? '▶' : '▼' }}</span>
-            <span class="text-xs font-bold" :class="phase.color">{{ phase.icon }} {{ phase.title }}</span>
+            <button @click="startManualRest" :disabled="restTimer.running"
+                    class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs"
+                    :class="restTimer.running ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-slate-800 border-slate-700 text-slate-300'"
+                    aria-label="开始 90 秒组间休息" title="手动开始 90s 休息（快捷键 R）">⏱</button>
+            <button @click="voiceEnabled = !voiceEnabled" 
+                    class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs"
+                    :class="voiceEnabled ? 'bg-indigo-950 border-indigo-700 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-500'"
+                    :aria-pressed="voiceEnabled" :aria-label="voiceEnabled ? '关闭语音与提示音' : '开启语音与提示音'" :title="voiceEnabled ? '语音提示：开' : '语音提示：关'">
+              {{ voiceEnabled ? '🗣️' : '🔇' }}
+            </button>
+            <button @click="showConfigDrawer = true" class="w-7 h-7 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-200" aria-label="打开配置中心">
+              ⚙️
+            </button>
           </div>
-          <span class="text-xs font-mono px-2 py-0-5 rounded-full" 
-                :class="isPhaseFullyCompleted(phase.key) ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400'">
-            {{ getPhaseProgress(phase.key) }}
-          </span>
+        </header>
+
+        <!-- 🏆 AI 诊断胶囊条 -->
+        <div v-if="activeSession.coach_review" 
+              @click="showAiReviewModal = true"
+              class="d-capsule mb-2 bg-slate-900 border border-rose-900 px-3 py-1-5 rounded-xl flex items-center justify-between text-xs cursor-pointer">
+          <div class="flex items-center gap-1-5 truncate text-rose-300">
+            <span>🏆</span>
+            <span class="truncate font-medium selectable">{{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}</span>
+          </div>
+          <span class="text-xs text-slate-500 font-mono shrink-0 ml-2">详情 &gt;</span>
         </div>
 
-        <!-- 动作列表 -->
-        <div v-show="!collapsedPhases[phase.key]" class="p-2 space-y-2-5">
-          <div v-for="(ex, exIdx) in activeSession.phases[phase.key]" :key="exIdx" 
-               :class="isExerciseDone(ex) ? 'border-emerald-800 bg-slate-950 opacity-60' : 'border-slate-800 bg-slate-900'"
-               class="rounded-xl p-2-5 border space-y-2">
+        <!-- 2. 主执行界面 (打卡流) -->
+        <main class="d-main space-y-2-5">
+          <!-- 空态引导 -->
+          <div v-if="!visiblePhases.length" class="bg-slate-900 rounded-xl border border-slate-800 p-4 text-center text-xs text-slate-400 space-y-2">
+            <div class="text-3xl">🏋️</div>
+            <div class="text-white font-bold">今日还没有动作</div>
+            <div>点右上角 ⚙️ →「1. 动作编排」添加动作，<br>或在「3. AI与数据」粘贴 AI 处方自动装载。</div>
+          </div>
+
+          <section v-for="phase in visiblePhases" :key="phase.key" class="phase-card bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
             
-            <!-- 动作卡片标题 -->
-            <div class="flex justify-between items-center">
-              <div class="flex items-center gap-1-5 flex-1 min-w-0">
-                <span class="text-sm font-black text-white truncate">{{ ex.name }}</span>
-                <span v-if="ex.overload_status" 
-                      class="text-xs px-1-5 py-0-5 rounded border shrink-0"
-                      :class="ex.overload_status.includes('加重') || ex.overload_status.includes('升级') ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-slate-950 text-amber-300 border-slate-800'">
-                  {{ ex.overload_status }}
-                </span>
+            <!-- 阶段头部 -->
+            <div @click="togglePhaseCollapse(phase.key)" 
+                 class="bg-slate-800 px-3 py-2 border-b border-slate-800 flex justify-between items-center cursor-pointer">
+              <div class="flex items-center gap-1-5">
+                <span class="text-xs text-slate-400">{{ collapsedPhases[phase.key] ? '▶' : '▼' }}</span>
+                <span class="text-xs font-bold" :class="phase.color">{{ phase.icon }} {{ phase.title }}</span>
               </div>
-              
-              <div class="flex items-center gap-1 shrink-0">
-                <button v-if="ex.cues || ex.target" @click="openCueModal(ex)" class="w-6 h-6 rounded-full bg-slate-800 text-amber-400 text-xs font-bold">💡</button>
-                <button @click="openQuickEditModal(phase.key, ex)" class="w-6 h-6 rounded-full bg-slate-800 text-slate-400 text-xs">✏️</button>
-              </div>
+              <span class="text-xs font-mono px-2 py-0-5 rounded-full" 
+                    :class="isPhaseFullyCompleted(phase.key) ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400'">
+                {{ getPhaseProgress(phase.key) }}
+              </span>
             </div>
 
-            <!-- 单组打卡行 -->
-            <div class="space-y-1-5">
-              <div v-for="(set, sIdx) in ex.sets" :key="sIdx" 
-                   :class="set.done ? 'bg-emerald-950 border-emerald-800' : (set.set_type === 'warmup' ? 'bg-amber-950 border-amber-800' : 'bg-slate-950 border-slate-800')"
-                   class="p-2 rounded-lg border space-y-1-5">
+            <!-- 动作列表 -->
+            <div v-show="!collapsedPhases[phase.key]" class="p-2 space-y-2-5">
+              <div v-for="(ex, exIdx) in activeSession.phases[phase.key]" :key="ex.name + '-' + exIdx" 
+                   :class="isExerciseDone(ex) ? 'border-emerald-800 bg-slate-950 opacity-60' : 'border-slate-800 bg-slate-900'"
+                   class="rounded-xl p-2-5 border space-y-2">
                 
-                <div class="flex items-center justify-between gap-1-5">
-                  <!-- 组类型 -->
-                  <button @click="toggleSetType(set)" 
-                          :class="set.set_type === 'warmup' ? 'bg-amber-950 text-amber-300 border border-amber-700' : 'bg-slate-900 text-slate-300 border border-slate-700'"
-                          class="w-7 h-7 rounded text-xs font-mono font-bold shrink-0">
-                    {{ set.set_type === 'warmup' ? '热' : sIdx + 1 }}
-                  </button>
-
-                  <!-- 负荷与装铃指引 -->
-                  <div class="flex-1 min-w-0" @click="openWeightPicker(ex, set)">
-                    <div class="flex items-baseline gap-1">
-                      <span class="text-xs font-bold font-mono text-amber-300">
-                        {{ ex.mode === 'bodyweight_reps' ? '自重' : (ex.mode === 'time' ? '计时' : `${set.weight}${ex.mode === 'band_reps' ? '磅' : 'kg'}`) }}
-                      </span>
-                      <span class="text-xs text-slate-500 font-mono" v-if="set.prev_record">({{ set.prev_record }})</span>
-                    </div>
-                    <div class="text-xs text-slate-400 font-mono truncate" v-if="ex.mode === 'weight_reps' && set.weight > 0">
-                      {{ getDumbbellPlateCue(set.weight) }}
-                    </div>
-                    <div class="text-xs text-slate-400 font-mono truncate" v-else-if="ex.mode === 'band_reps' && set.weight > 0">
-                      {{ getBandStackCue(set.weight) }}
-                    </div>
+                <!-- 动作卡片标题 -->
+                <div class="flex justify-between items-center">
+                  <div class="flex items-center gap-1-5 flex-1 min-w-0">
+                    <span class="text-sm font-black text-white truncate">{{ ex.name }}</span>
+                    <span v-if="ex.overload_status" 
+                          class="text-xs px-1-5 py-0-5 rounded border shrink-0"
+                          :class="ex.overload_status.includes('加重') || ex.overload_status.includes('升级') ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-slate-950 text-amber-300 border-slate-800'">
+                      {{ ex.overload_status }}
+                    </span>
                   </div>
-
-                  <!-- 步进调次数 -->
-                  <div class="flex items-center bg-slate-900 border border-slate-800 rounded-lg shrink-0">
-                    <button @click="stepValue(set, -1)" class="w-6 h-7 text-xs text-slate-400 font-bold">-</button>
-                    <span class="w-8 text-center text-xs font-mono font-bold text-white">{{ set.value }}{{ ex.mode === 'time' ? 's' : '' }}</span>
-                    <button @click="stepValue(set, 1)" class="w-6 h-7 text-xs text-slate-400 font-bold">+</button>
-                  </div>
-
-                  <!-- 节拍带练与打勾 -->
+                  
                   <div class="flex items-center gap-1 shrink-0">
-                    <button v-if="ex.mode !== 'time'" @click="startTempoCoach(phase.key, ex, set)" class="w-7 h-7 bg-indigo-900 text-indigo-200 rounded-lg text-xs font-bold border border-indigo-700">🎵</button>
-                    <button @click="handleSetCheck(phase.key, ex, set)" 
-                            :class="set.done ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-700'"
-                            class="w-7 h-7 rounded-lg text-xs font-bold">✓</button>
+                    <button v-if="ex.cues || ex.target" @click="openCueModal(ex)" class="w-7 h-7 rounded-full bg-slate-800 text-amber-400 text-xs font-bold" aria-label="查看动作要领">💡</button>
+                    <button @click="openQuickEditModal(phase.key, ex)" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 text-xs" aria-label="编辑动作">✏️</button>
                   </div>
                 </div>
 
-                <!-- 两击打卡 RPE 胶囊 -->
-                <div v-if="set.showRpePicker" class="pt-1 border-t border-slate-800 animate-fadeIn space-y-1">
-                  <div class="flex justify-between text-xs text-slate-400">
-                    <span>选择 RPE (疲劳度):</span>
-                    <span class="text-rose-400 font-mono font-bold">RPE {{ set.rpe || 8 }}</span>
+                <!-- 单组打卡行 -->
+                <div class="space-y-1-5">
+                  <div v-for="(set, sIdx) in ex.sets" :key="sIdx" 
+                       :class="set.done ? 'bg-emerald-950 border-emerald-800' : (set.set_type === 'warmup' ? 'bg-amber-950 border-amber-800' : 'bg-slate-950 border-slate-800')"
+                       class="p-2 rounded-lg border space-y-1-5">
+                    
+                    <div class="flex items-center justify-between gap-1-5">
+                      <!-- 组类型 -->
+                      <button @click="toggleSetType(set)" 
+                              :class="set.set_type === 'warmup' ? 'bg-amber-950 text-amber-300 border border-amber-700' : 'bg-slate-900 text-slate-300 border border-slate-700'"
+                              class="w-7 h-7 rounded text-xs font-mono font-bold shrink-0"
+                              :aria-label="set.set_type === 'warmup' ? '当前为热身组，点击切换为正式组' : '当前为正式组，点击切换为热身组'">
+                        {{ set.set_type === 'warmup' ? '热' : sIdx + 1 }}
+                      </button>
+
+                      <!-- 负荷与装铃指引 -->
+                      <div class="flex-1 min-w-0" @click="openWeightPicker(ex, set)">
+                        <div class="flex items-baseline gap-1">
+                          <span class="text-xs font-bold font-mono text-amber-300">
+                            {{ ex.mode === 'bodyweight_reps' ? '自重' : (ex.mode === 'time' ? '计时' : `${set.weight}${ex.mode === 'band_reps' ? '磅' : 'kg'}`) }}
+                          </span>
+                          <span class="text-xs text-slate-500 font-mono" v-if="set.prev_record">({{ set.prev_record }})</span>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono truncate" v-if="ex.mode === 'weight_reps' && set.weight > 0">
+                          {{ getDumbbellPlateCue(set.weight) }}
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono truncate" v-else-if="ex.mode === 'band_reps' && set.weight > 0">
+                          {{ getBandStackCue(set.weight) }}
+                        </div>
+                      </div>
+
+                      <!-- 步进调次数（计时模式按 5s 步进） -->
+                      <div class="flex items-center bg-slate-900 border border-slate-800 rounded-lg shrink-0">
+                        <button @click="stepValue(ex, set, -1)" class="w-6 h-7 text-xs text-slate-400 font-bold" aria-label="减少">-</button>
+                        <span class="w-8 text-center text-xs font-mono font-bold text-white">{{ set.value }}{{ ex.mode === 'time' ? 's' : '' }}</span>
+                        <button @click="stepValue(ex, set, 1)" class="w-6 h-7 text-xs text-slate-400 font-bold" aria-label="增加">+</button>
+                      </div>
+
+                      <!-- 节拍带练与打勾（已完成的组不再提供带练） -->
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button v-if="ex.mode !== 'time' && !set.done" @click="startTempoCoach(phase.key, ex, set)" class="w-7 h-7 bg-indigo-900 text-indigo-200 rounded-lg text-xs font-bold border border-indigo-700" aria-label="开始节奏带练" title="节奏带练">🎵</button>
+                        <button @click="handleSetCheck(phase.key, ex, set)" 
+                                :class="set.done ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-700'"
+                                class="w-7 h-7 rounded-lg text-xs font-bold" :aria-label="set.done ? '取消打卡' : '打卡这组'">✓</button>
+                      </div>
+                    </div>
+
+                    <!-- 两击打卡 RPE 胶囊 -->
+                    <div v-if="set.showRpePicker" class="pt-1 border-t border-slate-800 animate-fadeIn space-y-1">
+                      <div class="flex justify-between text-xs text-slate-400">
+                        <span>选择 RPE (疲劳度):</span>
+                        <span class="text-rose-400 font-mono font-bold">RPE {{ set.rpe || 8 }}</span>
+                      </div>
+                      <div class="flex justify-between gap-1 overflow-x-auto no-scrollbar py-0-5">
+                        <button v-for="r in [6, 7, 7.5, 8, 8.5, 9, 9.5, 10]" :key="r"
+                                @click="selectRpe(phase.key, ex, set, r)"
+                                :class="set.rpe === r ? 'bg-rose-600 text-white font-bold' : 'bg-slate-900 text-slate-300 border border-slate-800'"
+                                class="flex-1 py-1 rounded text-xs font-mono">
+                          {{ r }}
+                        </button>
+                      </div>
+                      <div class="text-xs text-slate-500 text-center">或直接再点一次 ✓ 按当前 RPE 完成</div>
+                    </div>
+
                   </div>
-                  <div class="flex justify-between gap-1 overflow-x-auto no-scrollbar py-0-5">
-                    <button v-for="r in [6, 7, 7.5, 8, 8.5, 9, 9.5, 10]" :key="r"
-                            @click="selectRpe(phase.key, ex, set, r)"
-                            :class="set.rpe === r ? 'bg-rose-600 text-white font-bold' : 'bg-slate-900 text-slate-300 border border-slate-800'"
-                            class="flex-1 py-1 rounded text-xs font-mono">
-                      {{ r }}
-                    </button>
-                  </div>
+                </div>
+
+                <!-- 卡片底栏 -->
+                <div class="flex justify-between items-center text-xs text-slate-500">
+                  <button @click="addSet(ex)" class="text-rose-400 font-medium">+ 增组</button>
+                  <span class="font-mono">建议休 {{ ex.target_rest || 90 }}s</span>
                 </div>
 
               </div>
             </div>
+          </section>
+        </main>
 
-            <!-- 卡片底栏 -->
-            <div class="flex justify-between items-center text-xs text-slate-500">
-              <button @click="addSet(ex)" class="text-rose-400 font-medium">+ 增组</button>
-              <span class="font-mono">建议休 {{ ex.target_rest || 90 }}s</span>
+        <!-- 桌面侧栏（≥1024px 显示）：休息计时 / 本次训练统计 / AI 复盘 -->
+        <aside class="desktop-rail space-y-2-5" aria-label="桌面侧栏">
+          <div class="bg-slate-900 rounded-xl border border-slate-800 p-3 space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-xs text-slate-400 font-bold">⏱️ 组间休息</span>
+              <span class="text-xs font-mono" :class="restTimer.running ? 'text-rose-400' : 'text-slate-500'">{{ restTimer.running ? '计时中' : '待机' }}</span>
             </div>
-
+            <div class="text-3xl font-mono font-black text-center" :class="restTimer.running ? (restTimer.timeLeft <= 5 ? 'text-rose-400 animate-ping' : 'text-emerald-400') : 'text-slate-500'">
+              {{ formatTime(restTimer.timeLeft) }}
+            </div>
+            <div class="flex gap-2">
+              <button @click="startManualRest" :disabled="restTimer.running" class="rail-btn flex-1 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200">开始 90s</button>
+              <button @click="adjustRestTimer(15)" :disabled="!restTimer.running" class="rail-btn w-14 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200">+15s</button>
+              <button @click="stopRestTimer" :disabled="!restTimer.running" class="rail-btn w-14 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-300">停止</button>
+            </div>
           </div>
-        </div>
-      </section>
-    </main>
+
+          <div class="bg-slate-900 rounded-xl border border-slate-800 p-3 space-y-1-5">
+            <div class="text-xs text-slate-400 font-bold">📊 本次训练 · {{ currentPlan }} 日</div>
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-500">有效吨位</span>
+              <span class="font-mono font-bold text-amber-300">{{ sessionVolume }} kg</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-500">正式组</span>
+              <span class="font-mono font-bold text-white">{{ sessionStats.done }} / {{ sessionStats.total }}</span>
+            </div>
+            <div class="space-y-1 pt-1 border-t border-slate-800">
+              <div v-for="phase in visiblePhases" :key="phase.key" class="flex items-center gap-1-5 text-xs">
+                <span class="shrink-0">{{ phase.icon }}</span>
+                <span class="flex-1 truncate text-slate-400">{{ phase.baseTitle }}</span>
+                <span class="font-mono text-slate-300">{{ getPhaseProgress(phase.key) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="activeSession.coach_review" class="bg-slate-900 rounded-xl border border-rose-900 p-3 space-y-1-5 text-xs">
+            <div class="flex justify-between items-center">
+              <span class="text-rose-300 font-bold">🏆 AI 复盘</span>
+              <button @click="showAiReviewModal = true" class="text-slate-500">详情 &gt;</button>
+            </div>
+            <div class="p-2 bg-rose-950 border border-rose-800 rounded-lg text-rose-200 selectable">{{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}</div>
+            <div class="text-slate-300 selectable">{{ activeSession.coach_review.volume_analysis || '—' }}</div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- 桌面页脚（≥1024px 显示） -->
+      <footer class="page-foot">
+        <span>纯前端 · 零依赖 · MIT</span>
+        <span class="font-mono">R 开始/停止休息 · Esc 关闭弹窗</span>
+        <a href="https://github.com/Poro789/iron-prompt" target="_blank" rel="noopener">GitHub ↗</a>
+      </footer>
+    </div>
 
     <!-- 底部固定栏 -->
     <div class="fixed-bottom">
       <div class="container" style="padding:0;">
-        <button @click="generateAndCopyPrompt" class="w-full bg-rose-600 text-white font-bold py-2-5 px-4 rounded-xl text-xs sm:text-sm">
-          📋 复制 AI 复盘 Prompt (含硬件约束与推拉诊断)
-        </button>
-      </div>
-      <div v-if="toastMsg" class="text-center text-xs text-emerald-400 font-medium animate-ping" style="margin-top:0.25rem;">
-        {{ toastMsg }}
+        <div class="fixed-cta">
+          <button @click="generateAndCopyPrompt" class="btn-cta w-full bg-rose-600 text-white font-bold py-2-5 px-4 rounded-xl text-xs sm:text-sm">
+            📋 复制 AI 复盘 Prompt
+          </button>
+          <button @click="startNewDay" class="w-full mt-1 bg-slate-800 text-slate-300 rounded-xl text-xs py-1-5 border border-slate-700" title="清空 A/B 两日全部打卡状态，吨位归零">
+            🌅 新训练日（重置打卡）
+          </button>
+        </div>
+        <div v-if="toastMsg" class="toast-anim fixed-cta text-center text-xs text-emerald-400 font-medium selectable" style="margin-top:0.25rem;" role="status">
+          {{ toastMsg }}
+        </div>
       </div>
     </div>
 
     <!-- ==================== 模态弹窗系统 ==================== -->
 
     <!-- A. 🎵 沉浸式节拍抽屉 -->
-    <div v-if="tempoCoach.running" class="modal-mask modal-bottom">
-      <div class="bg-slate-900 border-t border-indigo-700 rounded-t-3xl w-full max-w-md p-5 space-y-4 shadow-2xl animate-fadeIn">
+    <div v-if="tempoCoach.running" class="modal-mask modal-bottom" role="dialog" aria-modal="true" aria-label="节奏带练">
+      <div class="sheet bg-slate-900 border-t border-indigo-700 rounded-t-3xl w-full max-w-md p-5 space-y-4 shadow-2xl animate-fadeIn">
         <div class="flex justify-between items-center">
           <div class="flex items-center gap-2">
             <span class="text-xs bg-indigo-600 text-white font-bold px-2-5 py-0-5 rounded-full font-mono">
@@ -207,18 +301,18 @@
           <div class="text-xs text-slate-300 truncate w-full">{{ tempoCoach.dynamicCue }}</div>
         </div>
 
-        <button @click="stopTempoCoach" class="w-full py-3 bg-slate-800 text-slate-200 rounded-xl text-xs font-bold border border-slate-700">
+        <button @click="stopTempoCoach(true)" class="w-full py-3 bg-slate-800 text-slate-200 rounded-xl text-xs font-bold border border-slate-700">
           提前结束 / 退出带练
         </button>
       </div>
     </div>
 
     <!-- B. ⚙️ 总配置中心抽屉 -->
-    <div v-if="showConfigDrawer" @click.self="showConfigDrawer = false" class="modal-mask modal-bottom">
-      <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl w-full max-w-md p-4 space-y-3 shadow-2xl animate-fadeIn" style="max-height:85vh; overflow-y:auto;">
+    <div v-if="showConfigDrawer" @click.self="showConfigDrawer = false" class="modal-mask modal-bottom" role="dialog" aria-modal="true" aria-label="配置中心">
+      <div class="sheet bg-slate-900 border-t border-slate-700 rounded-t-3xl w-full max-w-md p-4 space-y-3 shadow-2xl animate-fadeIn" style="max-height:85vh; overflow-y:auto;">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2">
           <h3 class="text-sm font-bold text-white">⚙️ 总配置中心</h3>
-          <button @click="showConfigDrawer = false" class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 font-bold text-xs">✕</button>
+          <button @click="showConfigDrawer = false" class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 font-bold text-xs" aria-label="关闭配置中心">✕</button>
         </div>
 
         <!-- 3 大 Tab -->
@@ -235,11 +329,11 @@
               <span>{{ ph.title }}</span>
               <button @click="addExercise(ph.key)" class="text-rose-400">+ 加动作</button>
             </div>
-            <div v-for="(ex, i) in activeSession.phases[ph.key]" :key="i" class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex justify-between items-center">
+            <div v-for="(ex, i) in activeSession.phases[ph.key]" :key="ex.name + '-' + i" class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex justify-between items-center">
               <span class="font-bold text-white truncate flex-1 pr-2">{{ ex.name }}</span>
               <div class="flex gap-1 shrink-0">
                 <button @click="openQuickEditModal(ph.key, ex)" class="text-slate-300 px-2 py-0-5 bg-slate-800 rounded">编辑</button>
-                <button @click="removeExercise(ph.key, i)" class="text-rose-400 px-1-5 py-0-5">✕</button>
+                <button @click="removeExercise(ph.key, i)" class="text-rose-400 px-1-5 py-0-5" aria-label="删除动作">✕</button>
               </div>
             </div>
           </div>
@@ -249,7 +343,7 @@
         <div v-if="configTab === 'equip'" class="space-y-3 text-xs">
           <div>
             <label class="text-slate-400">哑铃短杆单只自重 (kg)</label>
-            <input type="number" step="0.01" v-model="equipment.dumbbellBarWeight" class="w-full px-2 py-1-5 mt-1 font-mono">
+            <input type="number" step="0.01" v-model.number="equipment.dumbbellBarWeight" class="w-full px-2 py-1-5 mt-1 font-mono">
           </div>
           <div>
             <div class="flex justify-between mb-1">
@@ -258,11 +352,11 @@
             </div>
             <div class="space-y-1 max-h-32 overflow-y-auto">
               <div v-for="(p, pIdx) in equipment.plates" :key="pIdx" class="flex items-center gap-2">
-                <input type="number" step="0.05" v-model="p.weight" class="w-16 px-2 py-1 text-center font-mono">
+                <input type="number" step="0.05" v-model.number="p.weight" class="w-16 px-2 py-1 text-center font-mono">
                 <span class="text-slate-500">kg ×</span>
-                <input type="number" min="0" step="2" v-model="p.count" class="w-14 px-2 py-1 text-center font-mono">
+                <input type="number" min="0" step="2" v-model.number="p.count" class="w-14 px-2 py-1 text-center font-mono">
                 <span class="text-slate-500">片</span>
-                <button @click="removePlateSpec(pIdx)" class="text-rose-400 ml-auto px-2 font-bold">✕</button>
+                <button @click="removePlateSpec(pIdx)" class="text-rose-400 ml-auto px-2 font-bold" aria-label="删除该片规">✕</button>
               </div>
             </div>
           </div>
@@ -273,9 +367,9 @@
             </div>
             <div class="flex flex-wrap gap-1">
               <div v-for="(b, bIdx) in equipment.bands" :key="bIdx" class="flex items-center gap-1 bg-slate-950 border border-slate-800 px-2 py-1 rounded">
-                <input type="number" v-model="equipment.bands[bIdx]" class="w-8 bg-transparent text-xs font-mono text-center">
+                <input type="number" v-model.number="equipment.bands[bIdx]" class="w-8 bg-transparent text-xs font-mono text-center">
                 <span class="text-slate-500">磅</span>
-                <button @click="removeBandSpec(bIdx)" class="text-rose-400 text-xs ml-1">✕</button>
+                <button @click="removeBandSpec(bIdx)" class="text-rose-400 text-xs ml-1" aria-label="删除该绳">✕</button>
               </div>
             </div>
           </div>
@@ -283,15 +377,31 @@
 
         <!-- Tab 3: AI与数据 -->
         <div v-if="configTab === 'data'" class="space-y-3 text-xs">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-slate-400">训练者档案（随 AI 复盘 Prompt 发送）</span>
+            </div>
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="text-slate-500">体重 (kg)</label>
+                <input type="number" step="0.5" v-model.number="activeSession.athlete.bodyweight" class="w-full px-2 py-1-5 font-mono">
+              </div>
+              <div class="flex-1">
+                <label class="text-slate-500">今日准备度 (/5)</label>
+                <input type="number" min="1" max="5" step="1" v-model.number="activeSession.athlete.readiness" class="w-full px-2 py-1-5 font-mono">
+              </div>
+            </div>
+          </div>
+
           <p class="text-slate-400">粘贴 AI 回复中的 ```json 代码块：</p>
           <textarea v-model="aiImportText" rows="4" placeholder="粘贴 AI 处方 JSON..." @paste="onAiPaste" class="w-full p-2 font-mono"></textarea>
           <button @click="parseAIResponse" class="w-full py-2-5 bg-rose-600 text-white rounded-xl font-bold">解析并装载 AI 处方</button>
           
           <div class="pt-2 border-t border-slate-800 flex gap-2">
             <button @click="exportJSONBackup" class="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg">备份 JSON</button>
-            <label class="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg text-center cursor-pointer">
+            <label class="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg text-center cursor-pointer" title="覆盖当前全部数据，还原前请先备份">
               还原 JSON
-              <input type="file" accept=".json" @change="importJSONBackup" style="display:none;">
+              <input type="file" accept=".json" @change="importJSONBackup" style="display:none;" aria-label="选择备份 JSON 文件">
             </label>
           </div>
         </div>
@@ -300,13 +410,13 @@
     </div>
 
     <!-- C. 负荷选择器抽屉 -->
-    <div v-if="weightPicker.visible" @click.self="weightPicker.visible = false" class="modal-mask modal-bottom">
-      <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl w-full max-w-md p-4 space-y-3 shadow-2xl animate-fadeIn" style="max-height:60vh; overflow-y:auto;">
+    <div v-if="weightPicker.visible" @click.self="weightPicker.visible = false" class="modal-mask modal-bottom" role="dialog" aria-modal="true" aria-label="选择负荷">
+      <div class="sheet bg-slate-900 border-t border-slate-700 rounded-t-3xl w-full max-w-md p-4 space-y-3 shadow-2xl animate-fadeIn" style="max-height:60vh; overflow-y:auto;">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2">
           <span class="text-xs font-bold text-amber-400">选择物理合法负荷 ({{ weightPicker.ex.name }})</span>
           <button @click="weightPicker.visible = false" class="text-xs text-slate-400">完成</button>
         </div>
-        <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="picker-grid grid grid-cols-2 gap-2 text-xs">
           <button v-for="item in (weightPicker.ex.mode === 'band_reps' ? availableBandOptions : availableDumbbellOptions)" 
                   :key="item.weight"
                   @click="selectWeightFromPicker(item.weight)"
@@ -320,13 +430,13 @@
     </div>
 
     <!-- D. 💡 动作口诀提示弹窗 -->
-    <div v-if="cueModal.visible" @click.self="cueModal.visible = false" class="modal-mask modal-center">
+    <div v-if="cueModal.visible" @click.self="cueModal.visible = false" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="动作要领">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2 font-bold text-white">
           <span>{{ cueModal.ex.name }} · 要领</span>
-          <button @click="cueModal.visible = false" class="text-slate-400">✕</button>
+          <button @click="cueModal.visible = false" class="text-slate-400" aria-label="关闭">✕</button>
         </div>
-        <div class="space-y-2 text-slate-300">
+        <div class="space-y-2 text-slate-300 selectable">
           <div v-if="cueModal.ex.target"><strong class="text-emerald-400">🎯 目标发力:</strong> {{ cueModal.ex.target }}</div>
           <div v-if="cueModal.ex.cues"><strong class="text-amber-400">💡 动作口诀:</strong> {{ cueModal.ex.cues }}</div>
           <div v-if="cueModal.ex.pitfalls"><strong class="text-rose-400">⚠️ 错误代偿:</strong> {{ cueModal.ex.pitfalls }}</div>
@@ -336,49 +446,77 @@
       </div>
     </div>
 
-    <!-- E. ✏️ 快速编辑弹窗 -->
-    <div v-if="editModal.visible" @click.self="editModal.visible = false" class="modal-mask modal-center">
+    <!-- E. ✏️ 快速编辑弹窗（草稿模式：保存才生效，可取消） -->
+    <div v-if="editModal.visible && editModal.draft" @click.self="cancelQuickEdit" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="编辑动作">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2 font-bold text-white">
-          <span>编辑动作</span>
-          <button @click="editModal.visible = false" class="text-slate-400">✕</button>
+          <span>编辑动作 · {{ editModal.draft.name }}</span>
+          <button @click="cancelQuickEdit" class="text-slate-400" aria-label="关闭">✕</button>
         </div>
         <div class="space-y-2">
           <div>
             <label class="text-slate-400">动作名称</label>
-            <input type="text" v-model="editModal.ex.name" class="w-full px-2 py-1 mt-1">
+            <input type="text" v-model="editModal.draft.name" class="w-full px-2 py-1 mt-1">
+          </div>
+          <div>
+            <label class="text-slate-400">动作模式</label>
+            <select v-model="editModal.draft.mode" class="w-full px-2 py-1 mt-1">
+              <option value="weight_reps">哑铃负重 (kg)</option>
+              <option value="band_reps">拉力绳 (磅)</option>
+              <option value="bodyweight_reps">自重</option>
+              <option value="time">计时 (秒)</option>
+            </select>
           </div>
           <div>
             <label class="text-slate-400">核心口诀 (语音带练将朗读)</label>
-            <input type="text" v-model="editModal.ex.cues" class="w-full px-2 py-1 mt-1">
+            <input type="text" v-model="editModal.draft.cues" class="w-full px-2 py-1 mt-1">
+          </div>
+          <div>
+            <label class="text-slate-400">目标发力</label>
+            <input type="text" v-model="editModal.draft.target" class="w-full px-2 py-1 mt-1">
+          </div>
+          <div>
+            <label class="text-slate-400">错误代偿警示</label>
+            <input type="text" v-model="editModal.draft.pitfalls" class="w-full px-2 py-1 mt-1">
+          </div>
+          <div>
+            <label class="text-slate-400">节奏 离心-停顿-向心 (秒)</label>
+            <div class="flex gap-1 mt-1">
+              <input type="number" min="0" step="1" v-model.number="editModal.draft.tempo[0]" class="w-full px-2 py-1 text-center font-mono">
+              <input type="number" min="0" step="1" v-model.number="editModal.draft.tempo[1]" class="w-full px-2 py-1 text-center font-mono">
+              <input type="number" min="0" step="1" v-model.number="editModal.draft.tempo[2]" class="w-full px-2 py-1 text-center font-mono">
+            </div>
           </div>
           <div>
             <label class="text-slate-400">目标休息时间 (秒)</label>
-            <input type="number" v-model="editModal.ex.target_rest" class="w-full px-2 py-1 mt-1 font-mono">
+            <input type="number" min="0" step="5" v-model.number="editModal.draft.target_rest" class="w-full px-2 py-1 mt-1 font-mono">
           </div>
         </div>
-        <button @click="editModal.visible = false" class="w-full py-2 bg-rose-600 text-white rounded-xl font-bold">保存微调</button>
+        <div class="flex gap-2">
+          <button @click="cancelQuickEdit" class="w-1/3 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold">取消</button>
+          <button @click="saveQuickEdit" class="w-2/3 py-2 bg-rose-600 text-white rounded-xl font-bold">保存微调</button>
+        </div>
       </div>
     </div>
 
     <!-- F. 🏆 AI 看板弹窗 -->
-    <div v-if="showAiReviewModal && activeSession.coach_review" @click.self="showAiReviewModal = false" class="modal-mask modal-center">
+    <div v-if="showAiReviewModal && activeSession.coach_review" @click.self="showAiReviewModal = false" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="AI 复盘看板">
       <div class="bg-slate-900 border border-rose-900 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2 text-rose-400 font-bold">
           <span>🏆 CSCS 专家教练复盘诊断</span>
-          <button @click="showAiReviewModal = false" class="text-slate-400">✕</button>
+          <button @click="showAiReviewModal = false" class="text-slate-400" aria-label="关闭">✕</button>
         </div>
-        <div class="space-y-2 text-slate-300">
+        <div class="space-y-2 text-slate-300 selectable">
           <div class="p-2 bg-rose-950 border border-rose-800 rounded-lg text-rose-200 font-medium">
-            {{ activeSession.coach_review.motivation_highlight }}
+            {{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}
           </div>
           <div class="bg-slate-950 p-2-5 rounded-lg border border-slate-800 space-y-1">
             <div class="text-xs text-amber-400 font-bold">📊 推拉平衡与容量评估:</div>
-            <div>{{ activeSession.coach_review.volume_analysis }}</div>
+            <div>{{ activeSession.coach_review.volume_analysis || '（无）' }}</div>
           </div>
           <div class="bg-slate-950 p-2-5 rounded-lg border border-slate-800 space-y-1">
             <div class="text-xs text-emerald-400 font-bold">💡 动作质量与加重总评:</div>
-            <div>{{ activeSession.coach_review.summary }}</div>
+            <div>{{ activeSession.coach_review.summary || '（无）' }}</div>
           </div>
         </div>
         <button @click="showAiReviewModal = false" class="w-full py-2 bg-slate-800 text-slate-200 rounded-xl font-bold">关闭看板</button>
@@ -387,7 +525,8 @@
 
   </div>
 
-  <!-- 引入纯本地 Vue 核心脚本与业务脚本 -->
+  <!-- 引入纯本地核心逻辑、Vue 核心脚本与业务脚本 -->
+  <script src="./js/core.js"></script>
   <script src="./js/vue.global.prod.js"></script>
   <script src="./js/app.js"></script>
 </body>
