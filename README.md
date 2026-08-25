@@ -3,9 +3,10 @@
 > 纯力量训练系统 · 移动端优先 · 零后端纯前端
 
 [![Deploy to GitHub Pages](https://github.com/Poro789/iron-prompt/actions/workflows/deploy.yml/badge.svg)](https://github.com/Poro789/iron-prompt/actions/workflows/deploy.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Poro789/iron-prompt)](https://github.com/Poro789/iron-prompt/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**在线访问：** [https://poro789.github.io/iron-prompt](https://poro789.github.io/iron-prompt)
+**在线访问：** [https://poro789.github.io/iron-prompt](https://poro789.github.io/iron-prompt) ｜ **版本记录：** [CHANGELOG](CHANGELOG.md) · [Releases](https://github.com/Poro789/iron-prompt/releases)
 
 ## ✨ 功能特性
 
@@ -16,7 +17,9 @@
 - **语音提示** — 基于 Web Speech API，准备口令、动作口诀、整组完成播报（可开关）
 - **AI 复盘闭环**
   - 📋 一键复制 AI 复盘 Prompt（含硬件约束与推拉诊断）
-  - 🔁 粘贴 AI 返回的 `json` 处方块，解析并直接装载为新训练计划
+  - 🔁 粘贴 AI 返回的 `json` 处方块，**粘贴后自动解析装载**（也可手动点击按钮）
+  - 📦 处方全量装载：5 大阶段（升温/主项/辅助/核心/冷身）全覆盖，**同名动作覆盖 + 新动作自动追加**，加载后 Toast 显示「更新 X 个 / 新增 X 个」
+  - 🧩 兼容未知阶段名：AI 返回新的 phase 会自动创建对应区块
 - **JSON 全量备份** — 导出/导入完整训练数据，跨设备迁移
 - **本地存储** — 数据保存在浏览器 `localStorage`，离线可用，无隐私上传
 
@@ -40,6 +43,7 @@ iron-prompt/
 ├── js/
 │   ├── vue.global.prod.js      # Vue 3.3.4 运行时（本地化）
 │   └── app.js                  # 应用逻辑
+├── CHANGELOG.md                # 版本更新记录
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml          # GitHub Pages 自动部署
@@ -59,9 +63,11 @@ cd iron-prompt
 # 用浏览器打开 index.html 即可
 ```
 
-## 📦 部署
+## 📦 部署与版本
 
-推送 `main` 分支后，[GitHub Actions](.github/workflows/deploy.yml) 自动构建并发布到 GitHub Pages，无需手动操作。
+- **GitHub Pages**：推送 `main` 分支后，[GitHub Actions](.github/workflows/deploy.yml) 自动部署，无需手动操作。
+- **版本管理**：遵循 [语义化版本](https://semver.org/lang/zh-CN/)（`vMAJOR.MINOR.PATCH`），每次发版创建 Git Tag 并在 [Releases](https://github.com/Poro789/iron-prompt/releases) 发布更新说明，详细变更见 [CHANGELOG.md](CHANGELOG.md)。
+- **注意**：应用数据保存在浏览器 `localStorage`，升级版本不影响已有数据（旧存档会自动补齐新增结构）；如需跨设备迁移请使用「备份 JSON / 还原 JSON」。
 
 ## 📄 许可
 
