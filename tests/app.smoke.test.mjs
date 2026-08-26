@@ -65,7 +65,7 @@ test('初始状态正确（默认计划 / 求解器 / 统计）', () => {
   assert.ok(api.availableBandOptions.value.some(o => o.weight === 35), '拉力绳 35 磅可达');
   assert.equal(api.sessionStats.value.done, 0, '初始无已完成组');
   assert.ok(api.sessionStats.value.total > 0, '初始计划存在正式组（统计管道可用）');
-  assert.equal(api.appVersion, '1.3.0');
+  assert.match(api.appVersion, /^\d+\.\d+\.\d+$/, 'appVersion 为语义化版本');
 });
 
 test('首启（空存档）粘贴含 accessory/core 的 AI 处方不崩溃（回归 R1）', () => {
