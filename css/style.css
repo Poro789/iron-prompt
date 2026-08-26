@@ -205,7 +205,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 /* 模态遮罩与弹窗 */
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(2px); z-index: 100; display: flex; }
-.modal-center { align-items: center; justify-content: center; padding: 1rem; }
+/* 居中弹窗：margin auto 实现「能居中则居中、超高则顶部对齐可滚动」，
+   避免 align-items:center 时超高弹窗底部按钮被推出视口（移动端改模式「保存」不可达的根因） */
+.modal-center { padding: 1rem; overflow-y: auto; }
+.modal-center > * { margin: auto; max-height: calc(100vh - 2rem); }
 .modal-bottom { align-items: flex-end; justify-content: center; }
 
 /* 动画 */

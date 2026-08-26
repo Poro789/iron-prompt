@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)（Semantic Versioning）。
 
+## [1.3.1] - 2026-08-26
+
+### Added
+
+- **计时模式带练**：计时动作（拉伸/平板支撑等）现在也有 🎵 按钮——3s 准备 → 静态保持倒计时（每 5s 提示音，30/20/10s 语音提醒）→ 保持结束自动打卡并入休息
+
+### Fixed
+
+- **移动端「改变动作模式无响应」**：快速编辑弹窗超高时「保存微调」按钮被推出视口不可达，且点击屏幕下方命中遮罩会静默取消（无任何提示）——编辑弹窗卡片限高 85vh 可滚动，`.modal-center` 改为「能居中则居中、超高则顶部对齐可滚动」（`margin: auto` + 遮罩 `overflow-y: auto`），桌面端矮窗口同样受益
+- **AI 处方 mode 变体丢失**：AI 返回 `"timer"` / `"TIME"` / `"hold"` / `"bodyweight"` 等变体时，模板的 `=== 'time'` 判断全部落空，界面表现为「模式没变」——新增 `Core.normalizeMode` 归一（无法识别的脏值保留原模式），AI 装载与快速编辑双向接入
+
 ## [1.3.0] - 2026-08-26
 
 ### Added

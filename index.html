@@ -169,7 +169,7 @@
 
                       <!-- 节拍带练与打勾（已完成的组不再提供带练） -->
                       <div class="flex items-center gap-1 shrink-0">
-                        <button v-if="ex.mode !== 'time' && !set.done" @click="startTempoCoach(phase.key, ex, set)" class="w-7 h-7 bg-indigo-900 text-indigo-200 rounded-lg text-xs font-bold border border-indigo-700" aria-label="开始节奏带练" title="节奏带练">🎵</button>
+                        <button v-if="!set.done" @click="startTempoCoach(phase.key, ex, set)" class="w-7 h-7 bg-indigo-900 text-indigo-200 rounded-lg text-xs font-bold border border-indigo-700" :aria-label="ex.mode === 'time' ? '开始计时保持' : '开始节奏带练'" :title="ex.mode === 'time' ? '开始计时保持' : '节奏带练'">🎵</button>
                         <button @click="handleSetCheck(phase.key, ex, set)" 
                                 :class="set.done ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-700'"
                                 class="w-7 h-7 rounded-lg text-xs font-bold" :aria-label="set.done ? '取消打卡' : '打卡这组'">✓</button>
@@ -287,11 +287,11 @@
         <div class="flex justify-between items-center">
           <div class="flex items-center gap-2">
             <span class="text-xs bg-indigo-600 text-white font-bold px-2-5 py-0-5 rounded-full font-mono">
-              第 {{ tempoCoach.currentRep }} / {{ tempoCoach.targetReps }} 次
+              {{ tempoCoach.mode === 'hold' ? '⏳ 保持 ' + tempoCoach.holdTotal + 's' : '第 ' + tempoCoach.currentRep + ' / ' + tempoCoach.targetReps + ' 次' }}
             </span>
             <span class="text-sm font-bold text-white">{{ tempoCoach.exName }}</span>
           </div>
-          <span class="text-xs text-purple-300 font-mono">节奏 {{ tempoCoach.tempoConfig.join('-') }}</span>
+          <span v-if="tempoCoach.mode !== 'hold'" class="text-xs text-purple-300 font-mono">节奏 {{ tempoCoach.tempoConfig.join('-') }}</span>
         </div>
 
         <div class="bg-black-60 rounded-2xl p-4 border border-indigo-900 flex flex-col items-center justify-center space-y-1 text-center">
@@ -448,7 +448,7 @@
 
     <!-- E. ✏️ 快速编辑弹窗（草稿模式：保存才生效，可取消） -->
     <div v-if="editModal.visible && editModal.draft" @click.self="cancelQuickEdit" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="编辑动作">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn" style="max-height:85vh; overflow-y:auto; overscroll-behavior:contain;">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2 font-bold text-white">
           <span>编辑动作 · {{ editModal.draft.name }}</span>
           <button @click="cancelQuickEdit" class="text-slate-400" aria-label="关闭">✕</button>

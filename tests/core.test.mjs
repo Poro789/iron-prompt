@@ -210,6 +210,22 @@ test('planVolumeKg: 全阶段统计，排除热身/自重/计时/拉力绳/未�
   assert.equal(C.planVolumeKg({ phases: { strength: [{ sets: null }] } }), 0);
 });
 
+// ---------------- 动作模式归一化 ----------------
+test('normalizeMode: 覆盖 AI 常见变体，脏值回退默认', () => {
+  assert.equal(C.normalizeMode('TIME'), 'time');
+  assert.equal(C.normalizeMode('timer'), 'time');
+  assert.equal(C.normalizeMode('hold'), 'time');
+  assert.equal(C.normalizeMode('Bodyweight'), 'bodyweight_reps');
+  assert.equal(C.normalizeMode('BW'), 'bodyweight_reps');
+  assert.equal(C.normalizeMode('band'), 'band_reps');
+  assert.equal(C.normalizeMode('Resistance_Band'), 'band_reps');
+  assert.equal(C.normalizeMode('Weight_Reps'), 'weight_reps');
+  assert.equal(C.normalizeMode('dumbbell'), 'weight_reps');
+  assert.equal(C.normalizeMode('未知模式', 'time'), 'time', '无法识别时回退 fallback');
+  assert.equal(C.normalizeMode(undefined), 'weight_reps', '空值回退 weight_reps');
+  assert.equal(C.normalizeMode('  time  '), 'time', '首尾空白归一');
+});
+
 // ---------------- 正式组进度 ----------------
 test('planStats: 只统计非热身组，忽略结构异常', () => {
   const plan = {

@@ -79,7 +79,7 @@ createApp({
     const STORAGE_KEY = 'iron_prompt_static_v10';
     const EQUIP_KEY = 'iron_prompt_equip_v10';
     const VOICE_KEY = 'iron_prompt_voice_v1';
-    const APP_VERSION = '1.3.0';
+    const APP_VERSION = '1.3.1';
 
     const currentPlan = ref('A');
     const toastMsg = ref('');
@@ -135,8 +135,10 @@ createApp({
       currentEx: null,
       currentSet: null,
       exName: '',
+      mode: 'reps',        // 'reps' 次数带练 | 'hold' 计时保持
       currentRep: 1,
       targetReps: 10,
+      holdTotal: 0,        // 保持模式总秒数
       tempoConfig: [3, 1, 1],
       phaseState: 'eccentric',
       countdown: 3,
@@ -279,59 +281,91 @@ createApp({
       } catch (e) {}
     };
 
-    // --- 节奏控制器 ---
+    // --- 节奏控制器（次数带练 + 计时保持双模式） ---
+    const finishTempoSet = () => {
+      // 带练结束 = 真正打卡完成（修复原「假完成」：只弹 RPE 面板不打勾）
+      const s = tempoCoach.currentSet;
+      const exRef = tempoCoach.currentEx;
+      const pk = tempoCoach.phaseKey;
+      if (s && !s.done) {
+        if (!s.rpe) s.rpe = 8;
+        stopTempoCoach(false);
+        playTone(1046, 0.5);
+        if (voiceEnabled.value) speakText(tempoCoach.mode === 'hold' ? '保持完成！进入休息' : '整组完成！表现优秀，进入休息');
+        completeSet(pk, exRef, s);
+      } else {
+        stopTempoCoach(false);
+      }
+    };
+
     const startTempoCoach = (phaseKey, ex, set) => {
       clearInterval(tempoCoach.timerId);
       tempoCoach.phaseKey = phaseKey;
       tempoCoach.currentEx = ex;
       tempoCoach.currentSet = set;
       tempoCoach.exName = ex.name;
-      tempoCoach.currentRep = 1;
-      tempoCoach.targetReps = Core.num(set.value, 10);
       tempoCoach.tempoConfig = Array.isArray(ex.tempo) ? ex.tempo : [3, 1, 1];
       tempoCoach.running = true;
 
-      if (voiceEnabled.value && ex.cues) speakText(`准备，${ex.name}。口诀：${ex.cues}`);
-      setTempoPhase('eccentric', Core.num(tempoCoach.tempoConfig[0], 3));
+      if (ex.mode === 'time') {
+        // 计时模式：3s 准备 → 保持 set.value 秒（最小 5s）
+        tempoCoach.mode = 'hold';
+        tempoCoach.currentRep = 0;
+        tempoCoach.targetReps = Math.max(5, Math.round(Core.num(set.value, 30)));
+        tempoCoach.holdTotal = tempoCoach.targetReps;
+        if (voiceEnabled.value) speakText(`准备，${ex.name}，保持 ${tempoCoach.targetReps} 秒`);
+        setTempoPhase('prepare', 3);
+      } else {
+        tempoCoach.mode = 'reps';
+        tempoCoach.currentRep = 1;
+        tempoCoach.targetReps = Core.num(set.value, 10);
+        if (voiceEnabled.value && ex.cues) speakText(`准备，${ex.name}。口诀：${ex.cues}`);
+        setTempoPhase('eccentric', Core.num(tempoCoach.tempoConfig[0], 3));
+      }
       playTone(330, 0.15);
 
       tempoCoach.timerId = setInterval(() => {
         if (tempoCoach.countdown > 1) {
           tempoCoach.countdown--;
-          playTone(330, 0.08);
-        } else {
-          if (tempoCoach.phaseState === 'eccentric') {
-            if (Core.num(tempoCoach.tempoConfig[1]) > 0) {
-              setTempoPhase('pause', Core.num(tempoCoach.tempoConfig[1]));
-              playTone(440, 0.1);
-            } else {
-              setTempoPhase('concentric', Core.num(tempoCoach.tempoConfig[2], 1));
-              playTone(880, 0.2);
+          if (tempoCoach.mode === 'hold' && tempoCoach.phaseState === 'hold') {
+            if (tempoCoach.countdown % 5 === 0) playTone(440, 0.1);
+            if (voiceEnabled.value && (tempoCoach.countdown === 30 || tempoCoach.countdown === 20 || tempoCoach.countdown === 10)) {
+              speakText(`还有 ${tempoCoach.countdown} 秒，稳住`);
             }
-          } else if (tempoCoach.phaseState === 'pause') {
+          } else {
+            playTone(330, 0.08);
+          }
+          return;
+        }
+        if (tempoCoach.mode === 'hold') {
+          if (tempoCoach.phaseState === 'prepare') {
+            setTempoPhase('hold', tempoCoach.holdTotal);
+            playTone(880, 0.2);
+            if (voiceEnabled.value) speakText('开始保持！');
+          } else {
+            finishTempoSet();
+          }
+          return;
+        }
+        if (tempoCoach.phaseState === 'eccentric') {
+          if (Core.num(tempoCoach.tempoConfig[1]) > 0) {
+            setTempoPhase('pause', Core.num(tempoCoach.tempoConfig[1]));
+            playTone(440, 0.1);
+          } else {
             setTempoPhase('concentric', Core.num(tempoCoach.tempoConfig[2], 1));
             playTone(880, 0.2);
-          } else if (tempoCoach.phaseState === 'concentric') {
-            if (tempoCoach.currentRep < tempoCoach.targetReps) {
-              tempoCoach.currentRep++;
-              setTempoPhase('eccentric', Core.num(tempoCoach.tempoConfig[0], 3));
-              playTone(330, 0.15);
-              if (voiceEnabled.value && tempoCoach.currentRep % 3 === 0) speakText(`第${tempoCoach.currentRep}次，稳住`);
-            } else {
-              // 带练结束 = 真正打卡完成（修复原「假完成」：只弹 RPE 面板不打勾）
-              const s = tempoCoach.currentSet;
-              const exRef = tempoCoach.currentEx;
-              const pk = tempoCoach.phaseKey;
-              if (s && !s.done) {
-                if (!s.rpe) s.rpe = 8;
-                stopTempoCoach(false);
-                playTone(1046, 0.5);
-                if (voiceEnabled.value) speakText(`整组完成！表现优秀，进入休息`);
-                completeSet(pk, exRef, s);
-              } else {
-                stopTempoCoach(false);
-              }
-            }
+          }
+        } else if (tempoCoach.phaseState === 'pause') {
+          setTempoPhase('concentric', Core.num(tempoCoach.tempoConfig[2], 1));
+          playTone(880, 0.2);
+        } else if (tempoCoach.phaseState === 'concentric') {
+          if (tempoCoach.currentRep < tempoCoach.targetReps) {
+            tempoCoach.currentRep++;
+            setTempoPhase('eccentric', Core.num(tempoCoach.tempoConfig[0], 3));
+            playTone(330, 0.15);
+            if (voiceEnabled.value && tempoCoach.currentRep % 3 === 0) speakText(`第${tempoCoach.currentRep}次，稳住`);
+          } else {
+            finishTempoSet();
           }
         }
       }, 1000);
@@ -341,7 +375,17 @@ createApp({
       tempoCoach.phaseState = state;
       tempoCoach.countdown = Math.max(0, Math.round(Core.num(sec, 1)));
       const ex = tempoCoach.currentEx;
-      if (state === 'eccentric') {
+      if (state === 'prepare') {
+        tempoCoach.phaseTitle = `准备 (${sec}s)`;
+        tempoCoach.dynamicCue = ex?.cues ? `💡 ${ex.cues}` : '调整呼吸，进入起始姿态';
+        tempoCoach.phaseIcon = '🧘';
+        tempoCoach.phaseColor = 'text-indigo-400';
+      } else if (state === 'hold') {
+        tempoCoach.phaseTitle = `静态保持 (共 ${sec}s)`;
+        tempoCoach.dynamicCue = ex?.cues ? `💡 ${ex.cues}` : '收紧核心，保持姿态不变形';
+        tempoCoach.phaseIcon = '⏳';
+        tempoCoach.phaseColor = 'text-cyan-400';
+      } else if (state === 'eccentric') {
         tempoCoach.phaseTitle = `慢速下放 / 离心 (${sec}s)`;
         tempoCoach.dynamicCue = ex?.cues ? `💡 ${ex.cues}` : '控制重力，肌肉拉长不泄力';
         tempoCoach.phaseIcon = '📉';
@@ -456,7 +500,7 @@ createApp({
       editModal.ex = ex;
       editModal.draft = {
         name: ex.name,
-        mode: ex.mode || 'weight_reps',
+        mode: Core.normalizeMode(ex.mode, 'weight_reps'), // 脏值归一，保证 <select> 选中有效项
         cues: ex.cues || '',
         target: ex.target || '',
         pitfalls: ex.pitfalls || '',
@@ -471,7 +515,7 @@ createApp({
       editModal.visible = false;
       if (!d || !ex) return;
       ex.name = String(d.name || '新动作').trim() || '新动作';
-      ex.mode = d.mode;
+      ex.mode = Core.normalizeMode(d.mode, 'weight_reps');
       ex.cues = d.cues || '';
       ex.target = d.target || '';
       ex.pitfalls = d.pitfalls || '';
@@ -680,7 +724,7 @@ createApp({
             }];
           }
           if (exist) {
-            exist.mode = item.mode || exist.mode;
+            exist.mode = item.mode ? Core.normalizeMode(item.mode, exist.mode) : exist.mode;
             exist.cues = item.cues || exist.cues;
             exist.target = item.target || exist.target;
             exist.pitfalls = item.pitfalls || exist.pitfalls;
@@ -692,7 +736,7 @@ createApp({
           } else {
             list.push({
               name: item.name,
-              mode: item.mode || 'weight_reps',
+              mode: item.mode ? Core.normalizeMode(item.mode) : 'weight_reps',
               overload_status: item.overload_status || '',
               target: item.target || '',
               cues: item.cues || '',

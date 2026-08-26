@@ -153,6 +153,45 @@ test('A/B 切换停止带练（回归 P1-13）', () => {
   api.switchPlan('A');
 });
 
+test('计时模式：🎵 保持带练跑完 → 真正打卡（修复「计时模式无计时按钮」）', async () => {
+  const ex = api.activeSession.value.phases.strength[0];
+  const savedMode = ex.mode;
+  ex.mode = 'time';
+  ex.sets[0].value = 5;
+  api.startTempoCoach('strength', ex, ex.sets[0]);
+  assert.equal(api.tempoCoach.running, true);
+  assert.equal(api.tempoCoach.mode, 'hold', '计时动作进入保持模式');
+  assert.equal(api.tempoCoach.phaseState, 'prepare', '先进入准备阶段');
+  const t0 = Date.now();
+  while (!ex.sets[0].done && Date.now() - t0 < 15000) await sleep(100);
+  assert.equal(ex.sets[0].done, true, '3s 准备 + 5s 保持跑完 → 打卡');
+  assert.equal(api.tempoCoach.running, false, '带练自动结束');
+  assert.ok(api.restTimer.running, '完成后自动进入休息');
+  api.stopRestTimer();
+  ex.mode = savedMode;
+  ex.sets[0].value = 10;
+});
+
+test('AI 处方：mode 变体归一（TIME/timer → time，脏值回退原模式）', () => {
+  api.aiImportText.value = JSON.stringify({
+    prescription: [
+      { phase: 'core', name: 'AI 计时动作', mode: 'TIME', suggested_sets: [{ value: 45, rpe: 8 }] },
+      { phase: 'strength', name: '哑铃卧推', mode: 'timer', suggested_sets: [{ value: 10, rpe: 8 }] }
+    ]
+  });
+  api.parseAIResponse();
+  const aiHold = api.activeSession.value.phases.core.find(e => e.name === 'AI 计时动作');
+  assert.equal(aiHold.mode, 'time', 'TIME → time');
+  const bench = api.activeSession.value.phases.strength.find(e => e.name === '哑铃卧推');
+  assert.equal(bench.mode, 'time', 'timer → time（同名覆盖也归一）');
+  // 脏值：无法识别的 mode 保留原模式
+  api.aiImportText.value = JSON.stringify({
+    prescription: [{ phase: 'strength', name: '哑铃卧推', mode: 'weird_mode', suggested_sets: [{ value: 10, rpe: 8 }] }]
+  });
+  api.parseAIResponse();
+  assert.equal(bench.mode, 'time', '未知 mode 回退为原模式而非脏值');
+});
+
 test('AI 处方：大小写归一 / 同名覆盖 / 未知阶段 / 小数节奏取整', () => {
   api.aiImportText.value = '```json\n' + JSON.stringify({
     prescription: [

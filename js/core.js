@@ -223,6 +223,17 @@
     return plans;
   }
 
+  // 动作模式归一化：AI 常返回 "timer" / "TIME" / "bodyweight" 等变体，
+  // 不归一会导致模板 === 'time' 判断全部落空，界面表现为「改了没反应」
+  function normalizeMode(raw, fallback = 'weight_reps') {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (['time', 'timer', 'hold', 'timed', 'time_based', 'duration'].includes(s)) return 'time';
+    if (['bodyweight_reps', 'bodyweight', 'body_weight', 'bw'].includes(s)) return 'bodyweight_reps';
+    if (['band_reps', 'band', 'bands', 'resistance_band'].includes(s)) return 'band_reps';
+    if (['weight_reps', 'weight', 'dumbbell', 'dumbbell_reps', 'reps'].includes(s)) return 'weight_reps';
+    return fallback;
+  }
+
   // 全阶段正式组进度（不含热身组）：{ done, total }
   function planStats(plan) {
     let done = 0;
@@ -273,6 +284,7 @@
     validateBackup,
     migratePlans,
     planVolumeKg,
-    planStats
+    planStats,
+    normalizeMode
   };
 });
