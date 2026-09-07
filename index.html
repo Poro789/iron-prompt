@@ -1,533 +1,1177 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
-  <meta name="description" content="IronPrompt Pro — 纯力量训练系统：A/B 日计划打卡、组间休息计时、沉浸式节拍带练、AI 复盘处方闭环。纯前端零后端，移动端优先，桌面端双栏工作台。">
-  <meta name="theme-color" content="#020617">
-  <meta property="og:title" content="IronPrompt Pro - 纯力量训练系统">
-  <meta property="og:description" content="A/B 日计划打卡 · 节拍带练 · AI 复盘处方闭环 · 纯前端零后端">
-  <meta property="og:type" content="website">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8F%8B%EF%B8%8F%3C/text%3E%3C/svg%3E">
-  <title>IronPrompt Pro - 纯力量训练系统</title>
-  <link rel="stylesheet" href="./css/style.css">
-</head>
-<body>
-  <div id="app" v-cloak>
-    <div class="container">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Iron Log · 力量训练记录</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋️</text></svg>">
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#262b36;
+  --text:#e6e9ef; --muted:#8b93a3; --accent:#4f8cff; --green:#3fb96f; --red:#e05252;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  font-size:15px;line-height:1.5;
+  padding-bottom:calc(64px + env(safe-area-inset-bottom));
+}
+button{font-family:inherit;touch-action:manipulation;cursor:pointer}
+input,textarea{font-family:inherit}
+.wrap{max-width:640px;margin:0 auto;padding:0 12px}
 
-      <!-- 桌面品牌栏（≥768px 显示） -->
-      <div class="page-brand">
-        <div class="flex items-center gap-2">
-          <span class="text-sm font-black text-white">🏋️ IronPrompt Pro</span>
-          <span class="text-xs font-mono text-slate-500 bg-slate-950 border border-slate-800 px-1-5 py-0-5 rounded">{{ appVersion }}</span>
-        </div>
-        <span class="text-xs text-slate-500">纯力量训练系统 · 数据仅存于本机浏览器</span>
-      </div>
+header{position:sticky;top:0;z-index:10;background:var(--bg);padding:12px 16px 6px}
+header .wrap{display:flex;align-items:baseline;justify-content:space-between;padding:0}
+header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.5px}
+header .ver{color:var(--muted);font-size:12px}
 
-      <!-- 桌面双栏布局容器（≥1024px 生效网格） -->
-      <div class="desktop-layout">
+.view{display:none;padding-top:8px}
+.view.active{display:block}
 
-        <!-- 1. 顶部极窄状态栏 -->
-        <header class="d-head mb-2 border border-slate-800 px-3 py-2 rounded-2xl sticky-header flex justify-between items-center shadow-lg">
-          <div class="flex items-center gap-2">
-            <div class="flex bg-slate-950 p-0-5 rounded-lg border border-slate-800">
-              <button @click="switchPlan('A')"
-                      :class="currentPlan === 'A' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'"
-                      class="px-2-5 py-1 rounded text-xs" :aria-pressed="currentPlan === 'A'">A日</button>
-              <button @click="switchPlan('B')"
-                      :class="currentPlan === 'B' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'"
-                      class="px-2-5 py-1 rounded text-xs" :aria-pressed="currentPlan === 'B'">B日</button>
-            </div>
-            <span class="text-xs bg-slate-950 border border-slate-800 text-amber-300 px-2 py-1 rounded font-mono font-bold" title="本次训练有效正式组吨位">
-              {{ sessionVolume }} kg
-            </span>
-          </div>
+.day-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.day-btn{
+  position:relative;height:52px;border-radius:12px;border:1px solid var(--border);
+  background:var(--panel);color:var(--muted);font-size:17px;font-weight:700;
+}
+.day-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.day-btn .dot{
+  position:absolute;top:8px;right:10px;width:8px;height:8px;border-radius:50%;
+  background:var(--green);display:none;
+}
+.day-btn.running .dot{display:block}
 
-          <!-- 组间休息表 -->
-          <div v-if="restTimer.running || restTimer.timeLeft > 0" class="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-rose-900">
-            <span class="text-xs font-mono font-bold" :class="restTimer.timeLeft <= 5 ? 'text-rose-500 animate-ping' : 'text-emerald-400'">
-              ⏱️ {{ formatTime(restTimer.timeLeft) }}
-            </span>
-            <button @click="adjustRestTimer(15)" class="text-xs text-slate-400">+15s</button>
-            <button @click="stopRestTimer" class="text-xs text-slate-500 hover:text-rose-400 ml-1" aria-label="停止休息计时">✕</button>
-          </div>
+.session-status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin:2px 2px 10px;min-height:20px}
+.session-status .live{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block}
+.session-status .clock{font-variant-numeric:tabular-nums;color:var(--text)}
 
-          <div class="flex items-center gap-1-5">
-            <button @click="startManualRest" :disabled="restTimer.running"
-                    class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs"
-                    :class="restTimer.running ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-slate-800 border-slate-700 text-slate-300'"
-                    aria-label="开始 90 秒组间休息" title="手动开始 90s 休息（快捷键 R）">⏱</button>
-            <button @click="voiceEnabled = !voiceEnabled" 
-                    class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs"
-                    :class="voiceEnabled ? 'bg-indigo-950 border-indigo-700 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-500'"
-                    :aria-pressed="voiceEnabled" :aria-label="voiceEnabled ? '关闭语音与提示音' : '开启语音与提示音'" :title="voiceEnabled ? '语音提示：开' : '语音提示：关'">
-              {{ voiceEnabled ? '🗣️' : '🔇' }}
-            </button>
-            <button @click="showConfigDrawer = true" class="w-7 h-7 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-200" aria-label="打开配置中心">
-              ⚙️
-            </button>
-          </div>
-        </header>
+.section-head{margin:18px 2px 8px;font-size:13px;font-weight:700;color:var(--accent)}
+.section-head:first-child{margin-top:4px}
 
-        <!-- 🏆 AI 诊断胶囊条 -->
-        <div v-if="activeSession.coach_review" 
-              @click="showAiReviewModal = true"
-              class="d-capsule mb-2 bg-slate-900 border border-rose-900 px-3 py-1-5 rounded-xl flex items-center justify-between text-xs cursor-pointer">
-          <div class="flex items-center gap-1-5 truncate text-rose-300">
-            <span>🏆</span>
-            <span class="truncate font-medium selectable">{{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}</span>
-          </div>
-          <span class="text-xs text-slate-500 font-mono shrink-0 ml-2">详情 &gt;</span>
-        </div>
+.ex-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
+.ex-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ex-name{font-size:16px;font-weight:700}
+.ex-muscle{color:var(--muted);font-size:12px;font-weight:400;margin-left:6px}
+.ex-target{color:var(--accent);font-size:13px;font-weight:600;white-space:nowrap}
+.ex-notes{margin:8px 0 4px;border-top:1px solid var(--border);padding-top:6px}
+.ex-notes summary{color:var(--muted);font-size:13px;cursor:pointer;user-select:none}
+.ex-notes .note{font-size:13px;color:var(--muted);margin-top:6px}
+.ex-notes .note b{color:var(--text);font-weight:600;margin-right:4px}
 
-        <!-- 2. 主执行界面 (打卡流) -->
-        <main class="d-main space-y-2-5">
-          <!-- 空态引导 -->
-          <div v-if="!visiblePhases.length" class="bg-slate-900 rounded-xl border border-slate-800 p-4 text-center text-xs text-slate-400 space-y-2">
-            <div class="text-3xl">🏋️</div>
-            <div class="text-white font-bold">今日还没有动作</div>
-            <div>点右上角 ⚙️ →「1. 动作编排」添加动作，<br>或在「3. AI与数据」粘贴 AI 处方自动装载。</div>
-          </div>
+.set-row{
+  display:grid;grid-template-columns:22px 1fr 1fr 44px;gap:8px;align-items:center;
+  padding:8px 0;border-top:1px solid var(--border);
+}
+.set-row:first-of-type{border-top:none}
+.set-row.time{grid-template-columns:22px 1fr 44px}
+.set-row.bodyweight{grid-template-columns:22px auto 1fr 44px}
+.set-row.warmup{opacity:.72}
+.set-row.warmup .set-idx{color:var(--accent)}
+.set-idx{color:var(--muted);font-size:13px;text-align:center;font-variant-numeric:tabular-nums}
+.stepper{display:flex;align-items:center;gap:4px;min-width:0}
+.step-btn{
+  width:38px;height:38px;flex:none;border-radius:9px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text);font-size:18px;line-height:1;
+}
+.step-btn:active{background:var(--border)}
+.set-input{
+  flex:1;min-width:0;height:38px;text-align:center;font-size:16px;font-weight:600;
+  background:var(--panel2);border:1px solid var(--border);border-radius:9px;color:var(--text);
+  -moz-appearance:textfield;
+}
+.set-input::-webkit-outer-spin-button,.set-input::-webkit-inner-spin-button{-webkit-appearance:none}
+.confirm-btn{
+  width:44px;height:44px;border-radius:10px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);font-size:18px;
+}
+.set-row.done .confirm-btn{background:var(--green);border-color:var(--green);color:#fff}
+.set-row.done .set-input{color:var(--muted)}
+.bw-tag{
+  color:var(--muted);font-size:13px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;text-align:center;white-space:nowrap;
+}
+.unit{color:var(--muted);font-size:11px;flex:none}
+.rpe-row{display:flex;align-items:center;gap:6px;margin:2px 0 6px 30px}
+.rpe-label{color:var(--muted);font-size:12px;width:30px}
+.rpe-btn{
+  width:30px;height:30px;border-radius:8px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);font-size:15px;
+}
+.rpe-val{min-width:28px;text-align:center;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rpe-target{color:var(--muted);font-size:11px;margin-left:auto}
+.add-set{
+  width:100%;height:40px;margin-top:6px;border-radius:10px;border:1px dashed var(--border);
+  background:none;color:var(--muted);font-size:14px;
+}
+.add-set:active{background:var(--panel2)}
 
-          <section v-for="phase in visiblePhases" :key="phase.key" class="phase-card bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
-            
-            <!-- 阶段头部 -->
-            <div @click="togglePhaseCollapse(phase.key)" 
-                 class="bg-slate-800 px-3 py-2 border-b border-slate-800 flex justify-between items-center cursor-pointer">
-              <div class="flex items-center gap-1-5">
-                <span class="text-xs text-slate-400">{{ collapsedPhases[phase.key] ? '▶' : '▼' }}</span>
-                <span class="text-xs font-bold" :class="phase.color">{{ phase.icon }} {{ phase.title }}</span>
-              </div>
-              <span class="text-xs font-mono px-2 py-0-5 rounded-full" 
-                    :class="isPhaseFullyCompleted(phase.key) ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-950 text-slate-400'">
-                {{ getPhaseProgress(phase.key) }}
-              </span>
-            </div>
+.end-btn{
+  width:100%;height:52px;margin-top:16px;border:none;border-radius:12px;
+  background:var(--green);color:#fff;font-size:17px;font-weight:700;
+}
+.discard-btn{
+  width:100%;height:36px;margin-top:8px;border:none;background:none;
+  color:var(--muted);font-size:13px;
+}
+.empty-hint{color:var(--muted);text-align:center;padding:40px 0;font-size:14px}
 
-            <!-- 动作列表 -->
-            <div v-show="!collapsedPhases[phase.key]" class="p-2 space-y-2-5">
-              <div v-for="(ex, exIdx) in activeSession.phases[phase.key]" :key="ex.name + '-' + exIdx" 
-                   :class="isExerciseDone(ex) ? 'border-emerald-800 bg-slate-950 opacity-60' : 'border-slate-800 bg-slate-900'"
-                   class="rounded-xl p-2-5 border space-y-2">
-                
-                <!-- 动作卡片标题 -->
-                <div class="flex justify-between items-center">
-                  <div class="flex items-center gap-1-5 flex-1 min-w-0">
-                    <span class="text-sm font-black text-white truncate">{{ ex.name }}</span>
-                    <span v-if="ex.overload_status" 
-                          class="text-xs px-1-5 py-0-5 rounded border shrink-0"
-                          :class="ex.overload_status.includes('加重') || ex.overload_status.includes('升级') ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-slate-950 text-amber-300 border-slate-800'">
-                      {{ ex.overload_status }}
-                    </span>
-                  </div>
-                  
-                  <div class="flex items-center gap-1 shrink-0">
-                    <button v-if="ex.cues || ex.target" @click="openCueModal(ex)" class="w-7 h-7 rounded-full bg-slate-800 text-amber-400 text-xs font-bold" aria-label="查看动作要领">💡</button>
-                    <button @click="openQuickEditModal(phase.key, ex)" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 text-xs" aria-label="编辑动作">✏️</button>
-                  </div>
-                </div>
+.hist-item{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.hist-item summary{list-style:none;cursor:pointer;padding:12px;display:flex;align-items:center;gap:8px}
+.hist-item summary::-webkit-details-marker{display:none}
+.hist-date{font-weight:600;font-size:14px}
+.day-badge{
+  width:22px;height:22px;flex:none;border-radius:6px;background:var(--panel2);
+  color:var(--accent);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;
+}
+.hist-meta{color:var(--muted);font-size:12px;margin-left:auto;text-align:right}
+.hist-detail{border-top:1px solid var(--border);padding:10px 12px;font-size:13px;color:var(--muted)}
+.hist-detail .h-ex{margin-bottom:8px}
+.hist-detail .h-ex b{color:var(--text);font-weight:600;display:block;margin-bottom:2px}
 
-                <!-- 单组打卡行 -->
-                <div class="space-y-1-5">
-                  <div v-for="(set, sIdx) in ex.sets" :key="sIdx" 
-                       :class="set.done ? 'bg-emerald-950 border-emerald-800' : (set.set_type === 'warmup' ? 'bg-amber-950 border-amber-800' : 'bg-slate-950 border-slate-800')"
-                       class="p-2 rounded-lg border space-y-1-5">
-                    
-                    <div class="flex items-center justify-between gap-1-5">
-                      <!-- 组类型 -->
-                      <button @click="toggleSetType(set)" 
-                              :class="set.set_type === 'warmup' ? 'bg-amber-950 text-amber-300 border border-amber-700' : 'bg-slate-900 text-slate-300 border border-slate-700'"
-                              class="w-7 h-7 rounded text-xs font-mono font-bold shrink-0"
-                              :aria-label="set.set_type === 'warmup' ? '当前为热身组，点击切换为正式组' : '当前为正式组，点击切换为热身组'">
-                        {{ set.set_type === 'warmup' ? '热' : sIdx + 1 }}
-                      </button>
+.set-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
+.set-card h3{margin:0 0 8px;font-size:14px}
+.set-card p{margin:4px 0;color:var(--muted);font-size:13px}
+.set-row2{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.set-row2 label{font-size:14px}
+.set-row2 input{
+  width:90px;height:38px;text-align:center;font-size:15px;background:var(--panel2);
+  border:1px solid var(--border);border-radius:9px;color:var(--text);
+}
+.set-row2 select{
+  width:90px;height:38px;text-align:center;font-size:15px;background:var(--panel2);
+  border:1px solid var(--border);border-radius:9px;color:var(--text);
+}
+.cond-btn{
+  margin-left:auto;flex:none;border:1px solid var(--border);background:var(--panel2);
+  color:var(--muted);font-size:12px;border-radius:8px;padding:4px 10px;
+}
+.wide-input{
+  width:100%;height:38px;margin-top:6px;font-size:14px;background:var(--panel2);
+  border:1px solid var(--border);border-radius:9px;color:var(--text);padding:0 10px;
+}
+.wide-area{
+  width:100%;min-height:96px;margin-top:6px;font-size:13px;background:var(--panel2);
+  border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;resize:vertical;
+}
+.danger-btn{
+  width:100%;height:44px;border-radius:10px;border:1px solid var(--red);
+  background:none;color:var(--red);font-size:14px;margin-top:8px;
+}
+.import-box{
+  width:100%;min-height:120px;margin-top:8px;background:var(--panel2);
+  border:1px solid var(--border);border-radius:9px;color:var(--text);
+  font-size:12px;font-family:Consolas,monospace;padding:8px;resize:vertical;
+}
+.import-btn{
+  width:100%;height:44px;margin-top:8px;border:none;border-radius:10px;
+  background:var(--accent);color:#fff;font-size:15px;font-weight:700;
+}
+.import-msg{font-size:12px;margin-top:8px;white-space:pre-wrap;word-break:break-all}
+.import-msg.err{color:var(--red)}
+.import-msg.ok{color:var(--green)}
+.soon-card{
+  background:var(--panel);border:1px dashed var(--border);border-radius:12px;
+  padding:14px;color:var(--muted);font-size:13px;margin-top:14px;
+}
 
-                      <!-- 负荷与装铃指引 -->
-                      <div class="flex-1 min-w-0" @click="openWeightPicker(ex, set)">
-                        <div class="flex items-baseline gap-1">
-                          <span class="text-xs font-bold font-mono text-amber-300">
-                            {{ ex.mode === 'bodyweight_reps' ? '自重' : (ex.mode === 'time' ? '计时' : `${set.weight}${ex.mode === 'band_reps' ? '磅' : 'kg'}`) }}
-                          </span>
-                          <span class="text-xs text-slate-500 font-mono" v-if="set.prev_record">({{ set.prev_record }})</span>
-                        </div>
-                        <div class="text-xs text-slate-400 font-mono truncate" v-if="ex.mode === 'weight_reps' && set.weight > 0">
-                          {{ getDumbbellPlateCue(set.weight) }}
-                        </div>
-                        <div class="text-xs text-slate-400 font-mono truncate" v-else-if="ex.mode === 'band_reps' && set.weight > 0">
-                          {{ getBandStackCue(set.weight) }}
-                        </div>
-                      </div>
+.tabbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:20;
+  background:var(--panel);border-top:1px solid var(--border);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.tabbar .wrap{display:grid;grid-template-columns:1fr 1fr 1fr;padding:0}
+.tab-btn{height:56px;border:none;background:none;color:var(--muted);font-size:14px}
+.tab-btn.active{color:var(--text);font-weight:700}
 
-                      <!-- 步进调次数（计时模式按 5s 步进） -->
-                      <div class="flex items-center bg-slate-900 border border-slate-800 rounded-lg shrink-0">
-                        <button @click="stepValue(ex, set, -1)" class="w-6 h-7 text-xs text-slate-400 font-bold" aria-label="减少">-</button>
-                        <span class="w-8 text-center text-xs font-mono font-bold text-white">{{ set.value }}{{ ex.mode === 'time' ? 's' : '' }}</span>
-                        <button @click="stepValue(ex, set, 1)" class="w-6 h-7 text-xs text-slate-400 font-bold" aria-label="增加">+</button>
-                      </div>
+.overlay{
+  position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);
+  display:none;align-items:center;justify-content:center;padding:24px;
+}
+.overlay.show{display:flex}
+.summary-card{
+  width:100%;max-width:360px;background:var(--panel);border:1px solid var(--border);
+  border-radius:16px;padding:20px;text-align:center;
+}
+.summary-card h2{margin:0 0 12px;font-size:18px}
+.summary-card .stat{font-size:14px;color:var(--muted);margin:4px 0}
+.summary-card .stat b{color:var(--text);font-size:16px}
+.summary-card button{
+  width:100%;height:46px;margin-top:16px;border:none;border-radius:10px;
+  background:var(--accent);color:#fff;font-size:15px;font-weight:700;
+}
+.toast{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));
+  z-index:60;background:#2a2f3a;border:1px solid var(--border);color:var(--text);
+  padding:8px 16px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;
+  transition:opacity .2s;max-width:90vw;
+}
+.toast.show{opacity:1}
+</style>
+</head><body>
 
-                      <!-- 节拍带练与打勾（已完成的组不再提供带练） -->
-                      <div class="flex items-center gap-1 shrink-0">
-                        <button v-if="!set.done" @click="startTempoCoach(phase.key, ex, set)" class="w-7 h-7 bg-indigo-900 text-indigo-200 rounded-lg text-xs font-bold border border-indigo-700" :aria-label="ex.mode === 'time' ? '开始计时保持' : '开始节奏带练'" :title="ex.mode === 'time' ? '开始计时保持' : '节奏带练'">🎵</button>
-                        <button @click="handleSetCheck(phase.key, ex, set)" 
-                                :class="set.done ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-700'"
-                                class="w-7 h-7 rounded-lg text-xs font-bold" :aria-label="set.done ? '取消打卡' : '打卡这组'">✓</button>
-                      </div>
-                    </div>
-
-                    <!-- 两击打卡 RPE 胶囊 -->
-                    <div v-if="set.showRpePicker" class="pt-1 border-t border-slate-800 animate-fadeIn space-y-1">
-                      <div class="flex justify-between text-xs text-slate-400">
-                        <span>选择 RPE (疲劳度):</span>
-                        <span class="text-rose-400 font-mono font-bold">RPE {{ set.rpe || 8 }}</span>
-                      </div>
-                      <div class="flex justify-between gap-1 overflow-x-auto no-scrollbar py-0-5">
-                        <button v-for="r in [6, 7, 7.5, 8, 8.5, 9, 9.5, 10]" :key="r"
-                                @click="selectRpe(phase.key, ex, set, r)"
-                                :class="set.rpe === r ? 'bg-rose-600 text-white font-bold' : 'bg-slate-900 text-slate-300 border border-slate-800'"
-                                class="flex-1 py-1 rounded text-xs font-mono">
-                          {{ r }}
-                        </button>
-                      </div>
-                      <div class="text-xs text-slate-500 text-center">或直接再点一次 ✓ 按当前 RPE 完成</div>
-                    </div>
-
-                  </div>
-                </div>
-
-                <!-- 卡片底栏 -->
-                <div class="flex justify-between items-center text-xs text-slate-500">
-                  <button @click="addSet(ex)" class="text-rose-400 font-medium">+ 增组</button>
-                  <span class="font-mono">建议休 {{ ex.target_rest || 90 }}s</span>
-                </div>
-
-              </div>
-            </div>
-          </section>
-        </main>
-
-        <!-- 桌面侧栏（≥1024px 显示）：休息计时 / 本次训练统计 / AI 复盘 -->
-        <aside class="desktop-rail space-y-2-5" aria-label="桌面侧栏">
-          <div class="bg-slate-900 rounded-xl border border-slate-800 p-3 space-y-2">
-            <div class="flex justify-between items-center">
-              <span class="text-xs text-slate-400 font-bold">⏱️ 组间休息</span>
-              <span class="text-xs font-mono" :class="restTimer.running ? 'text-rose-400' : 'text-slate-500'">{{ restTimer.running ? '计时中' : '待机' }}</span>
-            </div>
-            <div class="text-3xl font-mono font-black text-center" :class="restTimer.running ? (restTimer.timeLeft <= 5 ? 'text-rose-400 animate-ping' : 'text-emerald-400') : 'text-slate-500'">
-              {{ formatTime(restTimer.timeLeft) }}
-            </div>
-            <div class="flex gap-2">
-              <button @click="startManualRest" :disabled="restTimer.running" class="rail-btn flex-1 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200">开始 90s</button>
-              <button @click="adjustRestTimer(15)" :disabled="!restTimer.running" class="rail-btn w-14 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200">+15s</button>
-              <button @click="stopRestTimer" :disabled="!restTimer.running" class="rail-btn w-14 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-300">停止</button>
-            </div>
-          </div>
-
-          <div class="bg-slate-900 rounded-xl border border-slate-800 p-3 space-y-1-5">
-            <div class="text-xs text-slate-400 font-bold">📊 本次训练 · {{ currentPlan }} 日</div>
-            <div class="flex justify-between text-xs">
-              <span class="text-slate-500">有效吨位</span>
-              <span class="font-mono font-bold text-amber-300">{{ sessionVolume }} kg</span>
-            </div>
-            <div class="flex justify-between text-xs">
-              <span class="text-slate-500">正式组</span>
-              <span class="font-mono font-bold text-white">{{ sessionStats.done }} / {{ sessionStats.total }}</span>
-            </div>
-            <div class="space-y-1 pt-1 border-t border-slate-800">
-              <div v-for="phase in visiblePhases" :key="phase.key" class="flex items-center gap-1-5 text-xs">
-                <span class="shrink-0">{{ phase.icon }}</span>
-                <span class="flex-1 truncate text-slate-400">{{ phase.baseTitle }}</span>
-                <span class="font-mono text-slate-300">{{ getPhaseProgress(phase.key) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="activeSession.coach_review" class="bg-slate-900 rounded-xl border border-rose-900 p-3 space-y-1-5 text-xs">
-            <div class="flex justify-between items-center">
-              <span class="text-rose-300 font-bold">🏆 AI 复盘</span>
-              <button @click="showAiReviewModal = true" class="text-slate-500">详情 &gt;</button>
-            </div>
-            <div class="p-2 bg-rose-950 border border-rose-800 rounded-lg text-rose-200 selectable">{{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}</div>
-            <div class="text-slate-300 selectable">{{ activeSession.coach_review.volume_analysis || '—' }}</div>
-          </div>
-        </aside>
-      </div>
-
-      <!-- 桌面页脚（≥1024px 显示） -->
-      <footer class="page-foot">
-        <span>纯前端 · 零依赖 · MIT</span>
-        <span class="font-mono">R 开始/停止休息 · Esc 关闭弹窗</span>
-        <a href="https://github.com/Poro789/iron-prompt" target="_blank" rel="noopener">GitHub ↗</a>
-      </footer>
-    </div>
-
-    <!-- 底部固定栏 -->
-    <div class="fixed-bottom">
-      <div class="container" style="padding:0;">
-        <div class="fixed-cta">
-          <button @click="generateAndCopyPrompt" class="btn-cta w-full bg-rose-600 text-white font-bold py-2-5 px-4 rounded-xl text-xs sm:text-sm">
-            📋 复制 AI 复盘 Prompt
-          </button>
-          <button @click="startNewDay" class="w-full mt-1 bg-slate-800 text-slate-300 rounded-xl text-xs py-1-5 border border-slate-700" title="清空 A/B 两日全部打卡状态，吨位归零">
-            🌅 新训练日（重置打卡）
-          </button>
-        </div>
-        <div v-if="toastMsg" class="toast-anim fixed-cta text-center text-xs text-emerald-400 font-medium selectable" style="margin-top:0.25rem;" role="status">
-          {{ toastMsg }}
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== 模态弹窗系统 ==================== -->
-
-    <!-- A. 🎵 沉浸式节拍抽屉 -->
-    <div v-if="tempoCoach.running" class="modal-mask modal-bottom" role="dialog" aria-modal="true" aria-label="节奏带练">
-      <div class="sheet bg-slate-900 border-t border-indigo-700 rounded-t-3xl w-full max-w-md p-5 space-y-4 shadow-2xl animate-fadeIn">
-        <div class="flex justify-between items-center">
-          <div class="flex items-center gap-2">
-            <span class="text-xs bg-indigo-600 text-white font-bold px-2-5 py-0-5 rounded-full font-mono">
-              {{ tempoCoach.mode === 'hold' ? '⏳ 保持 ' + tempoCoach.holdTotal + 's' : '第 ' + tempoCoach.currentRep + ' / ' + tempoCoach.targetReps + ' 次' }}
-            </span>
-            <span class="text-sm font-bold text-white">{{ tempoCoach.exName }}</span>
-          </div>
-          <span v-if="tempoCoach.mode !== 'hold'" class="text-xs text-purple-300 font-mono">节奏 {{ tempoCoach.tempoConfig.join('-') }}</span>
-        </div>
-
-        <div class="bg-black-60 rounded-2xl p-4 border border-indigo-900 flex flex-col items-center justify-center space-y-1 text-center">
-          <div class="text-3xl">{{ tempoCoach.phaseIcon }}</div>
-          <div class="text-sm font-bold" :class="tempoCoach.phaseColor">{{ tempoCoach.phaseTitle }}</div>
-          <div class="text-5xl font-mono font-black my-1" :class="tempoCoach.phaseColor">{{ tempoCoach.countdown }}s</div>
-          <div class="text-xs text-slate-300 truncate w-full">{{ tempoCoach.dynamicCue }}</div>
-        </div>
-
-        <button @click="stopTempoCoach(true)" class="w-full py-3 bg-slate-800 text-slate-200 rounded-xl text-xs font-bold border border-slate-700">
-          提前结束 / 退出带练
-        </button>
-      </div>
-    </div>
-
-    <!-- B. ⚙️ 总配置中心抽屉 -->
-    <div v-if="showConfigDrawer" @click.self="showConfigDrawer = false" class="modal-mask modal-bottom" role="dialog" aria-modal="true" aria-label="配置中心">
-      <div class="sheet bg-slate-900 border-t border-slate-700 rounded-t-3xl w-full max-w-md p-4 space-y-3 shadow-2xl animate-fadeIn" style="max-height:85vh; overflow-y:auto;">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h3 class="text-sm font-bold text-white">⚙️ 总配置中心</h3>
-          <button @click="showConfigDrawer = false" class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 font-bold text-xs" aria-label="关闭配置中心">✕</button>
-        </div>
-
-        <!-- 3 大 Tab -->
-        <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
-          <button @click="configTab = 'plan'" :class="configTab === 'plan' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'" class="flex-1 py-1-5 rounded-lg">1. 动作编排</button>
-          <button @click="configTab = 'equip'" :class="configTab === 'equip' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'" class="flex-1 py-1-5 rounded-lg">2. 自由器械</button>
-          <button @click="configTab = 'data'" :class="configTab === 'data' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400'" class="flex-1 py-1-5 rounded-lg">3. AI与数据</button>
-        </div>
-
-        <!-- Tab 1: 动作编排 -->
-        <div v-if="configTab === 'plan'" class="space-y-3 text-xs">
-          <div v-for="ph in phases" :key="ph.key" class="space-y-1-5">
-            <div class="flex justify-between items-center text-slate-400 font-bold">
-              <span>{{ ph.title }}</span>
-              <button @click="addExercise(ph.key)" class="text-rose-400">+ 加动作</button>
-            </div>
-            <div v-for="(ex, i) in activeSession.phases[ph.key]" :key="ex.name + '-' + i" class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex justify-between items-center">
-              <span class="font-bold text-white truncate flex-1 pr-2">{{ ex.name }}</span>
-              <div class="flex gap-1 shrink-0">
-                <button @click="openQuickEditModal(ph.key, ex)" class="text-slate-300 px-2 py-0-5 bg-slate-800 rounded">编辑</button>
-                <button @click="removeExercise(ph.key, i)" class="text-rose-400 px-1-5 py-0-5" aria-label="删除动作">✕</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab 2: 器械库 -->
-        <div v-if="configTab === 'equip'" class="space-y-3 text-xs">
-          <div>
-            <label class="text-slate-400">哑铃短杆单只自重 (kg)</label>
-            <input type="number" step="0.01" v-model.number="equipment.dumbbellBarWeight" class="w-full px-2 py-1-5 mt-1 font-mono">
-          </div>
-          <div>
-            <div class="flex justify-between mb-1">
-              <span class="text-slate-400">杠铃片规格</span>
-              <button @click="addPlateSpec" class="text-amber-400">+ 加片</button>
-            </div>
-            <div class="space-y-1 max-h-32 overflow-y-auto">
-              <div v-for="(p, pIdx) in equipment.plates" :key="pIdx" class="flex items-center gap-2">
-                <input type="number" step="0.05" v-model.number="p.weight" class="w-16 px-2 py-1 text-center font-mono">
-                <span class="text-slate-500">kg ×</span>
-                <input type="number" min="0" step="2" v-model.number="p.count" class="w-14 px-2 py-1 text-center font-mono">
-                <span class="text-slate-500">片</span>
-                <button @click="removePlateSpec(pIdx)" class="text-rose-400 ml-auto px-2 font-bold" aria-label="删除该片规">✕</button>
-              </div>
-            </div>
-          </div>
-          <div>
-            <div class="flex justify-between mb-1">
-              <span class="text-slate-400">拉力绳磅数规格</span>
-              <button @click="addBandSpec" class="text-amber-400">+ 加绳</button>
-            </div>
-            <div class="flex flex-wrap gap-1">
-              <div v-for="(b, bIdx) in equipment.bands" :key="bIdx" class="flex items-center gap-1 bg-slate-950 border border-slate-800 px-2 py-1 rounded">
-                <input type="number" v-model.number="equipment.bands[bIdx]" class="w-8 bg-transparent text-xs font-mono text-center">
-                <span class="text-slate-500">磅</span>
-                <button @click="removeBandSpec(bIdx)" class="text-rose-400 text-xs ml-1" aria-label="删除该绳">✕</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab 3: AI与数据 -->
-        <div v-if="configTab === 'data'" class="space-y-3 text-xs">
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-slate-400">训练者档案（随 AI 复盘 Prompt 发送）</span>
-            </div>
-            <div class="flex gap-2">
-              <div class="flex-1">
-                <label class="text-slate-500">体重 (kg)</label>
-                <input type="number" step="0.5" v-model.number="activeSession.athlete.bodyweight" class="w-full px-2 py-1-5 font-mono">
-              </div>
-              <div class="flex-1">
-                <label class="text-slate-500">今日准备度 (/5)</label>
-                <input type="number" min="1" max="5" step="1" v-model.number="activeSession.athlete.readiness" class="w-full px-2 py-1-5 font-mono">
-              </div>
-            </div>
-          </div>
-
-          <p class="text-slate-400">粘贴 AI 回复中的 ```json 代码块：</p>
-          <textarea v-model="aiImportText" rows="4" placeholder="粘贴 AI 处方 JSON..." @paste="onAiPaste" class="w-full p-2 font-mono"></textarea>
-          <button @click="parseAIResponse" class="w-full py-2-5 bg-rose-600 text-white rounded-xl font-bold">解析并装载 AI 处方</button>
-          
-          <div class="pt-2 border-t border-slate-800 flex gap-2">
-            <button @click="exportJSONBackup" class="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg">备份 JSON</button>
-            <label class="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg text-center cursor-pointer" title="覆盖当前全部数据，还原前请先备份">
-              还原 JSON
-              <input type="file" accept=".json" @change="importJSONBackup" style="display:none;" aria-label="选择备份 JSON 文件">
-            </label>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- C. 负荷选择器抽屉 -->
-    <div v-if="weightPicker.visible" @click.self="weightPicker.visible = false" class="modal-mask modal-bottom" role="dialog" aria-modal="true" aria-label="选择负荷">
-      <div class="sheet bg-slate-900 border-t border-slate-700 rounded-t-3xl w-full max-w-md p-4 space-y-3 shadow-2xl animate-fadeIn" style="max-height:60vh; overflow-y:auto;">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <span class="text-xs font-bold text-amber-400">选择物理合法负荷 ({{ weightPicker.ex.name }})</span>
-          <button @click="weightPicker.visible = false" class="text-xs text-slate-400">完成</button>
-        </div>
-        <div class="picker-grid grid grid-cols-2 gap-2 text-xs">
-          <button v-for="item in (weightPicker.ex.mode === 'band_reps' ? availableBandOptions : availableDumbbellOptions)" 
-                  :key="item.weight"
-                  @click="selectWeightFromPicker(item.weight)"
-                  :class="weightPicker.set.weight === item.weight ? 'bg-rose-600 text-white font-bold' : 'bg-slate-950 text-slate-200 border border-slate-800'"
-                  class="p-2-5 rounded-xl text-left flex flex-col gap-1">
-            <span class="font-mono text-sm font-bold">{{ item.weight }}{{ weightPicker.ex.mode === 'band_reps' ? '磅' : 'kg' }}</span>
-            <span class="text-xs text-slate-400 truncate">{{ item.label }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- D. 💡 动作口诀提示弹窗 -->
-    <div v-if="cueModal.visible" @click.self="cueModal.visible = false" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="动作要领">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2 font-bold text-white">
-          <span>{{ cueModal.ex.name }} · 要领</span>
-          <button @click="cueModal.visible = false" class="text-slate-400" aria-label="关闭">✕</button>
-        </div>
-        <div class="space-y-2 text-slate-300 selectable">
-          <div v-if="cueModal.ex.target"><strong class="text-emerald-400">🎯 目标发力:</strong> {{ cueModal.ex.target }}</div>
-          <div v-if="cueModal.ex.cues"><strong class="text-amber-400">💡 动作口诀:</strong> {{ cueModal.ex.cues }}</div>
-          <div v-if="cueModal.ex.pitfalls"><strong class="text-rose-400">⚠️ 错误代偿:</strong> {{ cueModal.ex.pitfalls }}</div>
-          <div v-if="cueModal.ex.tempo"><strong class="text-purple-400">⏱️ 标准节奏:</strong> 离心{{ cueModal.ex.tempo[0] }}s - 停顿{{ cueModal.ex.tempo[1] }}s - 向心{{ cueModal.ex.tempo[2] }}s</div>
-        </div>
-        <button @click="cueModal.visible = false" class="w-full py-2 bg-slate-800 text-slate-200 rounded-xl font-bold">我知道了</button>
-      </div>
-    </div>
-
-    <!-- E. ✏️ 快速编辑弹窗（草稿模式：保存才生效，可取消） -->
-    <div v-if="editModal.visible && editModal.draft" @click.self="cancelQuickEdit" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="编辑动作">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn" style="max-height:85vh; overflow-y:auto; overscroll-behavior:contain;">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2 font-bold text-white">
-          <span>编辑动作 · {{ editModal.draft.name }}</span>
-          <button @click="cancelQuickEdit" class="text-slate-400" aria-label="关闭">✕</button>
-        </div>
-        <div class="space-y-2">
-          <div>
-            <label class="text-slate-400">动作名称</label>
-            <input type="text" v-model="editModal.draft.name" class="w-full px-2 py-1 mt-1">
-          </div>
-          <div>
-            <label class="text-slate-400">动作模式</label>
-            <select v-model="editModal.draft.mode" class="w-full px-2 py-1 mt-1">
-              <option value="weight_reps">哑铃负重 (kg)</option>
-              <option value="band_reps">拉力绳 (磅)</option>
-              <option value="bodyweight_reps">自重</option>
-              <option value="time">计时 (秒)</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-slate-400">核心口诀 (语音带练将朗读)</label>
-            <input type="text" v-model="editModal.draft.cues" class="w-full px-2 py-1 mt-1">
-          </div>
-          <div>
-            <label class="text-slate-400">目标发力</label>
-            <input type="text" v-model="editModal.draft.target" class="w-full px-2 py-1 mt-1">
-          </div>
-          <div>
-            <label class="text-slate-400">错误代偿警示</label>
-            <input type="text" v-model="editModal.draft.pitfalls" class="w-full px-2 py-1 mt-1">
-          </div>
-          <div>
-            <label class="text-slate-400">节奏 离心-停顿-向心 (秒)</label>
-            <div class="flex gap-1 mt-1">
-              <input type="number" min="0" step="1" v-model.number="editModal.draft.tempo[0]" class="w-full px-2 py-1 text-center font-mono">
-              <input type="number" min="0" step="1" v-model.number="editModal.draft.tempo[1]" class="w-full px-2 py-1 text-center font-mono">
-              <input type="number" min="0" step="1" v-model.number="editModal.draft.tempo[2]" class="w-full px-2 py-1 text-center font-mono">
-            </div>
-          </div>
-          <div>
-            <label class="text-slate-400">目标休息时间 (秒)</label>
-            <input type="number" min="0" step="5" v-model.number="editModal.draft.target_rest" class="w-full px-2 py-1 mt-1 font-mono">
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button @click="cancelQuickEdit" class="w-1/3 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold">取消</button>
-          <button @click="saveQuickEdit" class="w-2/3 py-2 bg-rose-600 text-white rounded-xl font-bold">保存微调</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- F. 🏆 AI 看板弹窗 -->
-    <div v-if="showAiReviewModal && activeSession.coach_review" @click.self="showAiReviewModal = false" class="modal-mask modal-center" role="dialog" aria-modal="true" aria-label="AI 复盘看板">
-      <div class="bg-slate-900 border border-rose-900 rounded-2xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl animate-fadeIn">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2 text-rose-400 font-bold">
-          <span>🏆 CSCS 专家教练复盘诊断</span>
-          <button @click="showAiReviewModal = false" class="text-slate-400" aria-label="关闭">✕</button>
-        </div>
-        <div class="space-y-2 text-slate-300 selectable">
-          <div class="p-2 bg-rose-950 border border-rose-800 rounded-lg text-rose-200 font-medium">
-            {{ activeSession.coach_review.motivation_highlight || activeSession.coach_review.summary }}
-          </div>
-          <div class="bg-slate-950 p-2-5 rounded-lg border border-slate-800 space-y-1">
-            <div class="text-xs text-amber-400 font-bold">📊 推拉平衡与容量评估:</div>
-            <div>{{ activeSession.coach_review.volume_analysis || '（无）' }}</div>
-          </div>
-          <div class="bg-slate-950 p-2-5 rounded-lg border border-slate-800 space-y-1">
-            <div class="text-xs text-emerald-400 font-bold">💡 动作质量与加重总评:</div>
-            <div>{{ activeSession.coach_review.summary || '（无）' }}</div>
-          </div>
-        </div>
-        <button @click="showAiReviewModal = false" class="w-full py-2 bg-slate-800 text-slate-200 rounded-xl font-bold">关闭看板</button>
-      </div>
-    </div>
-
+<header>
+  <div class="wrap">
+    <h1>Iron Log</h1>
+    <span class="ver">v0.4 · P0-1/2/3/4</span>
   </div>
+</header>
 
-  <!-- 引入纯本地核心逻辑、Vue 核心脚本与业务脚本 -->
-  <script src="./js/core.js"></script>
-  <script src="./js/vue.global.prod.js"></script>
-  <script src="./js/app.js"></script>
+<main class="wrap">
+
+  <!-- ============ 今日训练 ============ -->
+  <section id="view-today" class="view active">
+    <div class="day-toggle">
+      <button class="day-btn" id="day-btn-A" onclick="switchDay('A')">A 日<span class="dot"></span></button>
+      <button class="day-btn" id="day-btn-B" onclick="switchDay('B')">B 日<span class="dot"></span></button>
+    </div>
+    <div class="session-status" id="session-status"></div>
+    <div id="ex-list"></div>
+    <button class="end-btn" id="end-btn" style="display:none" onclick="endSession()">结束训练</button>
+    <button class="discard-btn" id="discard-btn" style="display:none" onclick="discardSession()">放弃本次记录</button>
+  </section>
+
+  <!-- ============ 历史 & 导出 ============ -->
+  <section id="view-history" class="view">
+    <div id="hist-list"></div>
+    <div class="set-card">
+      <h3>导出给 AI</h3>
+      <p>一键生成分析 prompt：固定背景 + 最近 N 次日志（含状态/完成标记）+ 逐动作趋势 + 输出模板。粘贴给 AI，返回的 JSON 可直接导入。</p>
+      <div class="set-row2">
+        <label for="export-n">最近次数</label>
+        <select id="export-n">
+          <option value="2">2 次</option>
+          <option value="4" selected>4 次</option>
+          <option value="6">6 次</option>
+          <option value="8">8 次</option>
+          <option value="12">12 次</option>
+        </select>
+      </div>
+      <textarea id="export-text" class="import-box" readonly placeholder="点击「生成并复制」后，JSON 快照显示在这里"></textarea>
+      <button class="import-btn" onclick="doExport()">生成并复制（含 prompt）</button>
+      <button class="discard-btn" style="margin-top:6px" onclick="doExportData()">仅复制数据（不含 prompt）</button>
+      <div id="export-msg" class="import-msg"></div>
+    </div>
+    <div class="set-card">
+      <h3>导入 AI 方案</h3>
+      <p>粘贴 AI 返回的 JSON（容忍 ```json 包裹与多余逗号）。只更新 Program 与动作库，不动训练日志；个人注意事项字段保留。</p>
+      <textarea id="import-text" class="import-box" placeholder='{"type":"ai-plan","exercises":{...},"program":{"A":[...]}}'></textarea>
+      <button class="import-btn" onclick="doImport()">导入</button>
+      <div id="import-msg" class="import-msg"></div>
+    </div>
+    <div class="soon-card">
+      JSON 全量备份将在 P1-7 中加入。
+    </div>
+  </section>
+
+  <!-- ============ 设置 ============ -->
+  <section id="view-settings" class="view">
+    <div class="set-card">
+      <h3>关于</h3>
+      <p>Iron Log v0.4 —— P0-1 今日训练页 + P0-2 自动保存 + P0-3 导出给 AI（含固定分析 prompt）+ P0-4 导入 AI 方案。</p>
+      <p>数据仅存于本机浏览器 localStorage，每次修改自动保存，不上传任何服务器。</p>
+      <p>当前 A/B 计划与动作库为<b style="color:var(--text)">占位数据</b>，在「历史 &amp; 导出」页导入 AI 方案后将被替换。</p>
+      <p>下一步：P1-7 JSON 全量备份。</p>
+    </div>
+    <div class="set-card">
+      <h3>记录</h3>
+      <div class="set-row2">
+        <label for="weight-step">重量步进（kg）</label>
+        <input id="weight-step" type="number" inputmode="decimal" step="0.5" min="0.5">
+      </div>
+      <div class="set-row2" style="margin-top:10px">
+        <label for="rest-note">组间休息（随导出附带）</label>
+      </div>
+      <input id="rest-note" type="text" class="wide-input" placeholder="如：固定 90 秒；不固定可留空">
+    </div>
+    <div class="set-card">
+      <h3>AI 分析背景</h3>
+      <p>导出 prompt 里附带的固定背景：身体数据、体态问题、目标、器械范围。填一次，每次导出自动带上。</p>
+      <textarea id="profile-bg" class="wide-area" placeholder="身高体重、体态问题、目标、训练水平、器械范围与上限"></textarea>
+    </div>
+    <div class="set-card">
+      <h3>危险区</h3>
+      <p>清除全部数据（日志、计划、动作库、进行中的记录），不可恢复。</p>
+      <button class="danger-btn" onclick="clearAll()">清除全部数据</button>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <div class="wrap">
+    <button class="tab-btn active" id="tab-today" onclick="switchView('today')">今日训练</button>
+    <button class="tab-btn" id="tab-history" onclick="switchView('history')">历史 &amp; 导出</button>
+    <button class="tab-btn" id="tab-settings" onclick="switchView('settings')">设置</button>
+  </div>
+</nav>
+
+<div class="overlay" id="summary-overlay">
+  <div class="summary-card">
+    <h2 id="summary-title">训练完成</h2>
+    <div id="summary-body"></div>
+    <button onclick="closeSummary()">好的</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div><script>
+'use strict';
+/* =====================================================================
+ * Iron Log v0.4 —— 力量训练记录（单文件版）
+ * P0-1 今日训练页 / P0-2 自动保存 / P0-3 导出给 AI（数据快照 + 固定分析 prompt）/ P0-4 导入 AI 方案
+ * 数据（四层，不混存）：
+ *   state.logs       训练日志：日期/动作/组·重量·次数·时长/RPE/完成标记/当日状态/用时
+ *   state.exercises  动作库：肌群/模式/单位/要点/避坑/节奏/替代/个人
+ *   state.program    训练计划：A/B 日、分区、逐组规格(type/weight/reps/duration/rpe目标)
+ *   state.sessions   进行中的记录（按 A/B 分存，未结束前不写入 logs）
+ * 导出快照（Export）为 P0-3：由 logs 即时打包生成，不单独存储。
+ * =================================================================== */
+
+const LS_KEY = 'ironlog.v1';
+
+/* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
+const SEED = {
+  version: 1,
+  settings: { lastDay: 'A', weightStep: 2.5, restNote: '' },
+  profile: { background: '体态问题：X 型腿、肋骨外扩\n目标：增肌 + 改善体态\n（请补充：身高体重、训练水平、器械范围与上限）' },
+  program: {
+    A: [
+      { exerciseId: 'bench',   sets: 4, reps: '6-8'   },
+      { exerciseId: 'ohp',     sets: 3, reps: '8-10'  },
+      { exerciseId: 'lateral', sets: 3, reps: '12-15' },
+      { exerciseId: 'squat',   sets: 4, reps: '5-8'   },
+      { exerciseId: 'legcurl', sets: 3, reps: '10-12' }
+    ],
+    B: [
+      { exerciseId: 'deadlift', sets: 3, reps: '3-5'   },
+      { exerciseId: 'row',      sets: 4, reps: '8-10'  },
+      { exerciseId: 'pullup',   sets: 3, reps: '6-10'  },
+      { exerciseId: 'rdl',      sets: 3, reps: '8-10'  },
+      { exerciseId: 'curl',     sets: 3, reps: '10-12' }
+    ]
+  },
+  exercises: {
+    bench:   { name:'杠铃卧推',   muscles:'胸 / 三头 / 前束',
+               tips:'肩胛后收下沉、双脚踩实；杠触下胸，肘与躯干约 45°',
+               pitfalls:'弹胸、肘外展 90°、挺髋', tempo:'离心 2s · 停 1s · 向心 1s',
+               alternatives:'哑铃卧推', personal:'' },
+    ohp:     { name:'站姿杠铃推举', muscles:'肩 / 三头',
+               tips:'核心与臀收紧，微收臀；杠铃在面部正上方锁定',
+               pitfalls:'腰椎过度反弓、后仰借力、杠铃前移', tempo:'离心 2s · 向心 1s',
+               alternatives:'坐姿哑铃推举', personal:'' },
+    lateral: { name:'哑铃侧平举', muscles:'中束',
+               tips:'肘部引领、身体微前倾，举至肩高即停',
+               pitfalls:'甩动借力、耸肩、举过肩高', tempo:'离心 1s · 向心 1s',
+               alternatives:'绳索侧平举', personal:'' },
+    squat:   { name:'杠铃深蹲',   muscles:'股四 / 臀 / 核心',
+               tips:'下蹲前憋气收紧核心，髋膝同动，膝跟脚尖方向一致，脚跟不离地',
+               pitfalls:'脚跟抬起、过度前倾、深度不足', tempo:'离心 3s · 停 1s · 向心 1s',
+               alternatives:'前蹲 / 哈克深蹲', personal:'' },
+    legcurl: { name:'仰卧腿弯举', muscles:'腘绳肌',
+               tips:'髋部贴实垫面，脚跟启动，底部完全伸展但不锁死膝',
+               pitfalls:'甩髋、半程动作', tempo:'离心 2s · 向心 1s',
+               alternatives:'坐姿腿弯举', personal:'' },
+    deadlift:{ name:'杠铃硬拉',   muscles:'后链 / 全身',
+               tips:'杠贴小腿，推地而非拉，全程背中立，髋部锁定收尾',
+               pitfalls:'圆背、手臂先拉、躯干过度前倾', tempo:'向心 1s · 无停顿',
+               alternatives:'六角杠硬拉', personal:'' },
+    row:     { name:'杠铃划船',   muscles:'上背 / 二头',
+               tips:'髋铰链至约 45°，杠拉至下肋，肘部引领',
+               pitfalls:'甩动借力、耸肩、半程', tempo:'离心 2s · 向心 1s',
+               alternatives:'T 杠划船 / 单臂哑铃划船', personal:'' },
+    pullup:  { name:'引体向上',   muscles:'背阔 / 二头',
+               tips:'底部完全悬挂，背阔肌启动，顶部下巴过杠',
+               pitfalls:'借力摆动、半程、耸肩代偿', tempo:'离心 2s · 向心 1s',
+               alternatives:'高位下拉 / 弹力带辅助引体', personal:'' },
+    rdl:     { name:'罗马尼亚硬拉', muscles:'腘绳肌 / 臀',
+               tips:'微屈膝、髋部后推，杠贴腿下行至腘绳肌充分拉伸即停',
+               pitfalls:'圆背、下探过深、膝锁死', tempo:'离心 3s · 向心 1s',
+               alternatives:'直腿硬拉', personal:'' },
+    curl:    { name:'杠铃弯举',   muscles:'二头',
+               tips:'肘贴体侧、手腕中立，底部完全伸展',
+               pitfalls:'甩动借力、屈腕、半程', tempo:'离心 2s · 向心 1s',
+               alternatives:'哑铃弯举 / 锤式弯举', personal:'' }
+  },
+  logs: [],
+  sessions: { A: null, B: null }
+};
+
+/* ---------------- 归一化与迁移（旧格式 {sets:N, reps:'x-y'} → 逐组数组） ---------------- */
+function numOrNull(v){
+  if(v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+function normalizeSet(s){
+  s = s || {};
+  return {
+    type: s.type === 'warmup' ? 'warmup' : 'work',
+    weight: numOrNull(s.weight),
+    reps: numOrNull(s.reps),
+    duration: numOrNull(s.duration),
+    rpe: numOrNull(s.rpe),
+    side: s.side === 'L' || s.side === 'R' ? s.side : null
+  };
+}
+function normalizeItem(raw){
+  raw = raw || {};
+  const section = typeof raw.section === 'string' ? raw.section : '';
+  const repsRange = typeof raw.reps === 'string' ? raw.reps : '';
+  let sets;
+  if(Array.isArray(raw.sets)){
+    sets = raw.sets.map(normalizeSet);
+  }else{
+    const n = Math.max(0, Math.round(Number(raw.sets) || 0));
+    sets = Array.from({ length: n }, () => normalizeSet({}));
+  }
+  return { section, exerciseId: raw.exerciseId, repsRange, sets };
+}
+function migrate(d){
+  if(!d.settings) d.settings = {};
+  if(d.settings.restNote === undefined) d.settings.restNote = '';
+  if(!d.profile) d.profile = { background: '' };
+  if(!d.sessions) d.sessions = { A: null, B: null };
+  for(const day of ['A','B']){
+    if(d.program && Array.isArray(d.program[day])){
+      d.program[day] = d.program[day].map(normalizeItem);
+    }
+  }
+  return d;
+}
+
+/* ---------------- 状态加载 / 保存（P0-2 自动保存） ---------------- */
+let state = load();
+
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const d = JSON.parse(raw);
+      if(d && d.version === 1) return migrate(d);
+    }
+  }catch(e){ console.warn('Iron Log: 读取本地数据失败', e); }
+  const d = JSON.parse(JSON.stringify(SEED));
+  migrate(d);
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(d)); }catch(e){}
+  return d;
+}
+
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  catch(e){ toast('保存失败：' + e.message); }
+}
+
+/* ---------------- 通用工具 ---------------- */
+const $ = id => document.getElementById(id);
+const round1 = v => Math.round(v * 10) / 10;
+const fmtW = v => (v === null || v === undefined || v === '') ? '' : String(round1(v));
+const WEEK = ['日','一','二','三','四','五','六'];
+
+function fmtDuration(sec){
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+function fmtDate(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${dateStr} 周${WEEK[d.getDay()]}`;
+}
+const isDone = s => s.done !== false;
+function sessionVolume(entry){
+  return entry.exercises.reduce((sum, ex) =>
+    sum + ex.sets.filter(isDone).reduce((s, st) => s + (st.weight||0) * (st.reps||0), 0), 0);
+}
+function sessionSets(entry){
+  return entry.exercises.reduce((s, ex) => s + ex.sets.filter(isDone).length, 0);
+}
+
+let toastTimer = null;
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---------------- 视图切换 ---------------- */
+let currentView = 'today';
+function switchView(v){
+  currentView = v;
+  ['today','history','settings'].forEach(x => {
+    $('view-' + x).classList.toggle('active', x === v);
+    $('tab-' + x).classList.toggle('active', x === v);
+  });
+  render();
+}
+
+/* ---------------- 今日训练 ---------------- */
+let draft = {};    // 内存草稿：未开始（未确认任何一组）前的预填数据，按日分存
+let openNotes = {}; // 已展开的"要点/避坑"详情，key = day:exIdx，重渲染后恢复
+let condDraft = { A: null, B: null }; // 当日状态草稿（会话建立前），点按循环切换
+
+const COND_ORDER = [null, '佳', '一般', '差'];
+const COND_LABEL = { '佳': '佳', '一般': '一般', '差': '差' };
+function cycleCondition(day){
+  const cur = state.sessions[day] ? state.sessions[day].condition : condDraft[day];
+  const next = COND_ORDER[(COND_ORDER.indexOf(cur) + 1) % COND_ORDER.length];
+  if(state.sessions[day]) state.sessions[day].condition = next;
+  else condDraft[day] = next;
+  save();
+  renderToday();
+}
+
+function curDay(){ return state.settings.lastDay; }
+
+function switchDay(d){
+  state.settings.lastDay = d;
+  save();
+  render();
+}
+
+/* 上次同动作的数值（取最近一次日志中该动作第一组） */
+function lastValues(exerciseId){
+  for(let i = state.logs.length - 1; i >= 0; i--){
+    const ex = state.logs[i].exercises.find(e => e.exerciseId === exerciseId);
+    if(ex){
+      const f = ex.sets.find(isDone);
+      if(f) return { weight: f.weight ?? null, reps: f.reps ?? null, duration: f.duration ?? null };
+    }
+  }
+  return { weight: null, reps: null, duration: null };
+}
+
+/* 当前日期的可编辑 items：有进行中记录用记录，否则用草稿（计划规格优先，上次数值兜底） */
+function getItems(day){
+  if(state.sessions[day]) return state.sessions[day].items;
+  if(!draft[day]){
+    draft[day] = (state.program[day] || []).map(p => {
+      const lv = lastValues(p.exerciseId);
+      return {
+        exerciseId: p.exerciseId,
+        sets: p.sets.map(spec => ({
+          type: spec.type,
+          weight: spec.weight ?? lv.weight,
+          reps: spec.reps ?? lv.reps,
+          duration: spec.duration ?? lv.duration,
+          rpe: null,
+          side: spec.side ?? null,
+          targetRpe: spec.rpe,
+          done: false
+        }))
+      };
+    });
+  }
+  return draft[day];
+}
+
+/* 首次确认一组时，把草稿提升为正式的进行中记录 */
+function startSessionIfNeeded(day){
+  if(!state.sessions[day]){
+    state.sessions[day] = { startedAt: Date.now(), items: getItems(day), condition: condDraft[day] || null };
+    condDraft[day] = null;
+  }
+}
+
+/* 卡片右上角目标标签：如 "热身 1 + 2 × 10" / "4 × 30s" */
+function targetLabel(item){
+  const work = item.sets.filter(s => s.type !== 'warmup');
+  const warm = item.sets.length - work.length;
+  let core;
+  if(work.length && work.every(s => s.duration != null)){
+    const ds = work.map(s => s.duration);
+    const dmin = Math.min(...ds), dmax = Math.max(...ds);
+    core = work.length + ' × ' + (dmin === dmax ? dmin : dmin + '-' + dmax) + 's';
+  }else if(work.length && work.every(s => s.reps != null)){
+    const rs = work.map(s => s.reps);
+    const rmin = Math.min(...rs), rmax = Math.max(...rs);
+    core = work.length + ' × ' + (rmin === rmax ? rmin : rmin + '-' + rmax);
+  }else if(item.repsRange){
+    core = work.length + ' × ' + item.repsRange;
+  }else{
+    core = work.length + ' 组';
+  }
+  return warm ? '热身 ' + warm + ' + ' + core : core;
+}
+
+/* 一组一行：按动作模式渲染（weight/band 双步进，bodyweight 自重+次数，time 时长） */
+function setRowHTML(exIdx, setIdx, st, ex){
+  const mode = ex.mode || 'weight';
+  const d = f => `data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}"`;
+  let mid;
+  if(mode === 'time'){
+    mid = `
+      <div class="stepper">
+        <button class="step-btn" ${d('duration')} data-act="dec">−</button>
+        <input class="set-input" ${d('duration')} inputmode="numeric" value="${st.duration ?? ''}" aria-label="时长">
+        <button class="step-btn" ${d('duration')} data-act="inc">＋</button>
+        <span class="unit">s</span>
+      </div>`;
+  }else if(mode === 'bodyweight'){
+    mid = `
+      <span class="bw-tag">自重</span>
+      <div class="stepper">
+        <button class="step-btn" ${d('reps')} data-act="dec">−</button>
+        <input class="set-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数">
+        <button class="step-btn" ${d('reps')} data-act="inc">＋</button>
+      </div>`;
+  }else{
+    mid = `
+      <div class="stepper">
+        <button class="step-btn" ${d('weight')} data-act="dec">−</button>
+        <input class="set-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量">
+        <button class="step-btn" ${d('weight')} data-act="inc">＋</button>
+      </div>
+      <div class="stepper">
+        <button class="step-btn" ${d('reps')} data-act="dec">−</button>
+        <input class="set-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数">
+        <button class="step-btn" ${d('reps')} data-act="inc">＋</button>
+      </div>`;
+  }
+  const rpeTarget = st.targetRpe != null ? `<span class="rpe-target">目标 ${st.targetRpe}</span>` : '';
+  return `
+    <div class="set-row ${st.done ? 'done' : ''} ${st.type === 'warmup' ? 'warmup' : ''} ${mode}">
+      <div class="set-idx">${setIdx + 1}</div>
+      ${mid}
+      <button class="confirm-btn" data-ex="${exIdx}" data-set="${setIdx}" data-act="confirm"
+              aria-label="确认这组">${st.done ? '✓' : '○'}</button>
+    </div>
+    <div class="rpe-row">
+      <span class="rpe-label">RPE</span>
+      <button class="rpe-btn" ${d('rpe')} data-act="dec">−</button>
+      <span class="rpe-val">${st.rpe ?? '–'}</span>
+      <button class="rpe-btn" ${d('rpe')} data-act="inc">＋</button>
+      ${rpeTarget}
+    </div>`;
+}
+
+function renderToday(){
+  const day = curDay();
+  $('day-btn-A').classList.toggle('active', day === 'A');
+  $('day-btn-B').classList.toggle('active', day === 'B');
+  $('day-btn-A').classList.toggle('running', !!state.sessions.A);
+  $('day-btn-B').classList.toggle('running', !!state.sessions.B);
+
+  const sess = state.sessions[day];
+  const status = $('session-status');
+  const condVal = sess ? sess.condition : condDraft[day];
+  const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${COND_LABEL[condVal] || '–'}</button>`;
+  if(sess){
+    status.innerHTML = `<span class="live"></span><span>进行中</span><span class="clock" id="session-clock">${fmtDuration((Date.now() - sess.startedAt)/1000)}</span>${condBtn}`;
+  }else{
+    status.innerHTML = `<span>未开始 · 确认第一组后自动计时</span>${condBtn}`;
+  }
+
+  const list = $('ex-list');
+  const program = state.program[day] || [];
+  if(!program.length){
+    list.innerHTML = '<div class="empty-hint">该日暂无动作，等待导入训练计划。</div>';
+  }else{
+    const items = getItems(day);
+    let lastSection = null;
+    list.innerHTML = program.map((p, exIdx) => {
+      const ex = state.exercises[p.exerciseId];
+      const item = items[exIdx];
+      if(!ex || !item) return '';
+      let html = '';
+      if(p.section && p.section !== lastSection){
+        html += `<div class="section-head">${p.section}</div>`;
+        lastSection = p.section;
+      }
+      const mode = ex.mode || 'weight';
+      const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + (ex.unit || 'kg') : '';
+      const notes = [
+        ex.tips ? `<div class="note"><b>要点</b>${ex.tips}</div>` : '',
+        ex.pitfalls ? `<div class="note"><b>避坑</b>${ex.pitfalls}</div>` : '',
+        ex.tempo ? `<div class="note"><b>节奏</b>${ex.tempo}</div>` : '',
+        ex.alternatives ? `<div class="note"><b>替代</b>${ex.alternatives}</div>` : '',
+        ex.personal ? `<div class="note"><b>个人</b>${ex.personal}</div>` : ''
+      ].join('');
+      const sets = item.sets.map((st, setIdx) => setRowHTML(exIdx, setIdx, st, ex)).join('');
+      html += `
+        <div class="ex-card">
+          <div class="ex-head">
+            <div class="ex-name">${ex.name}<span class="ex-muscle">${ex.muscles || ''}</span></div>
+            <div class="ex-target">${targetLabel(item)}${unitTag}</div>
+          </div>
+          ${notes ? `<details class="ex-notes" data-notes="${exIdx}" ${openNotes[day + ':' + exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
+          <div class="sets">${sets}</div>
+          <button class="add-set" data-ex="${exIdx}" data-act="addset">＋ 加一组</button>
+        </div>`;
+      return html;
+    }).join('');
+    list.querySelectorAll('details[data-notes]').forEach(d => {
+      d.addEventListener('toggle', () => { openNotes[day + ':' + d.dataset.notes] = d.open; });
+    });
+  }
+
+  $('end-btn').style.display = sess ? '' : 'none';
+  $('discard-btn').style.display = sess ? '' : 'none';
+  startClock();
+}
+
+/* 步进 / 确认 / 加组（事件委托） */
+$('ex-list').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]');
+  if(!btn) return;
+  const day = curDay();
+  const exIdx = +btn.dataset.ex;
+  const items = getItems(day);
+  const item = items[exIdx];
+  if(!item) return;
+
+  if(btn.dataset.act === 'addset'){
+    const last = item.sets[item.sets.length - 1];
+    item.sets.push({
+      type: last ? last.type : 'work',
+      weight: last ? last.weight : null,
+      reps: last ? last.reps : null,
+      duration: last ? last.duration : null,
+      rpe: null,
+      side: null,
+      targetRpe: last ? last.targetRpe : null,
+      done: false
+    });
+    save(); renderToday();
+    return;
+  }
+
+  const setIdx = +btn.dataset.set;
+  const set = item.sets[setIdx];
+  if(!set) return;
+  const f = btn.dataset.f, act = btn.dataset.act;
+
+  if(f === 'weight'){
+    const ex = state.exercises[item.exerciseId];
+    const step = (ex && ex.unit === 'lb') ? 5 : (state.settings.weightStep || 2.5);
+    set.weight = act === 'inc'
+      ? round1((set.weight || 0) + step)
+      : Math.max(0, round1((set.weight || 0) - step));
+  }else if(f === 'reps'){
+    set.reps = act === 'inc' ? (set.reps || 0) + 1 : Math.max(0, (set.reps || 0) - 1);
+  }else if(f === 'duration'){
+    set.duration = act === 'inc' ? (set.duration || 0) + 5 : Math.max(0, (set.duration || 0) - 5);
+  }else if(f === 'rpe'){
+    set.rpe = act === 'inc' ? Math.min(10, round1((set.rpe || 7.5) + 0.5))
+                            : Math.max(5,  round1((set.rpe || 8.5) - 0.5));
+  }else if(act === 'confirm'){
+    set.done = !set.done;
+    if(set.done) startSessionIfNeeded(day);
+  }
+  save();
+  renderToday();
+});
+
+/* 直接输入数值（change：失焦或回车时提交） */
+$('ex-list').addEventListener('change', e => {
+  const inp = e.target.closest('input.set-input');
+  if(!inp) return;
+  const day = curDay();
+  const set = getItems(day)[+inp.dataset.ex]?.sets[+inp.dataset.set];
+  if(!set) return;
+  const v = parseFloat(inp.value);
+  if(inp.dataset.f === 'weight'){
+    set.weight = isNaN(v) ? null : Math.max(0, round1(v));
+  }else if(inp.dataset.f === 'duration'){
+    set.duration = isNaN(v) ? null : Math.max(0, Math.round(v));
+  }else{
+    set.reps = isNaN(v) ? null : Math.max(0, Math.round(v));
+  }
+  save();
+  renderToday();
+});
+
+/* 结束训练：写入 logs（P0 闭环的落盘点） */
+function endSession(){
+  const day = curDay();
+  const sess = state.sessions[day];
+  if(!sess) return;
+  const exercises = sess.items
+    .map(it => ({
+      exerciseId: it.exerciseId,
+      sets: it.sets.map(s => ({
+        weight: s.weight ?? null, reps: s.reps ?? null,
+        duration: s.duration ?? null, rpe: s.rpe ?? null,
+        side: s.side ?? null, done: !!s.done
+      }))
+    }))
+    .filter(it => it.sets.some(isDone));
+  if(!exercises.length){ toast('还没有确认任何一组'); return; }
+
+  const endedAt = Date.now();
+  const entry = {
+    date: new Date().toISOString().slice(0, 10),
+    day,
+    startedAt: sess.startedAt,
+    endedAt,
+    durationSec: Math.round((endedAt - sess.startedAt) / 1000),
+    condition: sess.condition ?? null,
+    exercises
+  };
+  state.logs.push(entry);
+  state.sessions[day] = null;
+  delete draft[day];
+  save();
+  render();
+  showSummary(entry);
+}
+
+function discardSession(){
+  const day = curDay();
+  if(!state.sessions[day]) return;
+  if(!confirm('放弃本次未结束的记录？已确认的组数将丢失。')) return;
+  state.sessions[day] = null;
+  delete draft[day];
+  condDraft[day] = null;
+  save();
+  render();
+  toast('已放弃');
+}
+
+function showSummary(entry){
+  const vol = Math.round(sessionVolume(entry));
+  $('summary-title').textContent = `${entry.day} 日训练完成`;
+  $('summary-body').innerHTML = `
+    <div class="stat">动作 <b>${entry.exercises.length}</b> 个</div>
+    <div class="stat">总组数 <b>${sessionSets(entry)}</b> 组</div>
+    <div class="stat">总容量 <b>${vol.toLocaleString()} kg</b></div>
+    <div class="stat">用时 <b>${fmtDuration(entry.durationSec)}</b></div>
+    ${entry.condition ? `<div class="stat">状态 <b>${entry.condition}</b></div>` : ''}`;
+  $('summary-overlay').classList.add('show');
+}
+function closeSummary(){ $('summary-overlay').classList.remove('show'); }
+
+/* 进行中计时（只更新时钟，不重渲染） */
+let clockTimer = null;
+function startClock(){
+  if(clockTimer) clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    const sess = state.sessions[curDay()];
+    const el = $('session-clock');
+    if(sess && el) el.textContent = fmtDuration((Date.now() - sess.startedAt) / 1000);
+  }, 1000);
+}
+
+/* ---------------- 历史 & 导出 ---------------- */
+function renderHistory(){
+  const list = $('hist-list');
+  if(!state.logs.length){
+    list.innerHTML = '<div class="empty-hint">还没有训练记录。<br>完成一次训练后会自动出现在这里。</div>';
+    return;
+  }
+  list.innerHTML = state.logs.slice().reverse().map((entry, ri) => {
+    const vol = Math.round(sessionVolume(entry));
+    const doneSets = sessionSets(entry);
+    const totalSets = entry.exercises.reduce((s, ex) => s + ex.sets.length, 0);
+    const cond = entry.condition ? ` · 状态${entry.condition}` : '';
+    const detail = entry.exercises.map(ex => {
+      const exName = (state.exercises[ex.exerciseId] || {}).name || ex.exerciseId;
+      const sets = ex.sets.filter(isDone).map(s => {
+        let base;
+        if(s.duration != null) base = s.duration + 's';
+        else if(s.weight != null) base = fmtW(s.weight) + '×' + (s.reps ?? '?');
+        else base = (s.reps ?? '?') + ' 次';
+        return base + (s.rpe ? ` (RPE ${s.rpe})` : '');
+      }).join('，');
+      return `<div class="h-ex"><b>${exName}</b>${sets}</div>`;
+    }).join('');
+    return `
+      <details class="hist-item">
+        <summary>
+          <span class="hist-date">${fmtDate(entry.date)}</span>
+          <span class="day-badge">${entry.day}</span>
+          <span class="hist-meta">${entry.exercises.length} 动作 · ${doneSets === totalSets ? doneSets : doneSets + '/' + totalSets} 组${cond} · ${vol.toLocaleString()} kg · ${fmtDuration(entry.durationSec)}</span>
+        </summary>
+        <div class="hist-detail">${detail}</div>
+      </details>`;
+  }).join('');
+}
+
+/* ---------------- P0-4 导入 AI 方案 ----------------
+ * 容错：markdown 代码块包裹、多余尾逗号。
+ * 校验：逐字段检查，错误信息带具体路径。
+ * 合并：exercises 按 id 合并（personal 保留本地值）；program 按日整体替换；
+ *       日志不动；有进行中记录的日禁止导入。
+ * ------------------------------------------------------------------ */
+function stripFences(t){
+  t = t.trim();
+  const m = t.match(/^```(?:json|javascript)?\s*([\s\S]*?)\s*```$/i);
+  if(m) t = m[1].trim();
+  return t;
+}
+function validatePlan(d){
+  if(!d || typeof d !== 'object' || Array.isArray(d)) return '顶层必须是 JSON 对象';
+  if(!d.exercises || typeof d.exercises !== 'object' || Array.isArray(d.exercises)) return '缺少 exercises 字段（对象）';
+  if(!d.program || typeof d.program !== 'object' || Array.isArray(d.program)) return '缺少 program 字段（对象）';
+  const days = ['A','B'].filter(day => d.program[day] !== undefined);
+  if(!days.length) return 'program 必须包含 A 或 B（数组）';
+  for(const day of days){
+    const arr = d.program[day];
+    if(!Array.isArray(arr)) return `program.${day} 必须是数组`;
+    if(!arr.length) return `program.${day} 是空数组`;
+    for(let i = 0; i < arr.length; i++){
+      const it = arr[i];
+      if(!it || typeof it !== 'object') return `program.${day}[${i}] 必须是对象`;
+      if(typeof it.exerciseId !== 'string' || !it.exerciseId) return `program.${day}[${i}].exerciseId 缺失`;
+      if(!d.exercises[it.exerciseId]) return `program.${day}[${i}].exerciseId "${it.exerciseId}" 不在 exercises 中`;
+      if(!Array.isArray(it.sets) || !it.sets.length) return `program.${day}[${i}].sets 必须是非空数组`;
+      for(let j = 0; j < it.sets.length; j++){
+        const s = it.sets[j];
+        if(!s || typeof s !== 'object') return `program.${day}[${i}].sets[${j}] 必须是对象`;
+        for(const k of ['weight','reps','duration','rpe']){
+          if(s[k] !== null && s[k] !== undefined && typeof s[k] !== 'number')
+            return `program.${day}[${i}].sets[${j}].${k} 必须是数字或 null`;
+        }
+      }
+    }
+  }
+  return null;
+}
+function applyPlan(d){
+  for(const day of ['A','B']){
+    if(d.program[day] !== undefined && state.sessions[day])
+      return { ok:false, error:`${day} 日有进行中的记录，请先结束或放弃后再导入` };
+  }
+  let exCount = 0;
+  for(const [id, ex] of Object.entries(d.exercises)){
+    const old = state.exercises[id] || {};
+    state.exercises[id] = {
+      name: ex.name || old.name || id,
+      muscles: ex.muscles ?? old.muscles ?? '',
+      mode: ex.mode || old.mode || 'weight',
+      unit: ex.unit ?? old.unit ?? null,
+      tips: ex.tips ?? old.tips ?? '',
+      pitfalls: ex.pitfalls ?? old.pitfalls ?? '',
+      tempo: ex.tempo ?? old.tempo ?? '',
+      alternatives: ex.alternatives ?? old.alternatives ?? '',
+      personal: (ex.personal && String(ex.personal).trim()) ? ex.personal : (old.personal || '')
+    };
+    exCount++;
+  }
+  const daySummary = [];
+  for(const day of ['A','B']){
+    if(d.program[day] === undefined) continue;
+    state.program[day] = d.program[day].map(normalizeItem);
+    delete draft[day];
+    daySummary.push(`${day} 日 ${state.program[day].length} 动作`);
+  }
+  if(typeof d.day === 'string' && (d.day === 'A' || d.day === 'B')) state.settings.lastDay = d.day;
+  save();
+  render();
+  return { ok:true, summary:`导入完成：${daySummary.join('，')}；动作库 ${exCount} 项` };
+}
+function importPlan(text){
+  let t = stripFences(String(text || ''));
+  t = t.replace(/,\s*([}\]])/g, '$1'); // 容忍多余尾逗号
+  let data;
+  try{ data = JSON.parse(t); }
+  catch(e){ return { ok:false, error:'JSON 解析失败：' + e.message }; }
+  const verr = validatePlan(data);
+  if(verr) return { ok:false, error:'校验失败：' + verr };
+  return applyPlan(data);
+}
+function doImport(){
+  const msg = $('import-msg');
+  const r = importPlan($('import-text').value);
+  msg.className = 'import-msg ' + (r.ok ? 'ok' : 'err');
+  msg.textContent = r.ok ? r.summary : r.error;
+  if(r.ok) $('import-text').value = '';
+}
+
+/* ---------------- P0-3 导出给 AI ----------------
+ * 由 logs 即时打包生成快照（不单独存储）：
+ *   program + exercises + 最近 N 次日志 + 逐动作趋势（top 组 / 平均 RPE / 方向）
+ * 输出与导入格式兼容（program/exercises 原样），AI 可基于它生成 type: ai-plan 的新方案。
+ * ------------------------------------------------------------------ */
+function topSet(sets){
+  const withW = sets.filter(s => s.weight != null);
+  if(withW.length) return withW.reduce((a,b) =>
+    (b.weight > a.weight || (b.weight === a.weight && (b.reps||0) > (a.reps||0))) ? b : a);
+  const withD = sets.filter(s => s.duration != null);
+  if(withD.length) return withD.reduce((a,b) => b.duration > a.duration ? b : a);
+  return sets.reduce((a,b) => (b.reps||0) > (a.reps||0) ? b : a, { reps: null });
+}
+function avgRpe(sets){
+  const rs = sets.map(s => s.rpe).filter(v => v != null);
+  return rs.length ? round1(rs.reduce((a,b) => a + b, 0) / rs.length) : null;
+}
+function buildTrends(logs){
+  const byEx = {};
+  for(const entry of logs){
+    for(const ex of entry.exercises){
+      const doneSets = ex.sets.filter(isDone);
+      if(!doneSets.length) continue;
+      (byEx[ex.exerciseId] = byEx[ex.exerciseId] || []).push({
+        date: entry.date,
+        day: entry.day,
+        top: topSet(doneSets),
+        avgRpe: avgRpe(doneSets),
+        volume: Math.round(doneSets.reduce((s,st) => s + (st.weight||0) * (st.reps||0), 0)),
+        sets: doneSets.length
+      });
+    }
+  }
+  const metric = t => t.weight != null ? t.weight : (t.duration != null ? t.duration : t.reps);
+  const trends = {};
+  for(const [id, list] of Object.entries(byEx)){
+    let direction = 'new';
+    if(list.length > 1){
+      const d = metric(list[list.length-1].top) - metric(list[0].top);
+      direction = d > 0 ? 'up' : (d < 0 ? 'down' : 'flat');
+    }
+    trends[id] = { name: (state.exercises[id] || {}).name || id, direction, sessions: list };
+  }
+  return trends;
+}
+function buildExport(n){
+  n = Math.max(1, Math.round(Number(n)) || 4);
+  const logs = state.logs.slice(-n);
+  return {
+    type: 'ironlog-export',
+    version: 1,
+    generatedAt: new Date().toISOString().slice(0, 10),
+    settings: { weightStep: state.settings.weightStep, restNote: state.settings.restNote || '' },
+    program: state.program,
+    exercises: state.exercises,
+    recentLogs: logs,
+    trends: buildTrends(logs)
+  };
+}
+async function copyText(t){
+  try{
+    if(navigator && navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(t);
+      return true;
+    }
+  }catch(e){}
+  try{
+    const ta = $('export-text');
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, t.length);
+    return !!document.execCommand('copy');
+  }catch(e){ return false; }
+}
+/* 固定输出模板：字段名与导入解析器（validatePlan/normalizeItem）严格一致 */
+const PLAN_SCHEMA = `{
+  "type": "ai-plan",
+  "day": "A",
+  "exercises": {
+    "exercise_id": {
+      "name": "动作名",
+      "muscles": "目标肌群",
+      "mode": "weight / band / bodyweight / time 四选一",
+      "unit": "kg / lb / null",
+      "tips": "要点",
+      "pitfalls": "避坑",
+      "tempo": "节奏（离心-停-向心）",
+      "alternatives": "替代动作",
+      "personal": "个人注意（已有内容请保留）"
+    }
+  },
+  "program": {
+    "A": [
+      {
+        "section": "分区名（可省略）",
+        "exerciseId": "exercises 中的 key",
+        "sets": [
+          { "type": "warmup", "weight": 5, "reps": 10, "duration": null, "rpe": null, "side": null },
+          { "type": "work", "weight": 12.5, "reps": 8, "duration": null, "rpe": 8, "side": null }
+        ]
+      }
+    ]
+  }
+}
+字段规则：
+- sets 的 weight/reps/duration/rpe 为数字或 null：weight/band 模式填 weight+reps，bodyweight 填 reps，time 填 duration；rpe 为目标 RPE；side 仅单侧动作填 L/R，否则 null
+- exerciseId 必须存在于 exercises；program 只写需要更新的日（不更新的日不要写，也不要写空数组）`;
+
+function buildPrompt(data){
+  const logs = data.recentLogs;
+  const span = logs.length
+    ? `${logs[0].date} 至 ${logs[logs.length-1].date}，共 ${logs.length} 次（A 日 ${logs.filter(l => l.day === 'A').length} 次、B 日 ${logs.filter(l => l.day === 'B').length} 次）`
+    : '暂无训练记录';
+  const bg = ((state.profile && state.profile.background) || '').trim() || '（未填写背景，请先问我）';
+  const fence = '```';
+  return `你是我的力量训练数据分析助手。我的背景：
+${bg}
+
+以下是我最近的训练记录（JSON，${span}）：
+${fence}json
+${JSON.stringify(data, null, 2)}
+${fence}
+数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；condition 为当日整体状态（佳/一般/差）；trends 由已完成组聚合。
+
+请只基于这份数据分析（不要泛泛而谈通用健身知识）：
+1. 各动作重量/次数/时长趋势，是否需要渐进超负荷
+2. 计划（组数/次数/重量）或动作（替换/增删）是否需要调整，结合我的体态问题
+3. 需要注意的异常信号（停滞、左右不对称、疑似代偿、状态波动）
+
+输出要求（两段式）：
+- 先给一段中文可读总结，说明每处调整的原因
+- 再给一个 JSON 代码块，严格按以下字段结构，不要注释、不要多余逗号：
+${PLAN_SCHEMA}`;
+}
+
+function runExport(withPrompt){
+  const n = parseInt($('export-n').value, 10) || 4;
+  const data = buildExport(n);
+  const text = withPrompt ? buildPrompt(data) : JSON.stringify(data, null, 2);
+  $('export-text').value = text;
+  const msg = $('export-msg');
+  return copyText(text).then(ok => {
+    const note = data.recentLogs.length
+      ? `最近 ${data.recentLogs.length} 次日志 + ${Object.keys(data.trends).length} 个动作趋势`
+      : '暂无训练日志，仅含当前计划与动作库';
+    msg.className = 'import-msg ' + (ok ? 'ok' : 'err');
+    msg.textContent = ok
+      ? `已复制（${note}${withPrompt ? '，含分析 prompt' : ''}）。粘贴给 AI，返回的 JSON 可直接用「导入 AI 方案」导入。`
+      : `复制失败（${note}）：请手动全选下方文本后复制。`;
+  });
+}
+function doExport(){ return runExport(true); }
+function doExportData(){ return runExport(false); }
+
+/* ---------------- 设置 ---------------- */
+function renderSettings(){
+  $('weight-step').value = state.settings.weightStep;
+  $('rest-note').value = state.settings.restNote || '';
+  $('profile-bg').value = (state.profile && state.profile.background) || '';
+}
+$('weight-step').addEventListener('change', e => {
+  const v = parseFloat(e.target.value);
+  state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : round1(v);
+  save();
+  toast('重量步进：' + state.settings.weightStep + ' kg');
+});
+$('rest-note').addEventListener('change', e => {
+  state.settings.restNote = e.target.value.trim();
+  save();
+  toast('组间休息：' + (state.settings.restNote || '未设置'));
+});
+$('profile-bg').addEventListener('change', e => {
+  state.profile.background = e.target.value;
+  save();
+  toast('AI 分析背景已保存');
+});
+
+function clearAll(){
+  if(!confirm('确定清除全部数据？此操作不可恢复。')) return;
+  if(!confirm('再次确认：日志、计划、动作库、进行中的记录都会删除。')) return;
+  localStorage.removeItem(LS_KEY);
+  location.reload();
+}
+
+/* ---------------- 总渲染 ---------------- */
+function render(){
+  if(currentView === 'today') renderToday();
+  else if(currentView === 'history') renderHistory();
+  else renderSettings();
+}
+
+render();
+</script>
 </body>
 </html>

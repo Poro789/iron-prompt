@@ -1,15 +1,6 @@
-# OS
+# OS 垃圾
 .DS_Store
 Thumbs.db
 
-# Editors / IDE
-.vscode/
-.idea/
-*.swp
-
-# Logs
-*.log
-
-# 本地数据备份文件
-backups/
-*.backup.json
+# 旧版归档（完整保留在 git 历史中，不入库）
+archive/

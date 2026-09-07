@@ -1,5 +1,5 @@
-# GitHub Actions: 测试 + 自动构建并部署 GitHub Pages
-# 纯静态站点，无构建步骤；推送 main 分支即触发部署
+# GitHub Actions: 测试 + 自动部署 GitHub Pages
+# 纯静态单文件站点，无构建步骤；推送 main 分支即触发部署
 name: Deploy static content to Pages
 
 on:
@@ -29,9 +29,8 @@ jobs:
         with:
           node-version: 20
 
-      # 核心函数单测 + 应用冒烟测试（零依赖；显式路径避免跨 Node 版本发现行为差异）
       - name: Run tests
-        run: node --test tests/core.test.mjs tests/app.smoke.test.mjs
+        run: node test-ironlog.js
 
   build:
     runs-on: ubuntu-latest
@@ -43,14 +42,11 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      # 只发布运行所需文件，避免 .github / 测试 / 文档等随站点发布
+      # 单文件站点：只发布 index.html
       - name: Prepare dist
         run: |
-          mkdir -p dist/css dist/js
+          mkdir -p dist
           cp index.html dist/
-          cp css/style.css dist/css/
-          cp js/app.js js/core.js js/vue.global.prod.js dist/js/
-          cp LICENSE dist/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
