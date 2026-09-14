@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#0f1115">
 <title>Iron Log · 力量训练记录</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋️</text></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{
   --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#262b36;
@@ -208,6 +212,15 @@ header .ver{color:var(--muted);font-size:12px}
   transition:opacity .2s;max-width:90vw;
 }
 .toast.show{opacity:1}
+
+.rest-bar{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:0 0 12px}
+.rest-top{display:flex;align-items:center;gap:8px}
+.rest-label{color:var(--muted);font-size:13px}
+.rest-clock{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700;color:var(--accent);min-width:52px}
+.rest-bar.done .rest-clock{color:var(--green)}
+.rest-track{height:4px;margin-top:8px;border-radius:2px;background:var(--panel2);overflow:hidden}
+.rest-fill{height:100%;width:0;background:var(--accent);transition:width .2s linear}
+.rest-bar.done .rest-fill{background:var(--green)}
 </style>
 </head><body>
 
@@ -227,6 +240,16 @@ header .ver{color:var(--muted);font-size:12px}
       <button class="day-btn" id="day-btn-B" onclick="switchDay('B')">B 日<span class="dot"></span></button>
     </div>
     <div class="session-status" id="session-status"></div>
+    <div class="rest-bar" id="rest-bar" style="display:none">
+      <div class="rest-top">
+        <span class="rest-label">组间休息</span>
+        <span class="rest-clock" id="rest-clock">0:00</span>
+        <button class="cond-btn" onclick="adjustRest(-15)">−15s</button>
+        <button class="cond-btn" onclick="adjustRest(15)">+15s</button>
+        <button class="cond-btn" onclick="skipRest()">跳过</button>
+      </div>
+      <div class="rest-track"><div class="rest-fill" id="rest-fill"></div></div>
+    </div>
     <div id="ex-list"></div>
     <button class="end-btn" id="end-btn" style="display:none" onclick="endSession()">结束训练</button>
     <button class="discard-btn" id="discard-btn" style="display:none" onclick="discardSession()">放弃本次记录</button>
@@ -273,6 +296,7 @@ header .ver{color:var(--muted);font-size:12px}
       <p>数据仅存于本机浏览器 localStorage，每次修改自动保存，不上传任何服务器。</p>
       <p>当前 A/B 计划与动作库为<b style="color:var(--text)">占位数据</b>，在「历史 &amp; 导出」页导入 AI 方案后将被替换。</p>
       <p>下一步：P1-7 JSON 全量备份。</p>
+      <p>v0.5.0 新增：组间休息倒计时 · 增量渲染（不再丢输入焦点）· 防抖保存 · PWA 可安装离线使用。</p>
     </div>
     <div class="set-card">
       <h3>记录</h3>
@@ -281,7 +305,11 @@ header .ver{color:var(--muted);font-size:12px}
         <input id="weight-step" type="number" inputmode="decimal" step="0.5" min="0.5">
       </div>
       <div class="set-row2" style="margin-top:10px">
-        <label for="rest-note">组间休息（随导出附带）</label>
+        <label for="rest-sec">组间休息（秒，确认后自动倒计时，0 关闭）</label>
+        <input id="rest-sec" type="number" inputmode="numeric" step="5" min="0" max="1800">
+      </div>
+      <div class="set-row2" style="margin-top:10px">
+        <label for="rest-note">休息说明（随导出附带）</label>
       </div>
       <input id="rest-note" type="text" class="wide-input" placeholder="如：固定 90 秒；不固定可留空">
     </div>
@@ -329,12 +357,12 @@ header .ver{color:var(--muted);font-size:12px}
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.4.1';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染
+const APP_VERSION = '0.5.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
 const SEED = {
   version: 1,
-  settings: { lastDay: 'A', weightStep: 2.5, restNote: '' },
+  settings: { lastDay: 'A', weightStep: 2.5, restSec: 90, restNote: '' },
   profile: { background: '体态问题：X 型腿、肋骨外扩\n目标：增肌 + 改善体态\n（请补充：身高体重、训练水平、器械范围与上限）' },
   program: {
     A: [
@@ -431,6 +459,7 @@ function normalizeItem(raw){
 function migrate(d){
   if(!d.settings) d.settings = {};
   if(d.settings.restNote === undefined) d.settings.restNote = '';
+  if(typeof d.settings.restSec !== 'number' || !(d.settings.restSec >= 0)) d.settings.restSec = 90;
   if(!d.profile) d.profile = { background: '' };
   if(!d.sessions) d.sessions = { A: null, B: null };
   for(const day of ['A','B']){
@@ -462,6 +491,19 @@ function save(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
   catch(e){ toast('保存失败：' + e.message); }
 }
+
+/* 防抖写入：连点步进时合并为一次全量序列化；隐藏/卸载前强制落盘，不丢数据 */
+let saveTimer = null;
+function saveSoon(){
+  if(saveTimer) return;
+  saveTimer = setTimeout(() => { saveTimer = null; save(); }, 250);
+}
+function flushSave(){
+  if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; }
+  save();
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') flushSave(); });
+window.addEventListener('pagehide', flushSave);
 
 /* ---------------- 通用工具 ---------------- */
 const $ = id => document.getElementById(id);
@@ -694,6 +736,7 @@ function renderToday(){
         ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
       ].join('');
       const sets = item.sets.map((st, setIdx) => setRowHTML(exIdx, setIdx, st, ex)).join('');
+      const rowsKey = exIdx + ':' + day + ':' + item.sets.length;
       html += `
         <div class="ex-card">
           <div class="ex-head">
@@ -701,7 +744,7 @@ function renderToday(){
             <div class="ex-target">${esc(targetLabel(item))}${unitTag}</div>
           </div>
           ${notes ? `<details class="ex-notes" data-notes="${exIdx}" ${openNotes[day + ':' + exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
-          <div class="sets">${sets}</div>
+          <div class="sets" data-rows="${rowsKey}">${sets}</div>
           <button class="add-set" data-ex="${exIdx}" data-act="addset">＋ 加一组</button>
         </div>`;
       return html;
@@ -714,6 +757,26 @@ function renderToday(){
   $('end-btn').style.display = sess ? '' : 'none';
   $('discard-btn').style.display = sess ? '' : 'none';
   startClock();
+  renderRestBar();
+}
+
+/* 只重建受影响的那一组（保留其余行的输入焦点与键盘），结构性变化才走全量渲染 */
+function patchRow(exIdx, setIdx){
+  const day = curDay();
+  const item = getItems(day)[exIdx];
+  if(!item) return false;
+  const ex = state.exercises[item.exerciseId];
+  if(!ex) return false;
+  const rows = document.querySelector(`.sets[data-rows="${exIdx}:${day}:${item.sets.length}"]`);
+  if(!rows) return false;
+  const nodes = rows.children;
+  const target = setIdx * 2;   // 每组 = set-row + rpe-row 两个兄弟节点
+  if(nodes.length < target + 2) return false;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = setRowHTML(exIdx, setIdx, item.sets[setIdx], ex);
+  nodes[target].replaceWith(tmp.children[0]);
+  nodes[target + 1].replaceWith(tmp.children[1]);
+  return true;
 }
 
 /* 步进 / 确认 / 加组（事件委托） */
@@ -738,7 +801,7 @@ $('ex-list').addEventListener('click', e => {
       targetRpe: last ? last.targetRpe : null,
       done: false
     });
-    save(); renderToday();
+    saveSoon(); renderToday();
     return;
   }
 
@@ -762,10 +825,13 @@ $('ex-list').addEventListener('click', e => {
                             : Math.max(5,  round1((set.rpe || 8.5) - 0.5));
   }else if(act === 'confirm'){
     set.done = !set.done;
-    if(set.done) startSessionIfNeeded(day);
+    if(set.done){
+      startSessionIfNeeded(day);
+      startRestTimer();
+    }
   }
-  save();
-  renderToday();
+  saveSoon();
+  if(!patchRow(exIdx, setIdx)) renderToday();
 });
 
 /* 直接输入数值（change：失焦或回车时提交） */
@@ -783,8 +849,8 @@ $('ex-list').addEventListener('change', e => {
   }else{
     set.reps = isNaN(v) ? null : Math.max(0, Math.round(v));
   }
-  save();
-  renderToday();
+  saveSoon();
+  if(!patchRow(+inp.dataset.ex, +inp.dataset.set)) renderToday();
 });
 
 /* 结束训练：写入 logs（P0 闭环的落盘点） */
@@ -817,7 +883,8 @@ function endSession(){
   state.logs.push(entry);
   state.sessions[day] = null;
   delete draft[day];
-  save();
+  resetRest();
+  flushSave();
   render();
   showSummary(entry);
 }
@@ -829,7 +896,8 @@ function discardSession(){
   state.sessions[day] = null;
   delete draft[day];
   condDraft[day] = null;
-  save();
+  resetRest();
+  flushSave();
   render();
   toast('已放弃');
 }
@@ -856,6 +924,86 @@ function startClock(){
     const el = $('session-clock');
     if(sess && el) el.textContent = fmtDuration((Date.now() - sess.startedAt) / 1000);
   }, 1000);
+}
+
+/* ---------------- 组间休息倒计时 ----------------
+ * 确认一组后自动启动（取消确认不启动）；结束响一声 + toast。
+ * 基于 restEndsAt 时间戳，切后台/休眠后回来仍显示真实剩余。
+ * ------------------------------------------------ */
+let restEndsAt = null;
+let restStartsAt = null;
+let restTimer = null;
+let restDone = false;
+
+function startRestTimer(){
+  const sec = state.settings.restSec;
+  if(!(sec > 0)) return;
+  restStartsAt = Date.now();
+  restEndsAt = restStartsAt + sec * 1000;
+  restDone = false;
+  renderRestBar();
+  startRestTick();
+}
+function startRestTick(){
+  if(restTimer) clearInterval(restTimer);
+  restTimer = setInterval(tickRest, 250);
+}
+function tickRest(){
+  if(restEndsAt === null) return;
+  const remain = restEndsAt - Date.now();
+  if(remain <= 0){
+    if(!restDone){
+      restDone = true;
+      renderRestBar();
+      beep();
+      toast('休息结束，开始下一组');
+    }
+    return;
+  }
+  renderRestBar();
+}
+function renderRestBar(){
+  const bar = $('rest-bar');
+  if(restEndsAt === null){
+    if(restTimer){ clearInterval(restTimer); restTimer = null; }
+    bar.style.display = 'none';
+    return;
+  }
+  const total = restEndsAt - restStartsAt;
+  const remain = Math.max(0, restEndsAt - Date.now());
+  bar.style.display = '';
+  bar.classList.toggle('done', remain <= 0);
+  $('rest-clock').textContent = fmtDuration(remain / 1000);
+  const pct = total > 0 ? (1 - remain / total) * 100 : 100;
+  $('rest-fill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+function adjustRest(delta){
+  if(restEndsAt === null) return;
+  restEndsAt += delta * 1000;
+  if(restEndsAt - restStartsAt < 1000) restStartsAt = restEndsAt - 1000;  // 进度条基准兜底
+  restDone = false;
+  renderRestBar();
+}
+function skipRest(){ restEndsAt = null; restStartsAt = null; renderRestBar(); }
+function resetRest(){ restEndsAt = null; restStartsAt = null; restDone = false; renderRestBar(); }
+function restTotalSec(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); }
+
+/* 休息结束提示音（WebAudio，无外部资源；失败静默） */
+function beep(){
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    const ctx = beep._ctx || (beep._ctx = new Ctx());
+    if(ctx.state === 'suspended') ctx.resume();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sine'; osc.frequency.value = 880;
+    osc.connect(gain); gain.connect(ctx.destination);
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    osc.start(t); osc.stop(t + 0.5);
+  }catch(e){}
 }
 
 /* ---------------- 历史 & 导出 ---------------- */
@@ -1036,7 +1184,7 @@ function buildExport(n){
     type: 'ironlog-export',
     version: 1,
     generatedAt: new Date().toISOString().slice(0, 10),
-    settings: { weightStep: state.settings.weightStep, restNote: state.settings.restNote || '' },
+    settings: { weightStep: state.settings.weightStep, restSec: state.settings.restSec, restNote: state.settings.restNote || '' },
     program: state.program,
     exercises: state.exercises,
     recentLogs: logs,
@@ -1141,6 +1289,7 @@ function doExportData(){ return runExport(false); }
 /* ---------------- 设置 ---------------- */
 function renderSettings(){
   $('weight-step').value = state.settings.weightStep;
+  $('rest-sec').value = state.settings.restSec;
   $('rest-note').value = state.settings.restNote || '';
   $('profile-bg').value = (state.profile && state.profile.background) || '';
 }
@@ -1149,6 +1298,13 @@ $('weight-step').addEventListener('change', e => {
   state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : round1(v);
   save();
   toast('重量步进：' + state.settings.weightStep + ' kg');
+});
+$('rest-sec').addEventListener('change', e => {
+  const v = Math.round(parseFloat(e.target.value));
+  state.settings.restSec = (isNaN(v) || v < 0) ? 90 : Math.min(1800, v);
+  e.target.value = state.settings.restSec;
+  flushSave();
+  toast(state.settings.restSec > 0 ? `组间休息：${state.settings.restSec} 秒` : '组间休息已关闭');
 });
 $('rest-note').addEventListener('change', e => {
   state.settings.restNote = e.target.value.trim();
@@ -1177,7 +1333,14 @@ function render(){
   else renderSettings();
 }
 
+/* 首屏：默认视图只渲染一次，设置页控件预先填值 */
 render();
+renderSettings();
+
+/* PWA：注册 service worker（file:// 下跳过；SW 内部失败不影响页面） */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 </script>
 </body>
 </html>

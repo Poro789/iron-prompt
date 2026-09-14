@@ -42,11 +42,19 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      # 单文件站点：只发布 index.html
+      # 单文件站点：index.html + PWA 资源
       - name: Prepare dist
         run: |
           mkdir -p dist
-          cp index.html dist/
+          cp index.html manifest.webmanifest icon.svg sw.js dist/
+
+      # 缓存失效联动：sw.js 的 CACHE 版本串跟随 index.html 里的 APP_VERSION
+      - name: Stamp service worker version
+        run: |
+          VER=$(grep -oP "APP_VERSION = '\K[0-9.]+" index.html)
+          echo "sw cache version -> ironlog-v$VER"
+          sed -i "s/ironlog-v[0-9.]*/ironlog-v$VER/" dist/sw.js
+          grep -n "const CACHE" dist/sw.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -14,13 +14,20 @@ function makeEl(id){
   return {
     id, innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
     classList:{ toggle(){}, add(){}, remove(){} },
-    addEventListener(){}, querySelectorAll(){ return []; }
+    addEventListener(){}, querySelectorAll(){ return []; },
+    replaceWith(){}, focus(){}, select(){}, setSelectionRange(){}
   };
 }
 const touchedIds = new Set();   // 记录被访问过的元素 id，供测试断言 id 未被改名
 const missingIds = [];          // 桩在 HTML 中找不到的 id = 代码引用了不存在的元素
 const elsById = new Map();      // 同一 id 复用同一桩，便于断言渲染结果
+const timers = [];              // 捕获 setTimeout 回调，供防抖测试手动触发
+let patchTarget = null;         // 增量渲染测试注入的 .sets 容器：{ matches, node }
 global.document = {
+  visibilityState: 'visible',
+  addEventListener(){},
+  createElement(){ const e = makeEl('tmp'); e.children = [makeEl('a'), makeEl('b')]; return e; },
+  querySelector(sel){ return patchTarget && patchTarget.matches(sel) ? patchTarget.node : null; },
   getElementById(id){
     touchedIds.add(id);
     if(!html.includes(`id="${id}"`)) missingIds.push(id);
@@ -28,27 +35,39 @@ global.document = {
     return elsById.get(id);
   }
 };
-// 取某个容器桩最近一次写入的 innerHTML（渲染结果）
-function htmlTouchedHTML(id){ return (elsById.get(id) || { innerHTML:'' }).innerHTML; }
+// 只读容器桩内容；不存在的 id 返回 null（避免污染 missingIds）
+function htmlTouchedHTML(id){ return elsById.has(id) ? elsById.get(id).innerHTML : null; }
+function textOf(id){ return elsById.has(id) ? elsById.get(id).textContent : null; }
 global.localStorage = {
   _d: {},
   getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
   setItem(k,v){ this._d[k] = String(v); },
   removeItem(k){ delete this._d[k]; }
 };
+global.setTimeout = (fn) => { timers.push(fn); return timers.length; };
+global.clearTimeout = () => {};
+function runTimers(){ const n = timers.length; for(let i = 0; i < n; i++){ try{ timers[i](); }catch(e){} } timers.splice(0, n); }
 global.setInterval = () => 0;
 global.clearInterval = () => {};
-global.setTimeout = (fn) => 0;
-global.clearTimeout = () => {};
 global.confirm = () => true;
+global.window = { addEventListener(){}, AudioContext: null };
+Object.defineProperty(globalThis, 'navigator', {
+  value: { clipboard: { writeText: async t => { globalThis.copied = t; } } },
+  configurable: true, writable: true
+});
 
 const testScript = script + `
 ;globalThis.__T = {
   get state(){ return state; },
+  get restEndsAt(){ return restEndsAt; },
+  get restTotal(){ return restTotalSec(); },
+  get restDone(){ return restDone; },
+  set restEndsAt(v){ restEndsAt = v; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
-  esc, APP_VERSION, toast, render
+  esc, APP_VERSION, toast, render, saveSoon, flushSave,
+  startRestTimer, tickRest, adjustRest, skipRest, resetRest, patchRow
 };`;
 (0, eval)(testScript);
 const T = globalThis.__T;
@@ -183,15 +202,14 @@ const rt = T.importPlan(JSON.stringify(exp));
 check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
 
 (async () => {
-  let copied = null;
   Object.defineProperty(globalThis, 'navigator', {
-    value: { clipboard: { writeText: async t => { copied = t; } } },
+    value: { clipboard: { writeText: async t => { globalThis.copied = t; } } },
     configurable: true
   });
   await T.doExport();
-  check('doExport 复制 prompt（含数据）', copied && copied.startsWith('你是我的力量训练数据分析助手') && copied.includes('ironlog-export'));
+  check('doExport 复制 prompt（含数据）', globalThis.copied && globalThis.copied.startsWith('你是我的力量训练数据分析助手') && globalThis.copied.includes('ironlog-export'));
   await T.doExportData();
-  check('doExportData 复制纯数据', copied && JSON.parse(copied).type === 'ironlog-export');
+  check('doExportData 复制纯数据', globalThis.copied && JSON.parse(globalThis.copied).type === 'ironlog-export');
 
   console.log('== 10. P0 安全与健壮性 ==');
   check('esc 转义 & < > " \'',
@@ -216,7 +234,9 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
 
   // 版本号单一来源
   check('APP_VERSION 为 x.y.z', /^\d+\.\d+\.\d+$/.test(T.APP_VERSION));
-  check('index.html 无硬编码版本号', !/v0\.\d/.test(html));
+  // 版本只能有 APP_VERSION 定义处 + sw.js 缓存戳两处；渲染位必须是 id 占位，不得写死
+  check('页头/关于卡片无硬编码版本', !/<span class="ver">[^<]/.test(html) && !/Iron Log v\d/.test(html));
+  check('版本号仅出现在定义处与 sw.js', (html.match(/v?\b\d+\.\d+\.\d+/g) || []).length <= 2);
 
   // 代码引用的每个元素 id 都必须真实存在于 index.html（防止改名后静默失效）
   check('getElementById 未命中缺失 id' + (missingIds.length ? '：' + [...new Set(missingIds)].join(', ') : ''),
@@ -228,6 +248,73 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('三视图 + toast 渲染后仍无缺失 id' + (missingIds.length ? '：' + [...new Set(missingIds)].join(', ') : ''),
     missingIds.length === 0);
   check('id 覆盖面扩大到 ' + touchedIds.size + ' 个', touchedIds.size > 20);
+
+  console.log('== 11. P1 组间休息倒计时 ==');
+  check('migrate 补齐 restSec 默认值', T.state.settings.restSec === 90);
+  T.skipRest();
+  check('restSec=0 时不启动', (() => { T.state.settings.restSec = 0; T.startRestTimer(); return T.restEndsAt === null; })());
+  T.state.settings.restSec = 90;
+  T.startRestTimer();
+  check('启动后 restTotal=90', T.restEndsAt !== null && T.restTotal === 90);
+  T.adjustRest(15);
+  check('+15s 延长到 105', T.restTotal === 105);
+  T.adjustRest(-15);
+  check('−15s 回到 90', T.restTotal === 90);
+  T.skipRest();
+  check('跳过清空倒计时', T.restEndsAt === null);
+  T.startRestTimer();
+  T.restEndsAt = Date.now() - 1000;   // 拨到已过期
+  T.tickRest();
+  check('到期后标记 done 并提示', T.restDone === true && String(textOf('toast')).includes('休息结束'));
+  T.adjustRest(15);
+  check('到期后 +15s 可续用', T.restDone === false && T.restEndsAt > Date.now());
+  T.resetRest();
+  check('resetRest 清空', T.restEndsAt === null);
+  check('导出 settings 含 restSec', T.buildExport(2).settings.restSec === 90);
+
+  console.log('== 12. P1 防抖保存 ==');
+  const before = JSON.parse(global.localStorage._d['ironlog.v1']).settings.weightStep;
+  T.state.settings.weightStep = 1.25;
+  T.saveSoon();
+  check('saveSoon 未立即落盘', JSON.parse(global.localStorage._d['ironlog.v1']).settings.weightStep === before);
+  runTimers();
+  check('定时器触发后落盘', JSON.parse(global.localStorage._d['ironlog.v1']).settings.weightStep === 1.25);
+  T.state.settings.weightStep = 5;
+  T.saveSoon();
+  T.flushSave();
+  check('flushSave 立即落盘', JSON.parse(global.localStorage._d['ironlog.v1']).settings.weightStep === 5);
+  T.state.settings.weightStep = before;
+  T.flushSave();
+
+  console.log('== 13. P1 PWA 资源 ==');
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8'));
+  check('manifest 合法且 start_url=./', manifest.start_url === './' && manifest.display === 'standalone');
+  check('manifest 有图标', Array.isArray(manifest.icons) && manifest.icons.length > 0);
+  check('index.html 引用 manifest', html.includes('rel="manifest"'));
+  check('index.html 注册 service worker', html.includes("register('sw.js')"));
+  const sw = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
+  check('sw.js 版本串与 APP_VERSION 一致', sw.includes("ironlog-v" + T.APP_VERSION));
+  check('sw.js 有 install/activate/fetch', ['install','activate','fetch'].every(k => sw.includes("'" + k + "'")));
+  check('deploy.yml 发布 PWA 资源', /cp index.html manifest.webmanifest icon.svg sw.js/.test(
+    fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
+
+  console.log('== 14. P1 增量渲染（patchRow） ==');
+  // 注入一个带 2 组（每组 set-row + rpe-row）的 .sets 容器，模拟真实 DOM
+  const mkRow = tag => ({ tag, replaced: false, replaceWith(n){ this.replacedWith = n; } });
+  const rows = [mkRow('r0'), mkRow('p0'), mkRow('r1'), mkRow('p1')];
+  const container = { children: rows };
+  patchTarget = { matches: sel => sel === '.sets[data-rows="0:A:2"]', node: container };
+  T.switchDay('A');
+  const it = T.getItems('A');
+  const ex0 = T.state.exercises[it[0].exerciseId];
+  const mkSet = () => ({ type: 'work', weight: 10, reps: 8, duration: null, rpe: null, side: null, targetRpe: null, done: false });
+  it[0].sets = [mkSet(), mkSet()];   // 对齐注入容器的组数
+  const patched = T.patchRow(0, 1);
+  check('patchRow 命中并替换目标组', patched === true && rows[2].replacedWith !== undefined && rows[3].replacedWith !== undefined);
+  check('只替换该组，未动其他组', rows[0].replacedWith === undefined && rows[1].replacedWith === undefined);
+  patchTarget = { matches: () => false, node: container };
+  check('容器不匹配时回退 false（触发全量渲染）', T.patchRow(0, 1) === false);
+  patchTarget = null;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
