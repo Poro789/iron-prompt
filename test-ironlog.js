@@ -68,7 +68,7 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
-  startRestTimer, tickRest, adjustRest, skipRest, resetRest, patchRow
+  startRestTimer, tickRest, adjustRest, skipRest, resetRest, patchRow, askConfirm, answerConfirm
 };`;
 (0, eval)(testScript);
 const T = globalThis.__T;
@@ -85,7 +85,7 @@ check('旧 reps 范围保留为 repsRange', T.state.program.A[0].repsRange === '
 check('targetLabel 使用 repsRange', T.targetLabel(T.state.program.A[0]) === '4 × 6-8');
 
 console.log('== 2. 导入 plan-A.json ==');
-const planText = fs.readFileSync(path.join(__dirname, 'plan-A.json'), 'utf8');
+const planText = fs.readFileSync(path.join(__dirname, 'fixtures/plan-A.json'), 'utf8');
 let r = T.importPlan(planText);
 check('导入成功', r.ok === true);
 check('program A 22 项', T.state.program.A.length === 22);
@@ -387,6 +387,40 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const lv = T.lastValues('goblet_squat');
   check('取正式组最重值而非热身组', lv.weight === 15 && lv.reps === 8);
   check('忽略未完成组', lv.weight !== 99);
+
+  console.log('== 18. P3 工程约定 ==');
+  const readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8');
+  const changelog = fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8');
+  const ci = fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8');
+  check('README 有 CI 与 License 徽章', readme.includes('actions/workflows/deploy.yml/badge.svg')
+    && readme.includes('License-MIT'));
+  check('README 链接到 CHANGELOG', readme.includes('CHANGELOG.md'));
+  check('CHANGELOG 顶部版本与 APP_VERSION 一致',
+    changelog.includes('## [' + T.APP_VERSION + ']'));
+  check('CHANGELOG 版本条目降序', (() => {
+    const vs = [...changelog.matchAll(/^## \[(\d+\.\d+\.\d+)\]$/gm)].map(m => m[1]);
+    return vs.length >= 3 && vs.every((v, i) => i === 0 || vs[i - 1].localeCompare(v, undefined, { numeric: true }) > 0);
+  })());
+  check('CI 在 PR 上触发', /pull_request:/.test(ci));
+  check('CI 的 build/deploy 在 PR 上跳过', (ci.match(/if: github.event_name != 'pull_request'/g) || []).length === 2);
+  check('测试夹具在 fixtures/ 下', fs.existsSync(path.join(__dirname, 'fixtures/plan-A.json'))
+    && !fs.existsSync(path.join(__dirname, 'plan-A.json')));
+  check('README 结构清单与实际文件一致', ['index.html','css/style.css','js/app.js','manifest.webmanifest','icon.svg','sw.js','fixtures/plan-A.json']
+    .every(f => readme.includes(f) && fs.existsSync(path.join(__dirname, f))));
+
+  console.log('== 19. P3 应用内确认弹层 ==');
+  check('无原生 confirm 调用（排除注释行）', !script.split('\n')
+    .some(l => /^\s*(\*|\/\/)/.test(l) === false && /[^.\w]confirm\(/.test(l)));
+  check('弹层是 alertdialog 且有描述', html.includes('role="alertdialog"') && html.includes('aria-describedby="confirm-desc"'));
+  const p = T.askConfirm({ title: '放弃本次记录？', desc: '已确认的组数将丢失。', okLabel: '放弃' });
+  check('弹出后写入标题/描述/按钮文案', textOf('confirm-title') === '放弃本次记录？'
+    && textOf('confirm-desc') === '已确认的组数将丢失。'
+    && elsById.get('confirm-ok-btn').textContent === '放弃');
+  T.answerConfirm(true);
+  check('点确定 resolve true', await p === true);
+  const p2 = T.askConfirm({ title: 'x' });
+  T.answerConfirm(false);
+  check('点取消 resolve false', await p2 === false);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

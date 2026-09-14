@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.6.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.6.1';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -195,6 +195,24 @@ function toast(msg){
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* 应用内确认弹层：替换浏览器原生确认框（iOS 上样式与行为不一致，且无法本地化）
+ * 用法：askConfirm({title, desc, okLabel}).then(ok => ...)
+ */
+let confirmResolve = null;
+function askConfirm(opts){
+  $('confirm-title').textContent = opts.title;
+  $('confirm-desc').textContent = opts.desc || '';
+  $('confirm-ok-btn').textContent = opts.okLabel || '确定';
+  $('confirm-overlay').classList.add('show');
+  return new Promise(res => { confirmResolve = res; });
+}
+function answerConfirm(ok){
+  $('confirm-overlay').classList.remove('show');
+  const r = confirmResolve;
+  confirmResolve = null;
+  if(r) r(ok);
 }
 
 /* ---------------- 视图切换 ---------------- */
@@ -548,10 +566,11 @@ function endSession(){
   showSummary(entry);
 }
 
-function discardSession(){
+async function discardSession(){
   const day = curDay();
   if(!state.sessions[day]) return;
-  if(!confirm('放弃本次未结束的记录？已确认的组数将丢失。')) return;
+  const ok = await askConfirm({ title: '放弃本次记录？', desc: '已确认的组数将丢失，不可恢复。', okLabel: '放弃' });
+  if(!ok) return;
   state.sessions[day] = null;
   delete draft[day];
   condDraft[day] = null;
@@ -987,9 +1006,11 @@ $('profile-bg').addEventListener('change', e => {
   toast('AI 分析背景已保存');
 });
 
-function clearAll(){
-  if(!confirm('确定清除全部数据？此操作不可恢复。')) return;
-  if(!confirm('再次确认：日志、计划、动作库、进行中的记录都会删除。')) return;
+async function clearAll(){
+  const ok1 = await askConfirm({ title: '清除全部数据？', desc: '日志、计划、动作库、进行中的记录都会删除。', okLabel: '继续' });
+  if(!ok1) return;
+  const ok2 = await askConfirm({ title: '再次确认', desc: '此操作不可恢复，且无法撤销。', okLabel: '全部清除' });
+  if(!ok2) return;
   localStorage.removeItem(LS_KEY);
   location.reload();
 }

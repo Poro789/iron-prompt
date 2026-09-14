@@ -86,7 +86,7 @@
       <p>数据仅存于本机浏览器 localStorage，每次修改自动保存，不上传任何服务器。</p>
       <p>当前 A/B 计划与动作库为<b style="color:var(--text)">占位数据</b>，在「历史 &amp; 导出」页导入 AI 方案后将被替换。</p>
       <p>下一步：P1-7 JSON 全量备份。</p>
-      <p>v0.6.0 新增：按标准规范拆分 css/js · 趋势回看 12 次（平台期不再误判为上升）· 预填跳过热身组 · 无障碍（tablist / aria-pressed / 实时区域）。</p>
+      <p>v0.6.1：应用内确认弹层替换原生 confirm · CI 在 PR 上跑测试 · 变更记录见 CHANGELOG。</p>
     </div>
     <div class="set-card">
       <h3>记录</h3>
@@ -130,6 +130,17 @@
     <h2 id="summary-title">训练完成</h2>
     <div id="summary-body"></div>
     <button onclick="closeSummary()">好的</button>
+  </div>
+</div>
+
+<div class="overlay" id="confirm-overlay" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
+  <div class="summary-card">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-desc"></p>
+    <div class="confirm-actions">
+      <button class="confirm-cancel" onclick="answerConfirm(false)">取消</button>
+      <button class="confirm-ok" id="confirm-ok-btn" onclick="answerConfirm(true)">确定</button>
+    </div>
   </div>
 </div>
 

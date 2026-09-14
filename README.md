@@ -2,7 +2,10 @@
 
 > 力量训练记录 · 纯前端零构建 · 移动端优先 · 可安装离线使用
 
-**在线访问：** [https://poro789.github.io/iron-prompt](https://poro789.github.io/iron-prompt)
+[![Deploy to GitHub Pages](https://github.com/Poro789/iron-prompt/actions/workflows/deploy.yml/badge.svg)](https://github.com/Poro789/iron-prompt/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**在线访问：** [https://poro789.github.io/iron-prompt](https://poro789.github.io/iron-prompt)  ｜  **变更记录：** [CHANGELOG](CHANGELOG.md)
 
 ## 功能
 
@@ -39,6 +42,7 @@ js/app.js             逻辑（APP_VERSION 唯一来源）
 manifest.webmanifest  PWA 清单
 icon.svg              图标
 sw.js                 离线缓存（缓存版本串由 CI 按 APP_VERSION 改写）
+fixtures/plan-A.json  测试夹具（一份真实 A 日计划）
 ```
 
 零构建：无打包器、无依赖，`css`/`js` 直接外链。测试直接读 `js/app.js`，不解析 HTML。
