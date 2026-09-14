@@ -403,6 +403,13 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   })());
   check('CI 在 PR 上触发', /pull_request:/.test(ci));
   check('CI 的 build/deploy 在 PR 上跳过', (ci.match(/if: github.event_name != 'pull_request'/g) || []).length === 2);
+  // 模拟 CI 的版本戳步骤：它靠 grep 从某个文件抓 APP_VERSION，拆分后源文件变了就会静默失败
+  check('CI 版本戳抓取的源文件确实含 APP_VERSION', (() => {
+    const m = ci.match(/APP_VERSION = '\\K\[0-9.\]\+" ([\w./-]+)/);
+    if(!m) return false;
+    return fs.readFileSync(path.join(__dirname, m[1]), 'utf8').includes("APP_VERSION = '" + T.APP_VERSION + "'");
+  })());
+  check('CI 版本戳有 VER 非空守卫', /test -n "\$VER"/.test(ci));
   check('测试夹具在 fixtures/ 下', fs.existsSync(path.join(__dirname, 'fixtures/plan-A.json'))
     && !fs.existsSync(path.join(__dirname, 'plan-A.json')));
   check('README 结构清单与实际文件一致', ['index.html','css/style.css','js/app.js','manifest.webmanifest','icon.svg','sw.js','fixtures/plan-A.json']

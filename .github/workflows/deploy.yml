@@ -55,10 +55,11 @@ jobs:
           cp css/style.css dist/css/
           cp js/app.js dist/js/
 
-      # 缓存失效联动：sw.js 的 CACHE 版本串跟随 index.html 里的 APP_VERSION
+      # 缓存失效联动：sw.js 的 CACHE 版本串跟随 js/app.js 里的 APP_VERSION
       - name: Stamp service worker version
         run: |
-          VER=$(grep -oP "APP_VERSION = '\K[0-9.]+" index.html)
+          VER=$(grep -oP "APP_VERSION = '\K[0-9.]+" js/app.js)
+          test -n "$VER" || { echo "APP_VERSION not found in js/app.js" >&2; exit 1; }
           echo "sw cache version -> ironlog-v$VER"
           sed -i "s/ironlog-v[0-9.]*/ironlog-v$VER/" dist/sw.js
           grep -n "const CACHE" dist/sw.js
