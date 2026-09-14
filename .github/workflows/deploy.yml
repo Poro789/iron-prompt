@@ -42,11 +42,13 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      # 单文件站点：index.html + PWA 资源
+      # 静态站点：index.html + css/js + PWA 资源
       - name: Prepare dist
         run: |
-          mkdir -p dist
+          mkdir -p dist/css dist/js
           cp index.html manifest.webmanifest icon.svg sw.js dist/
+          cp css/style.css dist/css/
+          cp js/app.js dist/js/
 
       # 缓存失效联动：sw.js 的 CACHE 版本串跟随 index.html 里的 APP_VERSION
       - name: Stamp service worker version

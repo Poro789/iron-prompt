@@ -1,19 +1,20 @@
-// Iron Log 逻辑测试：用 DOM 桩在 node 中执行 index.html 内联脚本
+// Iron Log 逻辑测试：用 DOM 桩在 node 中执行 js/app.js
 'use strict';
 const fs = require('fs');
 const path = require('path');
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-const m = html.match(/<script>([\s\S]*)<\/script>/);
-if(!m) { console.error('FAIL 未能从 index.html 提取 <script> 内联脚本'); process.exit(1); }
-const script = m[1];
-if(script.length < 1000) { console.error('FAIL 提取到的脚本过短（' + script.length + ' 字符）'); process.exit(1); }
+const script = fs.readFileSync(path.join(__dirname, 'js/app.js'), 'utf8');
+if(script.length < 1000) { console.error('FAIL js/app.js 过短（' + script.length + ' 字符）'); process.exit(1); }
+// index.html 不得残留内联脚本/样式（拆分约定）
+if(/<script>/.test(html) || /<style>/.test(html)) { console.error('FAIL index.html 残留内联 <script>/<style>'); process.exit(1); }
 
 // ---- DOM / 浏览器 API 桩 ----
 function makeEl(id){
   return {
     id, innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
     classList:{ toggle(){}, add(){}, remove(){} },
+    attrs: {}, setAttribute(k, v){ this.attrs[k] = v; },
     addEventListener(){}, querySelectorAll(){ return []; },
     replaceWith(){}, focus(){}, select(){}, setSelectionRange(){}
   };
@@ -66,7 +67,7 @@ const testScript = script + `
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
-  esc, APP_VERSION, toast, render, saveSoon, flushSave,
+  esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   startRestTimer, tickRest, adjustRest, skipRest, resetRest, patchRow
 };`;
 (0, eval)(testScript);
@@ -237,6 +238,8 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   // 版本只能有 APP_VERSION 定义处 + sw.js 缓存戳两处；渲染位必须是 id 占位，不得写死
   check('页头/关于卡片无硬编码版本', !/<span class="ver">[^<]/.test(html) && !/Iron Log v\d/.test(html));
   check('版本号仅出现在定义处与 sw.js', (html.match(/v?\b\d+\.\d+\.\d+/g) || []).length <= 2);
+  check('sw.js 版本串与 APP_VERSION 一致',
+    fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8').includes("ironlog-v" + T.APP_VERSION));
 
   // 代码引用的每个元素 id 都必须真实存在于 index.html（防止改名后静默失效）
   check('getElementById 未命中缺失 id' + (missingIds.length ? '：' + [...new Set(missingIds)].join(', ') : ''),
@@ -291,12 +294,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('manifest 合法且 start_url=./', manifest.start_url === './' && manifest.display === 'standalone');
   check('manifest 有图标', Array.isArray(manifest.icons) && manifest.icons.length > 0);
   check('index.html 引用 manifest', html.includes('rel="manifest"'));
-  check('index.html 注册 service worker', html.includes("register('sw.js')"));
+  check('app.js 注册 service worker', script.includes("register('sw.js')"));
   const sw = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
   check('sw.js 版本串与 APP_VERSION 一致', sw.includes("ironlog-v" + T.APP_VERSION));
+  check('sw.js 预缓存 css/js', sw.includes('./css/style.css') && sw.includes('./js/app.js'));
+  check('sw.js 的 SHELL 覆盖 index.html 引用的全部本地资源', (() => {
+    const shell = (sw.match(/SHELL = \[([^\]]*)\]/) || ['', ''])[1];
+    const refs = [...html.matchAll(/(?:href|src)="(?!http|data:)([^"]+)"/g)].map(x => x[1]);
+    return refs.length > 0 && refs.every(r => shell.includes('./' + r));
+  })());
   check('sw.js 有 install/activate/fetch', ['install','activate','fetch'].every(k => sw.includes("'" + k + "'")));
-  check('deploy.yml 发布 PWA 资源', /cp index.html manifest.webmanifest icon.svg sw.js/.test(
-    fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
+  check('deploy.yml 发布 css/js 与 PWA 资源', /cp index.html manifest.webmanifest icon.svg sw.js/.test(
+    fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
+    && /cp css\/style.css dist\/css\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
+    && /cp js\/app.js dist\/js\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
 
   console.log('== 14. P1 增量渲染（patchRow） ==');
   // 注入一个带 2 组（每组 set-row + rpe-row）的 .sets 容器，模拟真实 DOM
@@ -315,6 +326,67 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   patchTarget = { matches: () => false, node: container };
   check('容器不匹配时回退 false（触发全量渲染）', T.patchRow(0, 1) === false);
   patchTarget = null;
+
+  console.log('== 15. P2 无障碍与结构 ==');
+  check('tablist + 三个 tab 角色', (html.match(/role="tab"/g) || []).length === 3 && html.includes('role="tablist"'));
+  check('tab 有 aria-controls/aria-selected', (html.match(/aria-controls="view-/g) || []).length === 3
+    && (html.match(/aria-selected=/g) || []).length >= 3);
+  check('三个视图都是 tabpanel', (html.match(/role="tabpanel"/g) || []).length === 3);
+  check('日期按钮有 aria-pressed', html.includes('id="day-btn-A" aria-pressed="true"') && html.includes('id="day-btn-B" aria-pressed="false"'));
+  check('toast 是 status 实时区域', html.includes('id="toast" role="status" aria-live="polite"'));
+  check('总结弹层是 dialog', html.includes('role="dialog"') && html.includes('aria-modal="true"'));
+  check('休息条是 timer 且计时不播报', html.includes('role="timer"') && html.includes('aria-live="off"'));
+  check('±15s 按钮有可读标签', html.includes('aria-label="减少 15 秒"') && html.includes('aria-label="增加 15 秒"'));
+  check('未禁用双指缩放（WCAG 1.4.4）', !/maximum-scale/.test(html));
+  check('确认按钮带 aria-pressed', T.state.program.A.length > 0 && /aria-pressed="(true|false)"/.test(htmlTouchedHTML('ex-list') || ''));
+  T.switchView('history');
+  check('切视图同步 aria-selected', elsById.get('tab-history').attrs['aria-selected'] === 'true'
+    && elsById.get('tab-today').attrs['aria-selected'] === 'false');
+  T.switchDay('B');
+  check('切日同步 aria-pressed', elsById.get('day-btn-B').attrs['aria-pressed'] === 'true'
+    && elsById.get('day-btn-A').attrs['aria-pressed'] === 'false');
+
+  console.log('== 16. P2 拆分与趋势窗口 ==');
+  check('index.html 无内联脚本/样式', !/<script>/.test(html) && !/<style>/.test(html));
+  check('index.html 引用外链资源', html.includes('href="css/style.css"') && html.includes('src="js/app.js"'));
+  check('app.js 用 defer 加载', html.includes('<script src="js/app.js" defer>'));
+  check('TREND_WINDOW 常量存在', T.TREND_WINDOW === 12);
+  check('导出含 trendsSpan', typeof T.buildExport(2).trendsSpan === 'number');
+
+  // 趋势窗口 > 导出窗口：n=2 时仍能看到完整历史的方向；「涨上去后停滞」不再误判为 up
+  const mkTrendLog = (date, w) => ({
+    date, day: 'A', startedAt: 0, endedAt: 0, durationSec: 3000,
+    exercises: [{ exerciseId: 'goblet_squat', sets: [{ weight: w, reps: 8, duration: null, rpe: 8, done: true }] }]
+  });
+  T.state.logs.length = 0;
+  [10, 12.5, 15, 15, 15, 15].forEach((w, i) => T.state.logs.push(mkTrendLog(`2026-03-0${i + 1}`, w)));
+  const wide = T.buildExport(2);
+  check('n=2 时 recentLogs 仍只有 2 条', wide.recentLogs.length === 2);
+  check('趋势回看全部 6 次', wide.trendsSpan === 6 && wide.trends.goblet_squat.sessions.length === 6);
+  T.state.logs.length = 0;
+  [10, 12.5, 15, 17.5, 20, 22.5].forEach((w, i) => T.state.logs.push(mkTrendLog(`2026-03-0${i + 1}`, w)));
+  check('持续上涨判定 up', T.buildExport(2).trends.goblet_squat.direction === 'up');
+  T.state.logs.length = 0;
+  [15, 15, 15, 15, 15, 15].forEach((w, i) => T.state.logs.push(mkTrendLog(`2026-04-0${i + 1}`, w)));
+  check('完全停滞判定 plateau', T.buildExport(2).trends.goblet_squat.direction === 'plateau');
+  T.state.logs.length = 0;
+  [15, 15, 15, 14, 13, 12].forEach((w, i) => T.state.logs.push(mkTrendLog(`2026-05-0${i + 1}`, w)));
+  check('持续下降判定 down', T.buildExport(2).trends.goblet_squat.direction === 'down');
+
+  console.log('== 17. P2 lastValues 跳过热身组 ==');
+  T.state.logs.length = 0;
+  T.state.logs.push({
+    date: '2026-06-01', day: 'A', startedAt: 0, endedAt: 0, durationSec: 3000,
+    exercises: [{ exerciseId: 'goblet_squat', sets: [
+      { weight: 5.35, reps: 10, duration: null, rpe: null, done: true, type: 'warmup' },
+      { weight: 15, reps: 8, duration: null, rpe: 8, done: true, type: 'work' },
+      { weight: 12.5, reps: 8, duration: null, rpe: 8, done: true, type: 'work' },
+      { weight: 99, reps: 1, duration: null, rpe: null, done: false, type: 'work' }
+    ] }]
+  });
+  const lv = T.lastValues('goblet_squat');
+  check('取正式组最重值而非热身组', lv.weight === 15 && lv.reps === 8);
+  check('忽略未完成组', lv.weight !== 99);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
