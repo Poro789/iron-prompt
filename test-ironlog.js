@@ -4,17 +4,32 @@ const fs = require('fs');
 const path = require('path');
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+const m = html.match(/<script>([\s\S]*)<\/script>/);
+if(!m) { console.error('FAIL 未能从 index.html 提取 <script> 内联脚本'); process.exit(1); }
+const script = m[1];
+if(script.length < 1000) { console.error('FAIL 提取到的脚本过短（' + script.length + ' 字符）'); process.exit(1); }
 
 // ---- DOM / 浏览器 API 桩 ----
-function makeEl(){
+function makeEl(id){
   return {
-    innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
+    id, innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
     classList:{ toggle(){}, add(){}, remove(){} },
     addEventListener(){}, querySelectorAll(){ return []; }
   };
 }
-global.document = { getElementById: () => makeEl() };
+const touchedIds = new Set();   // 记录被访问过的元素 id，供测试断言 id 未被改名
+const missingIds = [];          // 桩在 HTML 中找不到的 id = 代码引用了不存在的元素
+const elsById = new Map();      // 同一 id 复用同一桩，便于断言渲染结果
+global.document = {
+  getElementById(id){
+    touchedIds.add(id);
+    if(!html.includes(`id="${id}"`)) missingIds.push(id);
+    if(!elsById.has(id)) elsById.set(id, makeEl(id));
+    return elsById.get(id);
+  }
+};
+// 取某个容器桩最近一次写入的 innerHTML（渲染结果）
+function htmlTouchedHTML(id){ return (elsById.get(id) || { innerHTML:'' }).innerHTML; }
 global.localStorage = {
   _d: {},
   getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
@@ -31,8 +46,9 @@ const testScript = script + `
 ;globalThis.__T = {
   get state(){ return state; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
-  startSessionIfNeeded, endSession, switchDay, targetLabel,
-  buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition
+  startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
+  buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
+  esc, APP_VERSION, toast, render
 };`;
 (0, eval)(testScript);
 const T = globalThis.__T;
@@ -176,6 +192,42 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('doExport 复制 prompt（含数据）', copied && copied.startsWith('你是我的力量训练数据分析助手') && copied.includes('ironlog-export'));
   await T.doExportData();
   check('doExportData 复制纯数据', copied && JSON.parse(copied).type === 'ironlog-export');
+
+  console.log('== 10. P0 安全与健壮性 ==');
+  check('esc 转义 & < > " \'',
+    T.esc(`<a href="x">&'</>`) === '&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/&gt;');
+  check('esc 处理非字符串输入', T.esc(12.5) === '12.5' && T.esc(null) === 'null');
+
+  // AI 返回的方案里带 HTML 时，渲染必须转义（否则在本地源里执行任意 JS）
+  const xssPlan = JSON.stringify({
+    type: 'ai-plan',
+    exercises: { xss_ex: { name: '<img src=x onerror=alert(1)>', muscles: '<script>s</script>',
+                           tips: '<b>t</b>', personal: '"q"' } },
+    program: { B: [{ section: '<i>sec</i>', exerciseId: 'xss_ex',
+                     sets: [{ type: 'work', weight: 10, reps: 8 }] }] }
+  });
+  check('XSS 方案导入成功', T.importPlan(xssPlan).ok === true);
+  T.switchDay('B');
+  const rendered = htmlTouchedHTML('ex-list');
+  check('渲染无裸 <img onerror', !/<img src=x onerror=/.test(rendered));
+  check('渲染保留转义实体', /&lt;img src=x onerror=alert\(1\)&gt;/.test(rendered));
+  check('分区名已转义', /&lt;i&gt;sec&lt;\/i&gt;/.test(rendered));
+  check('要点已转义', /<b>要点<\/b>&lt;b&gt;t&lt;\/b&gt;/.test(rendered));
+
+  // 版本号单一来源
+  check('APP_VERSION 为 x.y.z', /^\d+\.\d+\.\d+$/.test(T.APP_VERSION));
+  check('index.html 无硬编码版本号', !/v0\.\d/.test(html));
+
+  // 代码引用的每个元素 id 都必须真实存在于 index.html（防止改名后静默失效）
+  check('getElementById 未命中缺失 id' + (missingIds.length ? '：' + [...new Set(missingIds)].join(', ') : ''),
+    missingIds.length === 0);
+  check('被访问的元素 id 数量合理（共 ' + touchedIds.size + ' 个）', touchedIds.size > 5);
+  // 强制走一遍三个视图 + toast，让所有 id 都被访问到，扩大缺失 id 的覆盖面
+  ['today','history','settings'].forEach(v => { T.switchView(v); T.render(); });
+  T.toast('x');
+  check('三视图 + toast 渲染后仍无缺失 id' + (missingIds.length ? '：' + [...new Set(missingIds)].join(', ') : ''),
+    missingIds.length === 0);
+  check('id 覆盖面扩大到 ' + touchedIds.size + ' 个', touchedIds.size > 20);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

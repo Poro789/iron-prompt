@@ -214,7 +214,7 @@ header .ver{color:var(--muted);font-size:12px}
 <header>
   <div class="wrap">
     <h1>Iron Log</h1>
-    <span class="ver">v0.4 · P0-1/2/3/4</span>
+    <span class="ver" id="ver-badge"></span>
   </div>
 </header>
 
@@ -269,7 +269,7 @@ header .ver{color:var(--muted);font-size:12px}
   <section id="view-settings" class="view">
     <div class="set-card">
       <h3>关于</h3>
-      <p>Iron Log v0.4 —— P0-1 今日训练页 + P0-2 自动保存 + P0-3 导出给 AI（含固定分析 prompt）+ P0-4 导入 AI 方案。</p>
+      <p>Iron Log <span id="about-ver"></span> —— 今日训练 · 自动保存 · 导出给 AI（含固定分析 prompt）· 导入 AI 方案。</p>
       <p>数据仅存于本机浏览器 localStorage，每次修改自动保存，不上传任何服务器。</p>
       <p>当前 A/B 计划与动作库为<b style="color:var(--text)">占位数据</b>，在「历史 &amp; 导出」页导入 AI 方案后将被替换。</p>
       <p>下一步：P1-7 JSON 全量备份。</p>
@@ -318,8 +318,8 @@ header .ver{color:var(--muted);font-size:12px}
 <div class="toast" id="toast"></div><script>
 'use strict';
 /* =====================================================================
- * Iron Log v0.4 —— 力量训练记录（单文件版）
- * P0-1 今日训练页 / P0-2 自动保存 / P0-3 导出给 AI（数据快照 + 固定分析 prompt）/ P0-4 导入 AI 方案
+ * Iron Log —— 力量训练记录（单文件版）
+ * 核心闭环：今日训练 / 自动保存 / 导出给 AI（数据快照 + 固定分析 prompt）/ 导入 AI 方案
  * 数据（四层，不混存）：
  *   state.logs       训练日志：日期/动作/组·重量·次数·时长/RPE/完成标记/当日状态/用时
  *   state.exercises  动作库：肌群/模式/单位/要点/避坑/节奏/替代/个人
@@ -329,6 +329,7 @@ header .ver{color:var(--muted);font-size:12px}
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
+const APP_VERSION = '0.4.1';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
 const SEED = {
@@ -467,6 +468,9 @@ const $ = id => document.getElementById(id);
 const round1 = v => Math.round(v * 10) / 10;
 const fmtW = v => (v === null || v === undefined || v === '') ? '' : String(round1(v));
 const WEEK = ['日','一','二','三','四','五','六'];
+/* 所有来自 localStorage / AI 导入的文本在拼进 innerHTML 前必须过 esc() */
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
 function fmtDuration(sec){
   sec = Math.max(0, Math.round(sec));
@@ -630,7 +634,7 @@ function setRowHTML(exIdx, setIdx, st, ex){
         <button class="step-btn" ${d('reps')} data-act="inc">＋</button>
       </div>`;
   }
-  const rpeTarget = st.targetRpe != null ? `<span class="rpe-target">目标 ${st.targetRpe}</span>` : '';
+  const rpeTarget = st.targetRpe != null ? `<span class="rpe-target">目标 ${esc(st.targetRpe)}</span>` : '';
   return `
     <div class="set-row ${st.done ? 'done' : ''} ${st.type === 'warmup' ? 'warmup' : ''} ${mode}">
       <div class="set-idx">${setIdx + 1}</div>
@@ -657,7 +661,7 @@ function renderToday(){
   const sess = state.sessions[day];
   const status = $('session-status');
   const condVal = sess ? sess.condition : condDraft[day];
-  const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${COND_LABEL[condVal] || '–'}</button>`;
+  const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${esc(COND_LABEL[condVal] || '–')}</button>`;
   if(sess){
     status.innerHTML = `<span class="live"></span><span>进行中</span><span class="clock" id="session-clock">${fmtDuration((Date.now() - sess.startedAt)/1000)}</span>${condBtn}`;
   }else{
@@ -677,24 +681,24 @@ function renderToday(){
       if(!ex || !item) return '';
       let html = '';
       if(p.section && p.section !== lastSection){
-        html += `<div class="section-head">${p.section}</div>`;
+        html += `<div class="section-head">${esc(p.section)}</div>`;
         lastSection = p.section;
       }
       const mode = ex.mode || 'weight';
-      const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + (ex.unit || 'kg') : '';
+      const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + esc(ex.unit || 'kg') : '';
       const notes = [
-        ex.tips ? `<div class="note"><b>要点</b>${ex.tips}</div>` : '',
-        ex.pitfalls ? `<div class="note"><b>避坑</b>${ex.pitfalls}</div>` : '',
-        ex.tempo ? `<div class="note"><b>节奏</b>${ex.tempo}</div>` : '',
-        ex.alternatives ? `<div class="note"><b>替代</b>${ex.alternatives}</div>` : '',
-        ex.personal ? `<div class="note"><b>个人</b>${ex.personal}</div>` : ''
+        ex.tips ? `<div class="note"><b>要点</b>${esc(ex.tips)}</div>` : '',
+        ex.pitfalls ? `<div class="note"><b>避坑</b>${esc(ex.pitfalls)}</div>` : '',
+        ex.tempo ? `<div class="note"><b>节奏</b>${esc(ex.tempo)}</div>` : '',
+        ex.alternatives ? `<div class="note"><b>替代</b>${esc(ex.alternatives)}</div>` : '',
+        ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
       ].join('');
       const sets = item.sets.map((st, setIdx) => setRowHTML(exIdx, setIdx, st, ex)).join('');
       html += `
         <div class="ex-card">
           <div class="ex-head">
-            <div class="ex-name">${ex.name}<span class="ex-muscle">${ex.muscles || ''}</span></div>
-            <div class="ex-target">${targetLabel(item)}${unitTag}</div>
+            <div class="ex-name">${esc(ex.name)}<span class="ex-muscle">${esc(ex.muscles || '')}</span></div>
+            <div class="ex-target">${esc(targetLabel(item))}${unitTag}</div>
           </div>
           ${notes ? `<details class="ex-notes" data-notes="${exIdx}" ${openNotes[day + ':' + exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
           <div class="sets">${sets}</div>
@@ -838,7 +842,7 @@ function showSummary(entry){
     <div class="stat">总组数 <b>${sessionSets(entry)}</b> 组</div>
     <div class="stat">总容量 <b>${vol.toLocaleString()} kg</b></div>
     <div class="stat">用时 <b>${fmtDuration(entry.durationSec)}</b></div>
-    ${entry.condition ? `<div class="stat">状态 <b>${entry.condition}</b></div>` : ''}`;
+    ${entry.condition ? `<div class="stat">状态 <b>${esc(entry.condition)}</b></div>` : ''}`;
   $('summary-overlay').classList.add('show');
 }
 function closeSummary(){ $('summary-overlay').classList.remove('show'); }
@@ -865,7 +869,7 @@ function renderHistory(){
     const vol = Math.round(sessionVolume(entry));
     const doneSets = sessionSets(entry);
     const totalSets = entry.exercises.reduce((s, ex) => s + ex.sets.length, 0);
-    const cond = entry.condition ? ` · 状态${entry.condition}` : '';
+    const cond = entry.condition ? ` · 状态${esc(entry.condition)}` : '';
     const detail = entry.exercises.map(ex => {
       const exName = (state.exercises[ex.exerciseId] || {}).name || ex.exerciseId;
       const sets = ex.sets.filter(isDone).map(s => {
@@ -875,13 +879,13 @@ function renderHistory(){
         else base = (s.reps ?? '?') + ' 次';
         return base + (s.rpe ? ` (RPE ${s.rpe})` : '');
       }).join('，');
-      return `<div class="h-ex"><b>${exName}</b>${sets}</div>`;
+      return `<div class="h-ex"><b>${esc(exName)}</b>${esc(sets)}</div>`;
     }).join('');
     return `
       <details class="hist-item">
         <summary>
-          <span class="hist-date">${fmtDate(entry.date)}</span>
-          <span class="day-badge">${entry.day}</span>
+          <span class="hist-date">${esc(fmtDate(entry.date))}</span>
+          <span class="day-badge">${esc(entry.day)}</span>
           <span class="hist-meta">${entry.exercises.length} 动作 · ${doneSets === totalSets ? doneSets : doneSets + '/' + totalSets} 组${cond} · ${vol.toLocaleString()} kg · ${fmtDuration(entry.durationSec)}</span>
         </summary>
         <div class="hist-detail">${detail}</div>
@@ -976,7 +980,7 @@ function doImport(){
   const msg = $('import-msg');
   const r = importPlan($('import-text').value);
   msg.className = 'import-msg ' + (r.ok ? 'ok' : 'err');
-  msg.textContent = r.ok ? r.summary : r.error;
+  msg.textContent = r.ok ? r.summary : r.error;   // textContent：校验错误里的 exerciseId 无需转义
   if(r.ok) $('import-text').value = '';
 }
 
@@ -1166,6 +1170,8 @@ function clearAll(){
 
 /* ---------------- 总渲染 ---------------- */
 function render(){
+  $('ver-badge').textContent = 'v' + APP_VERSION;
+  $('about-ver').textContent = 'v' + APP_VERSION;
   if(currentView === 'today') renderToday();
   else if(currentView === 'history') renderHistory();
   else renderSettings();
