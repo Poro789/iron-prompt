@@ -513,7 +513,7 @@ function fullScreenHTML(day){
       <div class="fs-top">
         <button class="fs-nav" data-act="prev" aria-label="上一组">‹</button>
         <div class="fs-title">
-          <div class="fs-name">${esc(ex.name)}${sideTag}${warmTag}</div>
+          <div class="fs-name"><span class="fs-num">${pos.exIdx + 1}.</span> ${esc(ex.name)}${sideTag}${warmTag}</div>
           <div class="fs-muscles">${esc(ex.muscles || '')}</div>
         </div>
         <button class="fs-nav" data-act="next" aria-label="下一组">›</button>
@@ -588,13 +588,11 @@ $('ex-list').addEventListener('click', e => {
   const act = btn.dataset.act;
 
   if(act === 'prev'){
-    if(restEndsAt !== null) finishRest();
     prevPos(day); saveSoon(); renderToday();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
   if(act === 'next'){
-    if(restEndsAt !== null) finishRest();
     nextPos(day); saveSoon(); renderToday();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
@@ -648,6 +646,7 @@ $('ex-list').addEventListener('click', e => {
   if(!set) return;
 
   if(act === 'confirm'){
+    if(restEndsAt !== null) finishRest();
     cycleDone(day, exIdx, setIdx);
     saveSoon(); renderToday();
     return;
@@ -732,6 +731,7 @@ async function discardSession(){
   state.sessions[day] = null;
   delete draft[day];
   condDraft[day] = null;
+  curPos = 0;
   resetRest();
   flushSave();
   render();

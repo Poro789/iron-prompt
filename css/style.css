@@ -103,6 +103,7 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-nav:active{background:var(--border)}
 .fs-title{flex:1;min-width:0}
 .fs-name{font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs-num{color:var(--accent);font-size:14px;font-weight:600;margin-right:2px}
 .fs-muscles{color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fs-side,.fs-warm{
   font-size:11px;font-weight:600;color:var(--accent);background:var(--panel2);
