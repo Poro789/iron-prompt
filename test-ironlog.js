@@ -61,6 +61,7 @@ const testScript = script + `
 ;globalThis.__T = {
   get state(){ return state; },
   get restEndsAt(){ return restEndsAt; },
+  get restStartsAt(){ return restStartsAt; },
   get restTotal(){ return restTotalSec(); },
   get restDone(){ return restDone; },
   set restEndsAt(v){ restEndsAt = v; },
@@ -69,7 +70,8 @@ const testScript = script + `
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   get openNotes(){ return openNotes; },
-  startRestTimer, tickRest, adjustRest, skipRest, resetRest, askConfirm, answerConfirm,
+  startRestTimer, tickRest, finishRest, skipRest, resetRest, askConfirm, answerConfirm,
+  toggleDrawer, closeDrawer,
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
   fullScreenHTML, flatPos, posLabel
@@ -140,7 +142,6 @@ console.log('== 7. 会话流程：确认 -> 结束 -> 落盘 ==');
 T.switchDay('A');
 const items2 = T.getItems('A');
 T.setDoneState('A', 0, 0, true);
-items2[0].sets[0].note = '测试备注';
 items2[0].note = '动作备注';
 T.startSessionIfNeeded('A');
 check('会话已建立', !!T.state.sessions.A);
@@ -148,7 +149,7 @@ T.endSession();
 check('日志已写入', T.state.logs.length === 1 && T.state.logs[0].exercises.length === 1);
 check('日志组含 rpe 字段', T.state.logs[0].exercises[0].sets[0].rpe === null);
 check('日志组含 done 标记', T.state.logs[0].exercises[0].sets.every(s => typeof s.done === 'boolean'));
-check('日志组含 note 字段', T.state.logs[0].exercises[0].sets[0].note === '测试备注');
+check('日志组含 restAfter 字段', T.state.logs[0].exercises[0].sets[0].restAfter === null);
 check('日志动作含 note 字段', T.state.logs[0].exercises[0].note === '动作备注');
 check('会话已清除', T.state.sessions.A === null);
 
@@ -266,25 +267,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     missingIds.length === 0);
   check('id 覆盖面扩大到 ' + touchedIds.size + ' 个', touchedIds.size > 20);
 
-  console.log('== 11. P1 组间休息倒计时 ==');
+  console.log('== 11. P1 组间休息计时（v0.9：超时继续 + 自动记录） ==');
   check('migrate 补齐 restSec 默认值', T.state.settings.restSec === 90);
-  T.skipRest();
+  T.resetRest();
   check('restSec=0 时不启动', (() => { T.state.settings.restSec = 0; T.startRestTimer(); return T.restEndsAt === null; })());
   T.state.settings.restSec = 90;
   T.startRestTimer();
   check('启动后 restTotal=90', T.restEndsAt !== null && T.restTotal === 90);
-  T.adjustRest(15);
-  check('+15s 延长到 105', T.restTotal === 105);
-  T.adjustRest(-15);
-  check('−15s 回到 90', T.restTotal === 90);
-  T.skipRest();
-  check('跳过清空倒计时', T.restEndsAt === null);
+  check('restStartsAt 已设置', T.restStartsAt !== null);
+  T.finishRest();
+  check('finishRest 清空计时', T.restEndsAt === null && T.restStartsAt === null);
   T.startRestTimer();
-  T.restEndsAt = Date.now() - 1000;   // 拨到已过期
+  T.restEndsAt = Date.now() - 1000;   // 拨到已过期（超时）
   T.tickRest();
-  check('到期后标记 done 并提示', T.restDone === true && String(textOf('toast')).includes('休息结束'));
-  T.adjustRest(15);
-  check('到期后 +15s 可续用', T.restDone === false && T.restEndsAt > Date.now());
+  check('超时后标记 done（不自动跳转）', T.restDone === true && T.restEndsAt !== null);
+  T.finishRest();
+  check('finishRest 后清空', T.restEndsAt === null);
   T.resetRest();
   check('resetRest 清空', T.restEndsAt === null);
   check('导出 settings 含 restSec', T.buildExport(2).settings.restSec === 90);
@@ -323,32 +321,29 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     && /cp css\/style.css dist\/css\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
     && /cp js\/app.js dist\/js\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
 
-  console.log('== 14. P1 全屏交互（三态 / 导航 / 备注） ==');
+  console.log('== 14. P1 全屏交互（二态 / 导航 / 备注） ==');
   T.switchDay('A');
   T.switchView('today');
   T.render();
   const it14 = T.getItems('A');
   const s14 = it14[0].sets[0];
-  // 重置 done 为 null（前面测试可能改过）
-  s14.done = null;
-  // 三态循环：null → true → false → null
-  check('初始为未记录（null）', s14.done === null);
+  // 重置 done 为 false（前面测试可能改过）
+  s14.done = false;
+  // 二态循环：false → true → false
+  check('初始为未完成（false）', s14.done === false);
   T.cycleDone('A', 0, 0);
   check('第一次点击 → 完成', s14.done === true);
   T.cycleDone('A', 0, 0);
   check('第二次点击 → 未完成', s14.done === false);
-  T.cycleDone('A', 0, 0);
-  check('第三次点击 → 回到未记录', s14.done === null);
   // 组导航
   const pos0 = T.curPos;
   T.nextPos('A');
   check('nextPos 前进', T.curPos === pos0 + 1);
   T.prevPos('A');
   check('prevPos 回退', T.curPos === pos0);
-  // 备注字段
-  s14.note = '第1组代偿明显';
+  // 动作级备注
   it14[0].note = '今天状态一般';
-  check('组级/动作级备注可存', s14.note === '第1组代偿明显' && it14[0].note === '今天状态一般');
+  check('动作级备注可存', it14[0].note === '今天状态一般');
 
   console.log('== 15. P2 无障碍与结构 ==');
   check('tablist + 三个 tab 角色', (html.match(/role="tab"/g) || []).length === 3 && html.includes('role="tablist"'));
@@ -358,15 +353,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('日期按钮有 aria-pressed', html.includes('id="day-btn-A" aria-pressed="true"') && html.includes('id="day-btn-B" aria-pressed="false"'));
   check('toast 是 status 实时区域', html.includes('id="toast" role="status" aria-live="polite"'));
   check('总结弹层是 dialog', html.includes('role="dialog"') && html.includes('aria-modal="true"'));
-  T.restEndsAt = null; // 清除 section 14 遗留的休息计时，确保渲染 fs-done 按钮
+  T.resetRest(); // 清除 section 14 遗留的休息计时
   const fsA = T.fullScreenHTML('A');
   check('全屏卡片渲染（一次一组）', fsA.includes('fs-card'));
-  check('三态完成按钮存在', /fs-done/.test(fsA));
+  check('二态完成按钮存在', /fs-done/.test(fsA));
   check('组导航按钮存在', /data-act="prev"/.test(fsA) && /data-act="next"/.test(fsA));
   check('无步进按钮（除 RPE）', !/step-btn/.test(fsA));
   check('完成按钮带 aria-pressed', /aria-pressed="(true|false)"/.test(fsA));
+  check('进度条存在', /fs-progress/.test(fsA));
+  check('休息窄条不替换内容', !/fs-rest-bar/.test(fsA)); // 无休息时不显示
   T.switchDay('B');
-  check('±15s 按钮有可读标签', script.includes('aria-label="减少 15 秒"') && script.includes('aria-label="增加 15 秒"'));
   check('未禁用双指缩放（WCAG 1.4.4）', !/maximum-scale/.test(html));
   T.switchView('history');
   check('切视图同步 aria-selected', elsById.get('tab-history').attrs['aria-selected'] === 'true'

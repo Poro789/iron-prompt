@@ -2,7 +2,7 @@
  * 版本串由构建时 sed 替换（见 .github/workflows/deploy.yml），与 APP_VERSION 联动，
  * 版本一变缓存即失效，避免移动端长期跑旧副本。
  */
-const CACHE = 'ironlog-v0.8.0';
+const CACHE = 'ironlog-v0.9.0';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './css/style.css', './js/app.js'];
 
 self.addEventListener('install', e => {

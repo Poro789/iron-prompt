@@ -16,19 +16,33 @@
 
 <header>
   <div class="wrap">
-    <h1>Iron Log</h1>
     <span class="ver" id="ver-badge"></span>
+    <button class="hamburger" id="hamburger-btn" aria-label="菜单" onclick="toggleDrawer()">☰</button>
   </div>
 </header>
+
+<!-- 抽屉导航 -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<nav class="drawer" id="drawer" aria-label="主导航">
+  <div class="drawer-header">
+    <h1>Iron Log</h1>
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="关闭菜单">✕</button>
+  </div>
+  <div class="drawer-day" role="group" aria-label="训练日切换">
+    <button class="day-btn" id="day-btn-A" aria-pressed="true" onclick="switchDay('A');closeDrawer()">A 日<span class="dot"></span></button>
+    <button class="day-btn" id="day-btn-B" aria-pressed="false" onclick="switchDay('B');closeDrawer()">B 日<span class="dot"></span></button>
+  </div>
+  <div class="drawer-nav" role="tablist">
+    <button class="drawer-item active" id="tab-today" role="tab" aria-selected="true" aria-controls="view-today" onclick="switchView('today');closeDrawer()">今日训练</button>
+    <button class="drawer-item" id="tab-history" role="tab" aria-selected="false" aria-controls="view-history" onclick="switchView('history');closeDrawer()">历史 &amp; 导出</button>
+    <button class="drawer-item" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" onclick="switchView('settings');closeDrawer()">设置</button>
+  </div>
+</nav>
 
 <main class="wrap">
 
   <!-- ============ 今日训练 ============ -->
   <section id="view-today" class="view active" role="tabpanel" aria-labelledby="tab-today">
-    <div class="day-toggle" role="group" aria-label="训练日切换">
-      <button class="day-btn" id="day-btn-A" aria-pressed="true" onclick="switchDay('A')">A 日<span class="dot"></span></button>
-      <button class="day-btn" id="day-btn-B" aria-pressed="false" onclick="switchDay('B')">B 日<span class="dot"></span></button>
-    </div>
     <div class="session-status" id="session-status" aria-live="polite"></div>
     <div id="ex-list"></div>
     <button class="end-btn" id="end-btn" style="display:none" onclick="endSession()">结束训练</button>
@@ -63,9 +77,6 @@
       <button class="import-btn" onclick="doImport()">导入</button>
       <div id="import-msg" class="import-msg"></div>
     </div>
-    <div class="soon-card">
-      JSON 全量备份将在 P1-7 中加入。
-    </div>
   </section>
 
   <!-- ============ 设置 ============ -->
@@ -74,29 +85,22 @@
       <h3>关于</h3>
       <p>Iron Log <span id="about-ver"></span> —— 今日训练 · 自动保存 · 导出给 AI（含固定分析 prompt）· 导入 AI 方案。</p>
       <p>数据仅存于本机浏览器 localStorage，每次修改自动保存，不上传任何服务器。</p>
-      <p>当前 A/B 计划与动作库为<b style="color:var(--text)">占位数据</b>，在「历史 &amp; 导出」页导入 AI 方案后将被替换。</p>
-      <p>下一步：P1-7 JSON 全量备份。</p>
-      <p>v0.6.1：应用内确认弹层替换原生 confirm · CI 在 PR 上跑测试 · 变更记录见 CHANGELOG。</p>
     </div>
     <div class="set-card">
-      <h3>记录</h3>
+      <h3>训练参数</h3>
       <div class="set-row2">
         <label for="weight-step">重量步进（kg）</label>
         <input id="weight-step" type="number" inputmode="decimal" step="0.5" min="0.5">
       </div>
       <div class="set-row2" style="margin-top:10px">
-        <label for="rest-sec">组间休息（秒，确认后自动倒计时，0 关闭）</label>
+        <label for="rest-sec">组间休息（秒，0 关闭）</label>
         <input id="rest-sec" type="number" inputmode="numeric" step="5" min="0" max="1800">
       </div>
-      <div class="set-row2" style="margin-top:10px">
-        <label for="rest-note">休息说明（随导出附带）</label>
-      </div>
-      <input id="rest-note" type="text" class="wide-input" placeholder="如：固定 90 秒；不固定可留空">
     </div>
     <div class="set-card">
-      <h3>AI 分析背景</h3>
-      <p>导出 prompt 里附带的固定背景：身体数据、体态问题、目标、器械范围。填一次，每次导出自动带上。</p>
-      <textarea id="profile-bg" class="wide-area" placeholder="身高体重、体态问题、目标、训练水平、器械范围与上限"></textarea>
+      <h3>训练备注 / 背景</h3>
+      <p>自由填写：身体数据、体态问题、目标、器械范围、伤病、当前状态…导出时自动附带给 AI。</p>
+      <textarea id="profile-bg" class="wide-area" placeholder="身高体重、体态问题、目标、训练水平、器械范围、伤病备注…"></textarea>
     </div>
     <div class="set-card">
       <h3>危险区</h3>
@@ -106,14 +110,6 @@
   </section>
 
 </main>
-
-<nav class="tabbar" aria-label="主导航">
-  <div class="wrap" role="tablist">
-    <button class="tab-btn active" id="tab-today" role="tab" aria-selected="true" aria-controls="view-today" onclick="switchView('today')">今日训练</button>
-    <button class="tab-btn" id="tab-history" role="tab" aria-selected="false" aria-controls="view-history" onclick="switchView('history')">历史 &amp; 导出</button>
-    <button class="tab-btn" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" onclick="switchView('settings')">设置</button>
-  </div>
-</nav>
 
 <div class="overlay" id="summary-overlay" role="dialog" aria-modal="true" aria-labelledby="summary-title">
   <div class="summary-card">

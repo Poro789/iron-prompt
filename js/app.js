@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.8.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -186,6 +186,12 @@ function migrate(d){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);
     }
+    // v0.9: 二态迁移 done: null/undefined → false
+    if(d.sessions[day] && d.sessions[day].items){
+      d.sessions[day].items.forEach(it => (it.sets || []).forEach(s => {
+        if(s.done === null || s.done === undefined) s.done = false;
+      }));
+    }
   }
   return d;
 }
@@ -244,7 +250,7 @@ function fmtDate(dateStr){
   const d = new Date(dateStr + 'T00:00:00');
   return `${dateStr} 周${WEEK[d.getDay()]}`;
 }
-const isDone = s => s.done !== false;
+const isDone = s => s.done === true;
 function sessionVolume(entry){
   return entry.exercises.reduce((sum, ex) =>
     sum + ex.sets.filter(isDone).reduce((s, st) => s + (st.weight||0) * (st.reps||0), 0), 0);
@@ -280,16 +286,28 @@ function answerConfirm(ok){
   if(r) r(ok);
 }
 
-/* ---------------- 视图切换 ---------------- */
+/* ---------------- 视图切换（v0.9：抽屉导航） ---------------- */
 let currentView = 'today';
 function switchView(v){
   currentView = v;
   ['today','history','settings'].forEach(x => {
     $('view-' + x).classList.toggle('active', x === v);
-    $('tab-' + x).classList.toggle('active', x === v);
-    $('tab-' + x).setAttribute('aria-selected', x === v ? 'true' : 'false');
+    const tab = $('tab-' + x);
+    if(tab){
+      tab.classList.toggle('active', x === v);
+      tab.setAttribute('aria-selected', x === v ? 'true' : 'false');
+    }
   });
   render();
+}
+/* 抽屉开关 */
+function toggleDrawer(){
+  $('drawer').classList.toggle('open');
+  $('drawer-overlay').classList.toggle('show');
+}
+function closeDrawer(){
+  $('drawer').classList.remove('open');
+  $('drawer-overlay').classList.remove('show');
 }
 
 /* ---------------- 今日训练 ---------------- */
@@ -345,7 +363,7 @@ function getItems(day){
           rpe: null,
           side: spec.side ?? null,
           targetRpe: spec.rpe,
-          note: '',
+          restAfter: null,
           done: false
         }))
       };
@@ -422,9 +440,8 @@ function prevPos(day){
 function cycleDone(day, exIdx, setIdx){
   const set = getItems(day)[exIdx].sets[setIdx];
   if(!set) return;
-  if(set.done === true){ set.done = false; }        // ✓ → ✗ 未完成
-  else if(set.done === false){ set.done = null; }  // ✗ → ○ 未记录
-  else {                                            // ○ → ✓ 完成
+  if(set.done === true){ set.done = false; }        // ✓ → ✗
+  else {                                            // ✗ → ✓
     set.done = true;
     startSessionIfNeeded(day);
     startRestTimer();
@@ -467,35 +484,44 @@ function fullScreenHTML(day){
     ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
   ].join('');
   const rpeTarget = set.targetRpe != null ? `<span class="rpe-target">目标 ${esc(set.targetRpe)}</span>` : '';
-  const doneCls = set.done === true ? 'done' : (set.done === false ? 'undone' : '');
-  const doneIcon = set.done === true ? '✓' : (set.done === false ? '✗' : '○');
-  const doneLabel = set.done === true ? '已完成' : (set.done === false ? '未完成' : '未记录');
+  const doneCls = set.done === true ? 'done' : 'undone';
+  const doneIcon = set.done === true ? '✓' : '✗';
+  const doneLabel = set.done === true ? '已完成' : '未完成';
   const restActive = restEndsAt !== null;
+  // 当日进度
+  const allPos = flatPos(day);
+  const items = getItems(day);
+  const totalSets = allPos.length;
+  const doneSets = items.reduce((s, it) => s + it.sets.filter(st => st.done === true).length, 0);
+  const pct = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : 0;
+  // 跳过此动作：当前动作所有组都是 ✗
+  const allUndone = item.sets.every(st => st.done === false);
+  const restClock = restActive
+    ? (restEndsAt - Date.now() > 0
+        ? fmtDuration((restEndsAt - Date.now()) / 1000)
+        : '超时 ' + fmtDuration((Date.now() - restEndsAt) / 1000))
+    : '';
   return `
-    <div class="fs-card ${restActive ? 'resting' : ''}">
+    <div class="fs-card">
+      <div class="fs-progress" aria-hidden="true"><div class="fs-progress-fill" style="width:${pct}%"></div></div>
+      ${restActive ? `
+      <div class="fs-rest-bar" role="timer" aria-label="组间休息计时">
+        <span class="rest-label">休息</span>
+        <span class="rest-clock" id="rest-clock">${restClock}</span>
+        <button class="cond-btn" onclick="skipRest()">跳过</button>
+      </div>` : ''}
       <div class="fs-top">
         <button class="fs-nav" data-act="prev" aria-label="上一组">‹</button>
         <div class="fs-title">
-          <div class="fs-name">${esc(ex.name)}${sideTag}${warmTag}<span class="ex-muscle">${esc(ex.muscles || '')}</span></div>
-          <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}</div>
+          <div class="fs-name">${esc(ex.name)}${sideTag}${warmTag}</div>
+          <div class="fs-muscles">${esc(ex.muscles || '')}</div>
         </div>
         <button class="fs-nav" data-act="next" aria-label="下一组">›</button>
       </div>
       ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
-      ${restActive ? `
-      <div class="fs-rest" role="timer" aria-label="组间休息倒计时">
-        <div class="rest-label">组间休息</div>
-        <div class="rest-clock" id="rest-clock" aria-live="off">${fmtDuration(Math.max(0, restEndsAt - Date.now()) / 1000)}</div>
-        <div class="rest-track"><div class="rest-fill" id="rest-fill"></div></div>
-        <div class="rest-btns">
-          <button class="cond-btn" aria-label="减少 15 秒" onclick="adjustRest(-15)">−15s</button>
-          <button class="cond-btn" aria-label="增加 15 秒" onclick="adjustRest(15)">+15s</button>
-          <button class="cond-btn" onclick="skipRest()">跳过</button>
-        </div>
-      </div>` : `
       <div class="fs-set">
+        <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}</div>
         <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
-        <input class="fs-note" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" value="${esc(set.note || '')}" placeholder="备注（可选）：实际重量/次数、代偿、状态…">
         <div class="rpe-row">
           <span class="rpe-label">RPE</span>
           <button class="rpe-btn" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-f="rpe" data-act="dec" aria-label="RPE 减 0.5">−</button>
@@ -504,23 +530,22 @@ function fullScreenHTML(day){
           ${rpeTarget}
         </div>
         <button class="fs-done ${doneCls}" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-act="confirm"
-                aria-label="完成状态：${doneLabel}（再点切换未完成/未记录）" aria-pressed="${set.done === true ? 'true' : 'false'}">${doneIcon}</button>
-      </div>`}
-    </div>
-    <div class="fs-foot">
-      <button class="add-set" data-ex="${pos.exIdx}" data-act="addset">＋ 加一组</button>
-      <input class="fs-exnote" data-ex="${pos.exIdx}" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
+                aria-label="完成状态：${doneLabel}" aria-pressed="${set.done === true ? 'true' : 'false'}">${doneIcon}</button>
+      </div>
+      <div class="fs-foot">
+        <button class="add-set" data-ex="${pos.exIdx}" data-act="addset">＋ 加一组</button>
+        <input class="fs-exnote" data-ex="${pos.exIdx}" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
+      </div>
+      ${allUndone ? `<button class="skip-ex" data-act="skipex" aria-label="跳过此动作">跳过此动作 →</button>` : ''}
     </div>`;
 }
 
 function renderToday(){
   const day = curDay();
-  $('day-btn-A').classList.toggle('active', day === 'A');
-  $('day-btn-B').classList.toggle('active', day === 'B');
-  $('day-btn-A').classList.toggle('running', !!state.sessions.A);
-  $('day-btn-B').classList.toggle('running', !!state.sessions.B);
-  $('day-btn-A').setAttribute('aria-pressed', day === 'A' ? 'true' : 'false');
-  $('day-btn-B').setAttribute('aria-pressed', day === 'B' ? 'true' : 'false');
+  // 抽屉内日期按钮状态
+  const dA = $('day-btn-A'), dB = $('day-btn-B');
+  if(dA){ dA.classList.toggle('active', day === 'A'); dA.setAttribute('aria-pressed', day === 'A' ? 'true' : 'false'); }
+  if(dB){ dB.classList.toggle('active', day === 'B'); dB.setAttribute('aria-pressed', day === 'B' ? 'true' : 'false'); }
 
   const sess = state.sessions[day];
   const status = $('session-status');
@@ -555,15 +580,47 @@ function patchRpe(exIdx, setIdx){
   return true;
 }
 
-/* 全屏卡片交互（事件委托）：组导航 / 三态完成 / RPE 步进 / 加组 */
+/* 全屏卡片交互（事件委托）：组导航 / 二态完成 / RPE 步进 / 加组 / 跳过动作 */
 $('ex-list').addEventListener('click', e => {
   const btn = e.target.closest('button[data-act]');
   if(!btn) return;
   const day = curDay();
   const act = btn.dataset.act;
 
-  if(act === 'prev'){ prevPos(day); saveSoon(); renderToday(); return; }
-  if(act === 'next'){ nextPos(day); saveSoon(); renderToday(); return; }
+  if(act === 'prev'){
+    if(restEndsAt !== null) finishRest();
+    prevPos(day); saveSoon(); renderToday();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  if(act === 'next'){
+    if(restEndsAt !== null) finishRest();
+    nextPos(day); saveSoon(); renderToday();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  if(act === 'skipex'){
+    if(restEndsAt !== null) finishRest();
+    // 跳到下一个动作的第一组
+    const pos = flatPos(day)[curPos];
+    if(pos){
+      const items = getItems(day);
+      let nextEx = pos.exIdx + 1;
+      while(nextEx < items.length && items[nextEx].sets.every(s => s.done === false)) nextEx++;
+      if(nextEx < items.length){
+        curPos = 0;
+        // 找到 nextEx 的第一组在 flatPos 中的位置
+        let count = 0;
+        for(let i = 0; i < nextEx; i++) count += items[i].sets.length;
+        curPos = count;
+      } else {
+        nextPos(day);
+      }
+    }
+    saveSoon(); renderToday();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
 
   const exIdx = +btn.dataset.ex;
   const item = getItems(day)[exIdx];
@@ -579,8 +636,8 @@ $('ex-list').addEventListener('click', e => {
       rpe: null,
       side: null,
       targetRpe: last ? last.targetRpe : null,
-      note: '',
-      done: null
+      restAfter: null,
+      done: false
     });
     saveSoon(); renderToday();
     return;
@@ -603,7 +660,7 @@ $('ex-list').addEventListener('click', e => {
   }
 });
 
-/* 直接输入（change：失焦或回车时提交）：数值 / 组备注 / 动作备注 */
+/* 直接输入（change：失焦或回车时提交）：数值 / 动作备注 */
 $('ex-list').addEventListener('change', e => {
   const inp = e.target.closest('input');
   if(!inp) return;
@@ -618,11 +675,6 @@ $('ex-list').addEventListener('change', e => {
   }
   const set = item.sets[+inp.dataset.set];
   if(!set) return;
-  if(inp.classList.contains('fs-note')){
-    set.note = inp.value.trim();
-    saveSoon();
-    return;
-  }
   const v = parseFloat(inp.value);
   if(inp.dataset.f === 'weight'){
     set.weight = isNaN(v) ? null : Math.max(0, round1(v));
@@ -646,7 +698,7 @@ function endSession(){
       sets: it.sets.map(s => ({
         weight: s.weight ?? null, reps: s.reps ?? null,
         duration: s.duration ?? null, rpe: s.rpe ?? null,
-        side: s.side ?? null, note: (s.note || '').trim() || null,
+        side: s.side ?? null, restAfter: s.restAfter ?? null,
         done: s.done === true
       }))
     }))
@@ -710,14 +762,16 @@ function startClock(){
   }, 1000);
 }
 
-/* ---------------- 组间休息倒计时 ----------------
- * 确认一组后自动启动（取消确认不启动）；结束响一声 + toast。
- * 基于 restEndsAt 时间戳，切后台/休眠后回来仍显示真实剩余。
+/* ---------------- 组间休息计时（v0.9：超时继续 + 自动记录用时） ----------------
+ * 确认一组后自动启动；倒计时到 0 后继续向上计（超时），不自动跳转。
+ * 用户点「下一组」或「跳过」时记录实际休息时长到 set.restAfter。
+ * 基于 restStartsAt 时间戳，切后台/休眠后回来仍显示真实值。
  * ------------------------------------------------ */
 let restEndsAt = null;
 let restStartsAt = null;
 let restTimer = null;
 let restDone = false;
+let restForPos = null;  // {exIdx, setIdx} 触发休息的组
 
 function startRestTimer(){
   const sec = state.settings.restSec;
@@ -725,6 +779,11 @@ function startRestTimer(){
   restStartsAt = Date.now();
   restEndsAt = restStartsAt + sec * 1000;
   restDone = false;
+  restForPos = { exIdx: null, setIdx: null };
+  // 记录当前组位置
+  const day = curDay();
+  const pos = flatPos(day)[curPos];
+  if(pos) restForPos = pos;
   renderRestBar();
   startRestTick();
 }
@@ -735,42 +794,50 @@ function startRestTick(){
 function tickRest(){
   if(restEndsAt === null) return;
   const remain = restEndsAt - Date.now();
-  if(remain <= 0){
-    if(!restDone){
-      restDone = true;
-      beep();
-      toast('休息结束，开始下一组');
-      nextPos(curDay());
-      renderToday();
-    }
-    return;
+  if(remain <= 0 && !restDone){
+    restDone = true;
+    beep();
   }
   renderRestBar();
 }
 function renderRestBar(){
-  // 休息 UI 集成在全屏卡片内（fullScreenHTML 渲染）
   if(restEndsAt === null){
     if(restTimer){ clearInterval(restTimer); restTimer = null; }
     return;
   }
   const clock = $('rest-clock');
-  const fill = $('rest-fill');
-  if(!clock || !fill) return;
-  const total = restEndsAt - restStartsAt;
-  const remain = Math.max(0, restEndsAt - Date.now());
-  clock.textContent = fmtDuration(remain / 1000);
-  const pct = total > 0 ? (1 - remain / total) * 100 : 100;
-  fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  if(!clock) return;
+  const remain = restEndsAt - Date.now();
+  if(remain > 0){
+    clock.textContent = fmtDuration(remain / 1000);
+    clock.classList.remove('overtime');
+  } else {
+    clock.textContent = '超时 ' + fmtDuration((-remain) / 1000);
+    clock.classList.add('overtime');
+  }
 }
-function adjustRest(delta){
-  if(restEndsAt === null) return;
-  restEndsAt += delta * 1000;
-  if(restEndsAt - restStartsAt < 1000) restStartsAt = restEndsAt - 1000;  // 进度条基准兜底
-  restDone = false;
-  renderRestBar();
+/* 记录休息时长并清除计时器 */
+function finishRest(){
+  if(restStartsAt !== null && restForPos){
+    const elapsed = Math.round((Date.now() - restStartsAt) / 1000);
+    const day = curDay();
+    const item = getItems(day)[restForPos.exIdx];
+    if(item && item.sets[restForPos.setIdx]) item.sets[restForPos.setIdx].restAfter = elapsed;
+  }
+  restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null;
+  if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
-function skipRest(){ restEndsAt = null; restStartsAt = null; renderRestBar(); }
-function resetRest(){ restEndsAt = null; restStartsAt = null; restDone = false; renderRestBar(); }
+function skipRest(){
+  finishRest();
+  nextPos(curDay());
+  saveSoon();
+  renderToday();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function resetRest(){
+  restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null;
+  if(restTimer){ clearInterval(restTimer); restTimer = null; }
+}
 function restTotalSec(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); }
 
 /* 休息结束提示音（WebAudio，无外部资源；失败静默） */
@@ -1082,11 +1149,10 @@ function runExport(withPrompt){
 function doExport(){ return runExport(true); }
 function doExportData(){ return runExport(false); }
 
-/* ---------------- 设置 ---------------- */
+/* ---------------- 设置（v0.9：备注融合） ---------------- */
 function renderSettings(){
   $('weight-step').value = state.settings.weightStep;
   $('rest-sec').value = state.settings.restSec;
-  $('rest-note').value = state.settings.restNote || '';
   $('profile-bg').value = (state.profile && state.profile.background) || '';
 }
 $('weight-step').addEventListener('change', e => {
@@ -1102,15 +1168,10 @@ $('rest-sec').addEventListener('change', e => {
   flushSave();
   toast(state.settings.restSec > 0 ? `组间休息：${state.settings.restSec} 秒` : '组间休息已关闭');
 });
-$('rest-note').addEventListener('change', e => {
-  state.settings.restNote = e.target.value.trim();
-  save();
-  toast('组间休息：' + (state.settings.restNote || '未设置'));
-});
 $('profile-bg').addEventListener('change', e => {
   state.profile.background = e.target.value;
   save();
-  toast('AI 分析背景已保存');
+  toast('训练备注已保存');
 });
 
 async function clearAll(){
