@@ -104,6 +104,8 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-title{flex:1;min-width:0}
 .fs-name{font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fs-num{color:var(--accent);font-size:14px;font-weight:600;margin-right:2px}
+.pr-badge{color:var(--red);font-size:13px;font-weight:700;margin-left:6px}
+.session-progress{font-size:13px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
 .fs-muscles{color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fs-side,.fs-warm{
   font-size:11px;font-weight:600;color:var(--accent);background:var(--panel2);
@@ -175,6 +177,8 @@ header .ver{color:var(--muted);font-size:12px}
 .empty-hint{color:var(--muted);text-align:center;padding:40px 0;font-size:14px}
 
 /* ---------------- 历史 ---------------- */
+.trend-chart{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
+.trend-chart svg{width:100%;height:auto;display:block}
 .hist-item{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
 .hist-item summary{list-style:none;cursor:pointer;padding:12px;display:flex;align-items:center;gap:8px}
 .hist-item summary::-webkit-details-marker{display:none}

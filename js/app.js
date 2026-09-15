@@ -440,9 +440,23 @@ function prevPos(day){
 function cycleDone(day, exIdx, setIdx){
   const set = getItems(day)[exIdx].sets[setIdx];
   if(!set) return;
-  if(set.done === true){ set.done = false; }        // ✓ → ✗
+  if(set.done === true){ set.done = false; set.isPR = false; }  // ✓ → ✗
   else {                                            // ✗ → ✓
     set.done = true;
+    // PR 检测：仅正式组，对比上次同动作最重/最长/最多
+    if(set.type !== 'warmup'){
+      const item = getItems(day)[exIdx];
+      const lv = lastValues(item.exerciseId);
+      const ex = state.exercises[item.exerciseId];
+      const mode = (ex && ex.mode) || 'weight';
+      if(mode === 'time'){
+        set.isPR = (set.duration != null && lv.duration != null && set.duration > lv.duration);
+      } else if(mode === 'bodyweight'){
+        set.isPR = (set.reps != null && lv.reps != null && set.reps > lv.reps);
+      } else {
+        set.isPR = (set.weight != null && lv.weight != null && set.weight > lv.weight);
+      }
+    }
     startSessionIfNeeded(day);
     startRestTimer();
   }
@@ -520,7 +534,7 @@ function fullScreenHTML(day){
       </div>
       ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
       <div class="fs-set">
-        <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}</div>
+        <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}${set.isPR ? ' <span class="pr-badge">🔥 PR</span>' : ''}</div>
         <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
         <div class="rpe-row">
           <span class="rpe-label">RPE</span>
@@ -551,10 +565,16 @@ function renderToday(){
   const status = $('session-status');
   const condVal = sess ? sess.condition : condDraft[day];
   const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${esc(COND_LABEL[condVal] || '–')}</button>`;
+  // 实时进度
+  const items = getItems(day);
+  const totalSets = items.reduce((s, it) => s + it.sets.length, 0);
+  const doneSets = items.reduce((s, it) => s + it.sets.filter(st => st.done === true).length, 0);
+  const vol = Math.round(items.reduce((s, it) => s + it.sets.filter(st => st.done === true).reduce((v, st) => v + (st.weight||0)*(st.reps||0), 0), 0));
+  const progStr = totalSets > 0 ? `<span class="session-progress">${doneSets}/${totalSets} 组${vol > 0 ? ' · ' + vol.toLocaleString() + 'kg' : ''}</span>` : '';
   if(sess){
-    status.innerHTML = `<span class="live"></span><span>进行中</span><span class="clock" id="session-clock">${fmtDuration((Date.now() - sess.startedAt)/1000)}</span>${condBtn}`;
+    status.innerHTML = `<span class="live"></span><span>进行中</span><span class="clock" id="session-clock">${fmtDuration((Date.now() - sess.startedAt)/1000)}</span>${progStr}${condBtn}`;
   }else{
-    status.innerHTML = `<span>未开始 · 确认第一组后自动计时</span>${condBtn}`;
+    status.innerHTML = `<span>未开始 · 确认第一组后自动计时</span>${progStr}${condBtn}`;
   }
 
   const list = $('ex-list');
@@ -648,6 +668,7 @@ $('ex-list').addEventListener('click', e => {
   if(act === 'confirm'){
     if(restEndsAt !== null) finishRest();
     cycleDone(day, exIdx, setIdx);
+    if(navigator.vibrate) navigator.vibrate(50);
     saveSoon(); renderToday();
     return;
   }
@@ -684,6 +705,23 @@ $('ex-list').addEventListener('change', e => {
   }
   saveSoon();
 });
+
+/* 滑动切组（touch 手势：左滑=下一组，右滑=上一组） */
+let touchStartX = 0, touchStartY = 0;
+$('ex-list').addEventListener('touchstart', e => {
+  if(e.touches.length !== 1) return;
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+$('ex-list').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if(Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return; // 水平滑动且幅度够
+  const day = curDay();
+  if(dx < 0) nextPos(day); else prevPos(day);
+  saveSoon(); renderToday();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}, { passive: true });
 
 /* 结束训练：写入 logs（P0 闭环的落盘点） */
 function endSession(){
@@ -859,13 +897,46 @@ function beep(){
 }
 
 /* ---------------- 历史 & 导出 ---------------- */
+/* 纯 SVG 趋势折线图：每个动作一条线，X=日期，Y=top 组主指标 */
+function buildTrendChartSVG(trends, maxLines){
+  const entries = Object.entries(trends).filter(([, t]) => t.sessions.length >= 2).slice(0, maxLines || 5);
+  if(!entries.length) return '';
+  const W = 320, H = 120, PAD = { t: 16, r: 12, b: 24, l: 36 };
+  const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
+  // 收集所有数据点
+  const allPts = [];
+  entries.forEach(([id, t]) => {
+    const metric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
+    t.sessions.forEach((s, i) => allPts.push(metric(s)));
+  });
+  const yMin = Math.min(...allPts) * 0.9, yMax = Math.max(...allPts) * 1.05;
+  const yRange = yMax - yMin || 1;
+  const totalSessions = Math.max(...entries.map(([, t]) => t.sessions.length));
+  const xStep = totalSessions > 1 ? pw / (totalSessions - 1) : pw;
+  const yScale = v => PAD.t + ph - ((v - yMin) / yRange) * ph;
+  const colors = ['#4f8cff','#3fb96f','#e0a030','#e05252','#9b6dff'];
+  const lines = entries.map(([id, t], li) => {
+    const metric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
+    const pts = t.sessions.map((s, i) => `${PAD.l + i * xStep},${yScale(metric(s))}`).join(' ');
+    const last = t.sessions[t.sessions.length - 1];
+    const label = `${(state.exercises[id] || {}).name || id} ${metric(last).toFixed(1)}`;
+    return `<polyline points="${pts}" fill="none" stroke="${colors[li % colors.length]}" stroke-width="2" stroke-linejoin="round"/>
+      <text x="${PAD.l + (t.sessions.length - 1) * xStep + 4}" y="${yScale(metric(last)) + 4}" font-size="9" fill="${colors[li % colors.length]}">${esc(label)}</text>`;
+  }).join('');
+  // Y 轴刻度
+  const yTicks = [yMin, yMin + yRange / 2, yMax].map(v =>
+    `<text x="${PAD.l - 4}" y="${yScale(v) + 3}" font-size="9" fill="#8b93a3" text-anchor="end">${Math.round(v)}</text>`
+  ).join('');
+  return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="动作趋势图">${yTicks}${lines}</svg></div>`;
+}
 function renderHistory(){
   const list = $('hist-list');
   if(!state.logs.length){
     list.innerHTML = '<div class="empty-hint">还没有训练记录。<br>完成一次训练后会自动出现在这里。</div>';
     return;
   }
-  list.innerHTML = state.logs.slice().reverse().map((entry, ri) => {
+  const trendSVG = buildTrendChartSVG(buildTrends(state.logs.slice(-TREND_WINDOW)), 5);
+  list.innerHTML = trendSVG + state.logs.slice().reverse().map((entry, ri) => {
     const vol = Math.round(sessionVolume(entry));
     const doneSets = sessionSets(entry);
     const totalSets = entry.exercises.reduce((s, ex) => s + ex.sets.length, 0);
