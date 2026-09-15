@@ -80,9 +80,9 @@ function check(name, cond){
 }
 
 console.log('== 1. 种子迁移（旧格式 -> 逐组数组） ==');
-check('program A 项被归一化为数组', Array.isArray(T.state.program.A[0].sets) && T.state.program.A[0].sets.length === 4);
-check('旧 reps 范围保留为 repsRange', T.state.program.A[0].repsRange === '6-8');
-check('targetLabel 使用 repsRange', T.targetLabel(T.state.program.A[0]) === '4 × 6-8');
+check('program A 项被归一化为数组', Array.isArray(T.state.program.A[0].sets) && T.state.program.A[0].sets.length === 1);
+check('B 日蚌式 2 组（左右各一）', T.state.program.B[3].exerciseId === 'clamshell' && T.state.program.B[3].sets.length === 2 && T.state.program.B[3].sets[0].side === 'L');
+check('targetLabel 单侧动作', T.targetLabel(T.state.program.B[3]) === '2 × 15');
 
 console.log('== 2. 导入 plan-A.json ==');
 const planText = fs.readFileSync(path.join(__dirname, 'fixtures/plan-A.json'), 'utf8');
