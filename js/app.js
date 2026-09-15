@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.7.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.8.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -294,7 +294,6 @@ function switchView(v){
 
 /* ---------------- 今日训练 ---------------- */
 let draft = {};    // 内存草稿：未开始（未确认任何一组）前的预填数据，按日分存
-let openNotes = {}; // 已展开的"要点/避坑"详情，key = day:exIdx，重渲染后恢复
 let condDraft = { A: null, B: null }; // 当日状态草稿（会话建立前），点按循环切换
 
 const COND_ORDER = [null, '佳', '一般', '差'];
@@ -337,6 +336,7 @@ function getItems(day){
       const lv = lastValues(p.exerciseId);
       return {
         exerciseId: p.exerciseId,
+        note: '',
         sets: p.sets.map(spec => ({
           type: spec.type,
           weight: spec.weight ?? lv.weight,
@@ -345,6 +345,7 @@ function getItems(day){
           rpe: null,
           side: spec.side ?? null,
           targetRpe: spec.rpe,
+          note: '',
           done: false
         }))
       };
@@ -382,54 +383,133 @@ function targetLabel(item){
   return warm ? '热身 ' + warm + ' + ' + core : core;
 }
 
-/* 一组一行：按动作模式渲染（weight/band 双步进，bodyweight 自重+次数，time 时长） */
-function setRowHTML(exIdx, setIdx, st, ex){
-  const mode = ex.mode || 'weight';
-  const d = f => `data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}"`;
-  let mid;
-  if(mode === 'time'){
-    mid = `
-      <div class="stepper">
-        <button class="step-btn" ${d('duration')} data-act="dec">−</button>
-        <input class="set-input" ${d('duration')} inputmode="numeric" value="${st.duration ?? ''}" aria-label="时长">
-        <button class="step-btn" ${d('duration')} data-act="inc">＋</button>
-        <span class="unit">s</span>
-      </div>`;
-  }else if(mode === 'bodyweight'){
-    mid = `
-      <span class="bw-tag">自重</span>
-      <div class="stepper">
-        <button class="step-btn" ${d('reps')} data-act="dec">−</button>
-        <input class="set-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数">
-        <button class="step-btn" ${d('reps')} data-act="inc">＋</button>
-      </div>`;
-  }else{
-    mid = `
-      <div class="stepper">
-        <button class="step-btn" ${d('weight')} data-act="dec">−</button>
-        <input class="set-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量">
-        <button class="step-btn" ${d('weight')} data-act="inc">＋</button>
-      </div>
-      <div class="stepper">
-        <button class="step-btn" ${d('reps')} data-act="dec">−</button>
-        <input class="set-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数">
-        <button class="step-btn" ${d('reps')} data-act="inc">＋</button>
-      </div>`;
+/* ---------------- 全屏一次一组（v0.8 交互） ----------------
+ * 一屏只显示当前组：大数字 + 输入框（无步进按钮）+ 备注 + RPE 步进 + 三态完成按钮。
+ * 三态：○ 未记录 → ✓ 完成（绿）→ ✗ 未完成（红）→ ○。
+ * 组间休息集成在卡片内：确认一组后卡片切到休息态，倒计时结束自动切下一组。
+ */
+let curPos = 0;      // 当前 (exIdx, setIdx) 扁平化位置
+let openNotes = {};  // 已展开的"要点/避坑"详情，key = day:exIdx
+
+function flatPos(day){
+  const items = getItems(day);
+  const pos = [];
+  items.forEach((it, exIdx) => it.sets.forEach((s, setIdx) => pos.push({ exIdx, setIdx })));
+  return pos;
+}
+function posLabel(day, p){
+  const items = getItems(day);
+  const it = items[p.exIdx];
+  if(!it) return { ex: null, item: null, set: null };
+  return { ex: state.exercises[it.exerciseId], item: it, set: it.sets[p.setIdx] };
+}
+function clampPos(day){
+  const n = flatPos(day).length;
+  if(!n) return 0;
+  curPos = Math.max(0, Math.min(curPos, n - 1));
+  return curPos;
+}
+function nextPos(day){
+  const n = flatPos(day).length;
+  if(!n) return;
+  curPos = (curPos + 1) % n;
+}
+function prevPos(day){
+  const n = flatPos(day).length;
+  if(!n) return;
+  curPos = (curPos - 1 + n) % n;
+}
+function cycleDone(day, exIdx, setIdx){
+  const set = getItems(day)[exIdx].sets[setIdx];
+  if(!set) return;
+  if(set.done === true){ set.done = false; }        // ✓ → ✗ 未完成
+  else if(set.done === false){ set.done = null; }  // ✗ → ○ 未记录
+  else {                                            // ○ → ✓ 完成
+    set.done = true;
+    startSessionIfNeeded(day);
+    startRestTimer();
   }
-  const rpeTarget = st.targetRpe != null ? `<span class="rpe-target">目标 ${esc(st.targetRpe)}</span>` : '';
+}
+function setDoneState(day, exIdx, setIdx, val){
+  const set = getItems(day)[exIdx].sets[setIdx];
+  if(!set) return;
+  set.done = val;
+}
+/* 按模式生成输入框（无步进按钮；weight 小数、reps/duration 整数） */
+function setInputsHTML(exIdx, setIdx, st, ex){
+  const d = f => `data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}"`;
+  const mode = ex.mode || 'weight';
+  if(mode === 'time'){
+    return `<input class="fs-input" ${d('duration')} inputmode="numeric" value="${st.duration ?? ''}" aria-label="时长（秒）"><span class="fs-unit">秒</span>`;
+  }
+  if(mode === 'bodyweight'){
+    return `<span class="fs-bw">自重</span><input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>`;
+  }
+  return `<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量"><span class="fs-unit">${esc(ex.unit || 'kg')}</span>
+    <input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>`;
+}
+function fullScreenHTML(day){
+  const program = state.program[day] || [];
+  if(!program.length) return '<div class="empty-hint">该日暂无动作，等待导入训练计划。</div>';
+  const p = clampPos(day);
+  const pos = flatPos(day)[p];
+  const { ex, item, set } = posLabel(day, pos);
+  if(!ex || !item || !set) return '<div class="empty-hint">动作库缺少该动作（exerciseId 不在 exercises 中）。</div>';
+  const mode = ex.mode || 'weight';
+  const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + esc(ex.unit || 'kg') : '';
+  const sideTag = set.side ? `<span class="fs-side">${set.side === 'L' ? '左' : '右'}侧</span>` : '';
+  const warmTag = set.type === 'warmup' ? '<span class="fs-warm">热身</span>' : '';
+  const notes = [
+    ex.tips ? `<div class="note"><b>要点</b>${esc(ex.tips)}</div>` : '',
+    ex.pitfalls ? `<div class="note"><b>避坑</b>${esc(ex.pitfalls)}</div>` : '',
+    ex.tempo ? `<div class="note"><b>节奏</b>${esc(ex.tempo)}</div>` : '',
+    ex.alternatives ? `<div class="note"><b>替代</b>${esc(ex.alternatives)}</div>` : '',
+    ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
+  ].join('');
+  const rpeTarget = set.targetRpe != null ? `<span class="rpe-target">目标 ${esc(set.targetRpe)}</span>` : '';
+  const doneCls = set.done === true ? 'done' : (set.done === false ? 'undone' : '');
+  const doneIcon = set.done === true ? '✓' : (set.done === false ? '✗' : '○');
+  const doneLabel = set.done === true ? '已完成' : (set.done === false ? '未完成' : '未记录');
+  const restActive = restEndsAt !== null;
   return `
-    <div class="set-row ${st.done ? 'done' : ''} ${st.type === 'warmup' ? 'warmup' : ''} ${mode}">
-      <div class="set-idx">${setIdx + 1}</div>
-      ${mid}
-      <button class="confirm-btn" data-ex="${exIdx}" data-set="${setIdx}" data-act="confirm"
-              aria-label="确认这组" aria-pressed="${st.done ? 'true' : 'false'}">${st.done ? '✓' : '○'}</button>
+    <div class="fs-card ${restActive ? 'resting' : ''}">
+      <div class="fs-top">
+        <button class="fs-nav" data-act="prev" aria-label="上一组">‹</button>
+        <div class="fs-title">
+          <div class="fs-name">${esc(ex.name)}${sideTag}${warmTag}<span class="ex-muscle">${esc(ex.muscles || '')}</span></div>
+          <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}</div>
+        </div>
+        <button class="fs-nav" data-act="next" aria-label="下一组">›</button>
+      </div>
+      ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
+      ${restActive ? `
+      <div class="fs-rest" role="timer" aria-label="组间休息倒计时">
+        <div class="rest-label">组间休息</div>
+        <div class="rest-clock" id="rest-clock" aria-live="off">${fmtDuration(Math.max(0, restEndsAt - Date.now()) / 1000)}</div>
+        <div class="rest-track"><div class="rest-fill" id="rest-fill"></div></div>
+        <div class="rest-btns">
+          <button class="cond-btn" aria-label="减少 15 秒" onclick="adjustRest(-15)">−15s</button>
+          <button class="cond-btn" aria-label="增加 15 秒" onclick="adjustRest(15)">+15s</button>
+          <button class="cond-btn" onclick="skipRest()">跳过</button>
+        </div>
+      </div>` : `
+      <div class="fs-set">
+        <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
+        <input class="fs-note" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" value="${esc(set.note || '')}" placeholder="备注（可选）：实际重量/次数、代偿、状态…">
+        <div class="rpe-row">
+          <span class="rpe-label">RPE</span>
+          <button class="rpe-btn" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-f="rpe" data-act="dec" aria-label="RPE 减 0.5">−</button>
+          <span class="rpe-val">${set.rpe ?? '–'}</span>
+          <button class="rpe-btn" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-f="rpe" data-act="inc" aria-label="RPE 加 0.5">＋</button>
+          ${rpeTarget}
+        </div>
+        <button class="fs-done ${doneCls}" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-act="confirm"
+                aria-label="完成状态：${doneLabel}（再点切换未完成/未记录）" aria-pressed="${set.done === true ? 'true' : 'false'}">${doneIcon}</button>
+      </div>`}
     </div>
-    <div class="rpe-row">
-      <span class="rpe-label">RPE</span>
-      <button class="rpe-btn" ${d('rpe')} data-act="dec">−</button>
-      <span class="rpe-val">${st.rpe ?? '–'}</span>
-      <button class="rpe-btn" ${d('rpe')} data-act="inc">＋</button>
-      ${rpeTarget}
+    <div class="fs-foot">
+      <button class="add-set" data-ex="${pos.exIdx}" data-act="addset">＋ 加一组</button>
+      <input class="fs-exnote" data-ex="${pos.exIdx}" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
     </div>`;
 }
 
@@ -453,48 +533,10 @@ function renderToday(){
   }
 
   const list = $('ex-list');
-  const program = state.program[day] || [];
-  if(!program.length){
-    list.innerHTML = '<div class="empty-hint">该日暂无动作，等待导入训练计划。</div>';
-  }else{
-    const items = getItems(day);
-    let lastSection = null;
-    list.innerHTML = program.map((p, exIdx) => {
-      const ex = state.exercises[p.exerciseId];
-      const item = items[exIdx];
-      if(!ex || !item) return '';
-      let html = '';
-      if(p.section && p.section !== lastSection){
-        html += `<div class="section-head">${esc(p.section)}</div>`;
-        lastSection = p.section;
-      }
-      const mode = ex.mode || 'weight';
-      const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + esc(ex.unit || 'kg') : '';
-      const notes = [
-        ex.tips ? `<div class="note"><b>要点</b>${esc(ex.tips)}</div>` : '',
-        ex.pitfalls ? `<div class="note"><b>避坑</b>${esc(ex.pitfalls)}</div>` : '',
-        ex.tempo ? `<div class="note"><b>节奏</b>${esc(ex.tempo)}</div>` : '',
-        ex.alternatives ? `<div class="note"><b>替代</b>${esc(ex.alternatives)}</div>` : '',
-        ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
-      ].join('');
-      const sets = item.sets.map((st, setIdx) => setRowHTML(exIdx, setIdx, st, ex)).join('');
-      const rowsKey = exIdx + ':' + day + ':' + item.sets.length;
-      html += `
-        <div class="ex-card">
-          <div class="ex-head">
-            <div class="ex-name">${esc(ex.name)}<span class="ex-muscle">${esc(ex.muscles || '')}</span></div>
-            <div class="ex-target">${esc(targetLabel(item))}${unitTag}</div>
-          </div>
-          ${notes ? `<details class="ex-notes" data-notes="${exIdx}" ${openNotes[day + ':' + exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
-          <div class="sets" data-rows="${rowsKey}">${sets}</div>
-          <button class="add-set" data-ex="${exIdx}" data-act="addset">＋ 加一组</button>
-        </div>`;
-      return html;
-    }).join('');
-    list.querySelectorAll('details[data-notes]').forEach(d => {
-      d.addEventListener('toggle', () => { openNotes[day + ':' + d.dataset.notes] = d.open; });
-    });
-  }
+  list.innerHTML = fullScreenHTML(day);
+  list.querySelectorAll('details[data-notes]').forEach(d => {
+    d.addEventListener('toggle', () => { openNotes[day + ':' + d.dataset.notes] = d.open; });
+  });
 
   $('end-btn').style.display = sess ? '' : 'none';
   $('discard-btn').style.display = sess ? '' : 'none';
@@ -502,36 +544,32 @@ function renderToday(){
   renderRestBar();
 }
 
-/* 只重建受影响的那一组（保留其余行的输入焦点与键盘），结构性变化才走全量渲染 */
-function patchRow(exIdx, setIdx){
+/* 组内局部更新：只替换 RPE 值（保留输入焦点）；其余变化走全量渲染 */
+function patchRpe(exIdx, setIdx){
   const day = curDay();
   const item = getItems(day)[exIdx];
   if(!item) return false;
-  const ex = state.exercises[item.exerciseId];
-  if(!ex) return false;
-  const rows = document.querySelector(`.sets[data-rows="${exIdx}:${day}:${item.sets.length}"]`);
-  if(!rows) return false;
-  const nodes = rows.children;
-  const target = setIdx * 2;   // 每组 = set-row + rpe-row 两个兄弟节点
-  if(nodes.length < target + 2) return false;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = setRowHTML(exIdx, setIdx, item.sets[setIdx], ex);
-  nodes[target].replaceWith(tmp.children[0]);
-  nodes[target + 1].replaceWith(tmp.children[1]);
+  const val = document.querySelector(`.rpe-val`);
+  if(!val) return false;
+  val.textContent = item.sets[setIdx].rpe ?? '–';
   return true;
 }
 
-/* 步进 / 确认 / 加组（事件委托） */
+/* 全屏卡片交互（事件委托）：组导航 / 三态完成 / RPE 步进 / 加组 */
 $('ex-list').addEventListener('click', e => {
   const btn = e.target.closest('button[data-act]');
   if(!btn) return;
   const day = curDay();
+  const act = btn.dataset.act;
+
+  if(act === 'prev'){ prevPos(day); saveSoon(); renderToday(); return; }
+  if(act === 'next'){ nextPos(day); saveSoon(); renderToday(); return; }
+
   const exIdx = +btn.dataset.ex;
-  const items = getItems(day);
-  const item = items[exIdx];
+  const item = getItems(day)[exIdx];
   if(!item) return;
 
-  if(btn.dataset.act === 'addset'){
+  if(act === 'addset'){
     const last = item.sets[item.sets.length - 1];
     item.sets.push({
       type: last ? last.type : 'work',
@@ -541,7 +579,8 @@ $('ex-list').addEventListener('click', e => {
       rpe: null,
       side: null,
       targetRpe: last ? last.targetRpe : null,
-      done: false
+      note: '',
+      done: null
     });
     saveSoon(); renderToday();
     return;
@@ -550,39 +589,40 @@ $('ex-list').addEventListener('click', e => {
   const setIdx = +btn.dataset.set;
   const set = item.sets[setIdx];
   if(!set) return;
-  const f = btn.dataset.f, act = btn.dataset.act;
 
-  if(f === 'weight'){
-    const ex = state.exercises[item.exerciseId];
-    const step = (ex && ex.unit === 'lb') ? 5 : (state.settings.weightStep || 2.5);
-    set.weight = act === 'inc'
-      ? round1((set.weight || 0) + step)
-      : Math.max(0, round1((set.weight || 0) - step));
-  }else if(f === 'reps'){
-    set.reps = act === 'inc' ? (set.reps || 0) + 1 : Math.max(0, (set.reps || 0) - 1);
-  }else if(f === 'duration'){
-    set.duration = act === 'inc' ? (set.duration || 0) + 5 : Math.max(0, (set.duration || 0) - 5);
-  }else if(f === 'rpe'){
+  if(act === 'confirm'){
+    cycleDone(day, exIdx, setIdx);
+    saveSoon(); renderToday();
+    return;
+  }
+  if(act === 'dec' || act === 'inc'){
     set.rpe = act === 'inc' ? Math.min(10, round1((set.rpe || 7.5) + 0.5))
                             : Math.max(5,  round1((set.rpe || 8.5) - 0.5));
-  }else if(act === 'confirm'){
-    set.done = !set.done;
-    if(set.done){
-      startSessionIfNeeded(day);
-      startRestTimer();
-    }
+    saveSoon();
+    if(!patchRpe(exIdx, setIdx)) renderToday();
   }
-  saveSoon();
-  if(!patchRow(exIdx, setIdx)) renderToday();
 });
 
-/* 直接输入数值（change：失焦或回车时提交） */
+/* 直接输入（change：失焦或回车时提交）：数值 / 组备注 / 动作备注 */
 $('ex-list').addEventListener('change', e => {
-  const inp = e.target.closest('input.set-input');
+  const inp = e.target.closest('input');
   if(!inp) return;
   const day = curDay();
-  const set = getItems(day)[+inp.dataset.ex]?.sets[+inp.dataset.set];
+  const exIdx = +inp.dataset.ex;
+  const item = getItems(day)[exIdx];
+  if(!item) return;
+  if(inp.classList.contains('fs-exnote')){
+    item.note = inp.value.trim();
+    saveSoon();
+    return;
+  }
+  const set = item.sets[+inp.dataset.set];
   if(!set) return;
+  if(inp.classList.contains('fs-note')){
+    set.note = inp.value.trim();
+    saveSoon();
+    return;
+  }
   const v = parseFloat(inp.value);
   if(inp.dataset.f === 'weight'){
     set.weight = isNaN(v) ? null : Math.max(0, round1(v));
@@ -592,7 +632,6 @@ $('ex-list').addEventListener('change', e => {
     set.reps = isNaN(v) ? null : Math.max(0, Math.round(v));
   }
   saveSoon();
-  if(!patchRow(+inp.dataset.ex, +inp.dataset.set)) renderToday();
 });
 
 /* 结束训练：写入 logs（P0 闭环的落盘点） */
@@ -603,10 +642,12 @@ function endSession(){
   const exercises = sess.items
     .map(it => ({
       exerciseId: it.exerciseId,
+      note: (it.note || '').trim() || null,
       sets: it.sets.map(s => ({
         weight: s.weight ?? null, reps: s.reps ?? null,
         duration: s.duration ?? null, rpe: s.rpe ?? null,
-        side: s.side ?? null, done: !!s.done
+        side: s.side ?? null, note: (s.note || '').trim() || null,
+        done: s.done === true
       }))
     }))
     .filter(it => it.sets.some(isDone));
@@ -697,28 +738,29 @@ function tickRest(){
   if(remain <= 0){
     if(!restDone){
       restDone = true;
-      renderRestBar();
       beep();
       toast('休息结束，开始下一组');
+      nextPos(curDay());
+      renderToday();
     }
     return;
   }
   renderRestBar();
 }
 function renderRestBar(){
-  const bar = $('rest-bar');
+  // 休息 UI 集成在全屏卡片内（fullScreenHTML 渲染）
   if(restEndsAt === null){
     if(restTimer){ clearInterval(restTimer); restTimer = null; }
-    bar.style.display = 'none';
     return;
   }
+  const clock = $('rest-clock');
+  const fill = $('rest-fill');
+  if(!clock || !fill) return;
   const total = restEndsAt - restStartsAt;
   const remain = Math.max(0, restEndsAt - Date.now());
-  bar.style.display = '';
-  bar.classList.toggle('done', remain <= 0);
-  $('rest-clock').textContent = fmtDuration(remain / 1000);
+  clock.textContent = fmtDuration(remain / 1000);
   const pct = total > 0 ? (1 - remain / total) * 100 : 100;
-  $('rest-fill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
 }
 function adjustRest(delta){
   if(restEndsAt === null) return;
@@ -768,9 +810,9 @@ function renderHistory(){
         if(s.duration != null) base = s.duration + 's';
         else if(s.weight != null) base = fmtW(s.weight) + '×' + (s.reps ?? '?');
         else base = (s.reps ?? '?') + ' 次';
-        return base + (s.rpe ? ` (RPE ${s.rpe})` : '');
+        return base + (s.rpe ? ` (RPE ${s.rpe})` : '') + (s.note ? `（${s.note}）` : '');
       }).join('，');
-      return `<div class="h-ex"><b>${esc(exName)}</b>${esc(sets)}</div>`;
+      return `<div class="h-ex"><b>${esc(exName)}</b>${esc(sets)}${ex.note ? `<div class="h-note">${esc(ex.note)}</div>` : ''}</div>`;
     }).join('');
     return `
       <details class="hist-item">
@@ -1008,7 +1050,7 @@ ${bg}
 ${fence}json
 ${JSON.stringify(data, null, 2)}
 ${fence}
-数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；condition 为当日整体状态（佳/一般/差）；trends 由已完成组聚合，回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
+数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；condition 为当日整体状态（佳/一般/差）；note 为组级/动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；trends 由已完成组聚合，回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
 
 请只基于这份数据分析（不要泛泛而谈通用健身知识）：
 1. 各动作重量/次数/时长趋势，是否需要渐进超负荷

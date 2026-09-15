@@ -30,16 +30,6 @@
       <button class="day-btn" id="day-btn-B" aria-pressed="false" onclick="switchDay('B')">B 日<span class="dot"></span></button>
     </div>
     <div class="session-status" id="session-status" aria-live="polite"></div>
-    <div class="rest-bar" id="rest-bar" style="display:none" role="timer" aria-label="组间休息倒计时">
-      <div class="rest-top">
-        <span class="rest-label">组间休息</span>
-        <span class="rest-clock" id="rest-clock" aria-live="off">0:00</span>
-        <button class="cond-btn" aria-label="减少 15 秒" onclick="adjustRest(-15)">−15s</button>
-        <button class="cond-btn" aria-label="增加 15 秒" onclick="adjustRest(15)">+15s</button>
-        <button class="cond-btn" onclick="skipRest()">跳过</button>
-      </div>
-      <div class="rest-track"><div class="rest-fill" id="rest-fill"></div></div>
-    </div>
     <div id="ex-list"></div>
     <button class="end-btn" id="end-btn" style="display:none" onclick="endSession()">结束训练</button>
     <button class="discard-btn" id="discard-btn" style="display:none" onclick="discardSession()">放弃本次记录</button>

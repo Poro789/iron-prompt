@@ -68,7 +68,11 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
-  startRestTimer, tickRest, adjustRest, skipRest, resetRest, patchRow, askConfirm, answerConfirm
+  get openNotes(){ return openNotes; },
+  startRestTimer, tickRest, adjustRest, skipRest, resetRest, askConfirm, answerConfirm,
+  cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
+  set curPos(v){ curPos = v; },
+  fullScreenHTML, flatPos, posLabel
 };`;
 (0, eval)(testScript);
 const T = globalThis.__T;
@@ -135,19 +139,23 @@ check('自重动作预填 targetRpe', wa.sets[0].targetRpe === 6);
 console.log('== 7. 会话流程：确认 -> 结束 -> 落盘 ==');
 T.switchDay('A');
 const items2 = T.getItems('A');
-items2[0].sets[0].done = true;
+T.setDoneState('A', 0, 0, true);
+items2[0].sets[0].note = '测试备注';
+items2[0].note = '动作备注';
 T.startSessionIfNeeded('A');
 check('会话已建立', !!T.state.sessions.A);
 T.endSession();
 check('日志已写入', T.state.logs.length === 1 && T.state.logs[0].exercises.length === 1);
 check('日志组含 rpe 字段', T.state.logs[0].exercises[0].sets[0].rpe === null);
 check('日志组含 done 标记', T.state.logs[0].exercises[0].sets.every(s => typeof s.done === 'boolean'));
+check('日志组含 note 字段', T.state.logs[0].exercises[0].sets[0].note === '测试备注');
+check('日志动作含 note 字段', T.state.logs[0].exercises[0].note === '动作备注');
 check('会话已清除', T.state.sessions.A === null);
 
 console.log('== 8. 导入保护：有进行中记录时拒绝 ==');
 T.switchDay('A');
 const items3 = T.getItems('A');
-items3[0].sets[0].done = true;
+T.setDoneState('A', 0, 0, true);
 T.startSessionIfNeeded('A');
 r = T.importPlan(planText);
 check('有会话时拒绝导入', !r.ok && /进行中/.test(r.error));
@@ -185,7 +193,7 @@ check('趋势不含未完成组', exp3.trends.goblet_squat.sessions[3].top.weigh
 // 当日状态标记
 T.switchDay('A');
 const items4 = T.getItems('A');
-items4[0].sets[0].done = true;
+T.setDoneState('A', 0, 0, true);
 T.startSessionIfNeeded('A');
 T.cycleCondition('A'); // null -> 佳
 T.endSession();
@@ -227,11 +235,17 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   });
   check('XSS 方案导入成功', T.importPlan(xssPlan).ok === true);
   T.switchDay('B');
-  const rendered = htmlTouchedHTML('ex-list');
+  const rendered = T.fullScreenHTML('B');
   check('渲染无裸 <img onerror', !/<img src=x onerror=/.test(rendered));
   check('渲染保留转义实体', /&lt;img src=x onerror=alert\(1\)&gt;/.test(rendered));
-  check('分区名已转义', /&lt;i&gt;sec&lt;\/i&gt;/.test(rendered));
-  check('要点已转义', /<b>要点<\/b>&lt;b&gt;t&lt;\/b&gt;/.test(rendered));
+  T.openNotes['B:0'] = true;   // 展开要点详情，验证 tips 转义
+  check('要点已转义', /<b>要点<\/b>&lt;b&gt;t&lt;\/b&gt;/.test(T.fullScreenHTML('B')));
+  T.openNotes['B:0'] = false;
+  // 恢复 A 日计划（XSS 测试覆盖了 B 日，A 日可能在前面的测试中被改过）
+  T.importPlan(planText);
+  T.switchDay('A');
+  T.curPos = 0;
+  
 
   // 版本号单一来源
   check('APP_VERSION 为 x.y.z', /^\d+\.\d+\.\d+$/.test(T.APP_VERSION));
@@ -309,23 +323,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     && /cp css\/style.css dist\/css\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
     && /cp js\/app.js dist\/js\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
 
-  console.log('== 14. P1 增量渲染（patchRow） ==');
-  // 注入一个带 2 组（每组 set-row + rpe-row）的 .sets 容器，模拟真实 DOM
-  const mkRow = tag => ({ tag, replaced: false, replaceWith(n){ this.replacedWith = n; } });
-  const rows = [mkRow('r0'), mkRow('p0'), mkRow('r1'), mkRow('p1')];
-  const container = { children: rows };
-  patchTarget = { matches: sel => sel === '.sets[data-rows="0:A:2"]', node: container };
+  console.log('== 14. P1 全屏交互（三态 / 导航 / 备注） ==');
   T.switchDay('A');
-  const it = T.getItems('A');
-  const ex0 = T.state.exercises[it[0].exerciseId];
-  const mkSet = () => ({ type: 'work', weight: 10, reps: 8, duration: null, rpe: null, side: null, targetRpe: null, done: false });
-  it[0].sets = [mkSet(), mkSet()];   // 对齐注入容器的组数
-  const patched = T.patchRow(0, 1);
-  check('patchRow 命中并替换目标组', patched === true && rows[2].replacedWith !== undefined && rows[3].replacedWith !== undefined);
-  check('只替换该组，未动其他组', rows[0].replacedWith === undefined && rows[1].replacedWith === undefined);
-  patchTarget = { matches: () => false, node: container };
-  check('容器不匹配时回退 false（触发全量渲染）', T.patchRow(0, 1) === false);
-  patchTarget = null;
+  T.switchView('today');
+  T.render();
+  const it14 = T.getItems('A');
+  const s14 = it14[0].sets[0];
+  // 重置 done 为 null（前面测试可能改过）
+  s14.done = null;
+  // 三态循环：null → true → false → null
+  check('初始为未记录（null）', s14.done === null);
+  T.cycleDone('A', 0, 0);
+  check('第一次点击 → 完成', s14.done === true);
+  T.cycleDone('A', 0, 0);
+  check('第二次点击 → 未完成', s14.done === false);
+  T.cycleDone('A', 0, 0);
+  check('第三次点击 → 回到未记录', s14.done === null);
+  // 组导航
+  const pos0 = T.curPos;
+  T.nextPos('A');
+  check('nextPos 前进', T.curPos === pos0 + 1);
+  T.prevPos('A');
+  check('prevPos 回退', T.curPos === pos0);
+  // 备注字段
+  s14.note = '第1组代偿明显';
+  it14[0].note = '今天状态一般';
+  check('组级/动作级备注可存', s14.note === '第1组代偿明显' && it14[0].note === '今天状态一般');
 
   console.log('== 15. P2 无障碍与结构 ==');
   check('tablist + 三个 tab 角色', (html.match(/role="tab"/g) || []).length === 3 && html.includes('role="tablist"'));
@@ -335,10 +358,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('日期按钮有 aria-pressed', html.includes('id="day-btn-A" aria-pressed="true"') && html.includes('id="day-btn-B" aria-pressed="false"'));
   check('toast 是 status 实时区域', html.includes('id="toast" role="status" aria-live="polite"'));
   check('总结弹层是 dialog', html.includes('role="dialog"') && html.includes('aria-modal="true"'));
-  check('休息条是 timer 且计时不播报', html.includes('role="timer"') && html.includes('aria-live="off"'));
-  check('±15s 按钮有可读标签', html.includes('aria-label="减少 15 秒"') && html.includes('aria-label="增加 15 秒"'));
+  T.restEndsAt = null; // 清除 section 14 遗留的休息计时，确保渲染 fs-done 按钮
+  const fsA = T.fullScreenHTML('A');
+  check('全屏卡片渲染（一次一组）', fsA.includes('fs-card'));
+  check('三态完成按钮存在', /fs-done/.test(fsA));
+  check('组导航按钮存在', /data-act="prev"/.test(fsA) && /data-act="next"/.test(fsA));
+  check('无步进按钮（除 RPE）', !/step-btn/.test(fsA));
+  check('完成按钮带 aria-pressed', /aria-pressed="(true|false)"/.test(fsA));
+  T.switchDay('B');
+  check('±15s 按钮有可读标签', script.includes('aria-label="减少 15 秒"') && script.includes('aria-label="增加 15 秒"'));
   check('未禁用双指缩放（WCAG 1.4.4）', !/maximum-scale/.test(html));
-  check('确认按钮带 aria-pressed', T.state.program.A.length > 0 && /aria-pressed="(true|false)"/.test(htmlTouchedHTML('ex-list') || ''));
   T.switchView('history');
   check('切视图同步 aria-selected', elsById.get('tab-history').attrs['aria-selected'] === 'true'
     && elsById.get('tab-today').attrs['aria-selected'] === 'false');
