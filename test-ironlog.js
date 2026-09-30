@@ -2130,6 +2130,26 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('下一次开练不会把旧状态抄进新记录', T.state.sessions.A && T.state.sessions.A.condition === null);
   T.state.sessions.A = null; delete T.state.drafts.A; delete T.state.exercises.l84;
 
+  console.log('== 85. 跳过此动作：落到下一个没做完的动作的第一组 ==');
+  T.state.logs = []; T.state.sessions = {}; delete T.state.drafts.A;
+  T.state.exercises.l85a = { name: '一', mode: 'weight', unit: 'kg' };
+  T.state.exercises.l85b = { name: '二', mode: 'weight', unit: 'kg' };
+  T.state.exercises.l85c = { name: '三', mode: 'weight', unit: 'kg' };
+  const mk85 = id => ({ section: '', exerciseId: id, repsRange: '', sets: [
+    { type: 'work', weight: 10, reps: 5 }, { type: 'work', weight: 10, reps: 5 }] });
+  T.state.program.A = [mk85('l85a'), mk85('l85b'), mk85('l85c')];
+  T.switchDay('A'); T.curPos = 0;
+  clickExList(btnOf({ act: 'skipex' }));
+  check('下一动作没开始也照样跳过去（落在它的第 1 组）', T.curPos === 2);
+  const it85 = T.getItems('A');
+  it85[1].sets[0].done = true;
+  T.curPos = 0; clickExList(btnOf({ act: 'skipex' }));
+  check('下一动作做了一半时仍落在它', T.curPos === 2);
+  it85[1].sets[1].done = true;
+  T.curPos = 0; clickExList(btnOf({ act: 'skipex' }));
+  check('做完的动作被跳过，落到再下一个的第一组', T.curPos === 4);
+  delete T.state.drafts.A; delete T.state.exercises.l85a; delete T.state.exercises.l85b; delete T.state.exercises.l85c;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

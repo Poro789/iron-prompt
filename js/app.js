@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.61';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.62';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -820,12 +820,12 @@ $('ex-list').addEventListener('click', e => {
   }
   if(act === 'skipex'){
     if(restEndsAt !== null) finishRest();
-    // 跳到下一个动作的第一组
+    // 跳到下一个还没做完的动作的第一组（整组做完的动作跳过没有意义）
     const pos = flatPos(day)[curPos];
     if(pos){
       const items = getItems(day);
       let nextEx = pos.exIdx + 1;
-      while(nextEx < items.length && items[nextEx].sets.every(s => s.done === false)) nextEx++;
+      while(nextEx < items.length && items[nextEx].sets.every(s => s.done === true)) nextEx++;
       if(nextEx < items.length){
         curPos = 0;
         // 找到 nextEx 的第一组在 flatPos 中的位置
