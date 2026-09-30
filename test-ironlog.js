@@ -1839,6 +1839,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('次数字段同样清空乱字符', s47().reps === null && inp47.value === '');
   delete T.state.exercises.test47; delete T.state.drafts.A; delete T.state.sessions.A;
 
+  console.log('== 69. 撤销删除按时间戳有序插回（v0.9.48）==');
+  const lA = { date: '2023-11-15', day: 'A', startedAt: 1700000400000, endedAt: 1700000460000, durationSec: 60, condition: null, exercises: [] };
+  const lB = { date: '2023-11-16', day: 'A', startedAt: 1700000500000, endedAt: 1700000560000, durationSec: 60, condition: null, exercises: [] };
+  T.state.logs.push(lA, lB);
+  T.switchView('history'); T.render();
+  clickEl('hist-list', btnOf({ act: 'dellog', ts: String(lA.startedAt), i: '0' }));
+  T.answerConfirm(true);
+  await null;
+  check('已删除最早的一条', T.state.logs.length === 1 && T.state.logs[0] === lB);
+  // 撤销窗口内又结束了一次新训练（时间戳在中间）：正常结束走有序插入，列表保持时间序
+  const lC = { date: '2023-11-15', day: 'A', startedAt: 1700000450000, endedAt: 1700000510000, durationSec: 60, condition: null, exercises: [] };
+  T.state.logs.splice(0, 0, lC);   // lC 比剩下的 lB 早：有序插入会排在 lB 前
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('撤销后三条都在', T.state.logs.length === 3);
+  check('放回的不是塞回旧下标，而是按时间戳排在中间',
+    T.state.logs[0] === lA && T.state.logs[1] === lC && T.state.logs[2] === lB);
+  T.state.logs = T.state.logs.filter(l => l !== lA && l !== lB && l !== lC);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
