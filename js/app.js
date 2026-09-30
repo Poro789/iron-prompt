@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.92';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.93';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -344,6 +344,9 @@ function fmtDuration(sec){
 function fmtDate(dateStr){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return '未知日期';
   const d = new Date(dateStr + 'T00:00:00');
+  /* 格式对但日历不存在（手编备份的「2025-02-30」）：JS 会把它顺延成 3 月 2 日，
+   * 念出「2025-02-30 周一」是日期与星期打架的假数据——只念日期本身，别猜星期 */
+  if(isNaN(d.getTime()) || d.getMonth() !== +dateStr.slice(5, 7) - 1 || d.getDate() !== +dateStr.slice(8, 10)) return String(dateStr);
   return `${dateStr} 周${WEEK[d.getDay()]}`;
 }
 /* 本地日期串 YYYY-MM-DD。不能用 toISOString().slice(0,10)：那是 UTC，
@@ -1715,6 +1718,17 @@ function validatePlan(d){
   if(!d || typeof d !== 'object' || Array.isArray(d)) return '顶层必须是 JSON 对象';
   if(!d.exercises || typeof d.exercises !== 'object' || Array.isArray(d.exercises)) return '缺少 exercises 字段（对象）';
   if(!d.program || typeof d.program !== 'object' || Array.isArray(d.program)) return '缺少 program 字段（对象）';
+  /* exercises 条目：允许只更新部分字段（合并语义），但写了 mode/unit 就得合法——
+   * 「body-weight」或数字 unit 会被原样存下，输入界面默默落到重量分支，
+   * 历史里出现「607×8」这种没有单位的数字，不如当场拒绝说清楚。
+   * unit 只要是字符串就放行（历史数据里有 'LB'，严格枚举会挡住自导出回环）。 */
+  for(const [id, ex] of Object.entries(d.exercises)){
+    if(!ex || typeof ex !== 'object' || Array.isArray(ex)) return `exercises.${id} 必须是对象`;
+    if(ex.mode != null && !['weight','band','bodyweight','time'].includes(ex.mode))
+      return `exercises.${id}.mode 必须是 weight / band / bodyweight / time 之一`;
+    if(ex.unit != null && typeof ex.unit !== 'string')
+      return `exercises.${id}.unit 必须是 kg / lb / null`;
+  }
   const days = ['A','B'].filter(day => d.program[day] !== undefined);
   if(!days.length) return 'program 必须包含 A 或 B（数组）';
   for(const day of days){
@@ -2021,8 +2035,8 @@ const PLAN_SCHEMA = `{
     "exercise_id": {
       "name": "动作名",
       "muscles": "目标肌群",
-      "mode": "weight / band / bodyweight / time 四选一",
-      "unit": "kg / lb / null",
+      "mode": "weight",
+      "unit": "kg",
       "tips": "要点",
       "pitfalls": "避坑",
       "tempo": "节奏（离心-停-向心）",
@@ -2037,16 +2051,18 @@ const PLAN_SCHEMA = `{
         "exerciseId": "exercise_id",
         "sets": [
           { "type": "warmup", "weight": 5, "reps": 10, "duration": null, "rpe": null, "side": null },
-          { "type": "work", "weight": 12.5, "reps": 8, "duration": null, "rpe": 8, "side": null }
+          { "type": "work", "weight": 12.5, "reps": 8, "duration": null, "rpe": 8, "rpeLabel": "目标 RPE 的文字说明（可省略；原计划有内容请保留）", "side": null }
         ]
       }
     ]
   }
 }
 字段规则：
+- exercises 条目可以只写部分字段（会与现有内容合并）；mode 只能是 weight / band / bodyweight / time 之一，unit 只能是 kg / lb 或 null
 - sets 的 weight/reps/duration/rpe 为数字或 null：weight/band 模式填 weight+reps，bodyweight 填 reps，time 填 duration；rpe 为目标 RPE；side 仅单侧动作填 L/R，否则 null
 - 如果想表达次数区间（如 8-12），在 item 层（sets 之外）加 "reps": "8-12"，它会显示为目标「N 组 × 8-12」；sets 内的 reps 仍是数字目标
-- exerciseId 必须存在于 exercises；program 只写需要更新的日（不更新的日不要写，也不要写空数组）`;
+- exerciseId 必须存在于 exercises；program 只写需要更新的日（不更新的日不要写，也不要写空数组）
+- program 至少要写一个日：如果你判断无需调整，就把当前某一日的计划原样写回，空的 program 会被拒绝`;
 
 function buildPrompt(data){
   const logs = data.recentLogs;
@@ -2062,7 +2078,7 @@ ${bg}
 ${fence}json
 ${JSON.stringify(data)}
 ${fence}
-数据说明：done=false 的组是计划内未完成（数值可能是上次预填、也可能是用户填了但没点完成的意图，都不当作已验证的实际表现）；type="warmup" 的组是热身组（趋势、最好成绩、PR 都不统计热身）；condition 为当日整体状态（佳/一般/差）；restAfter 是该组之后实际休息的秒数（null 表示未记录，可用于分析恢复节奏）；settings.restNote 是用户对组间休息约束的自我说明（如场地时段限制），分析休息是否合理时要优先考虑；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe，选组按 最大重量→否则最长时间→否则最多次数），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）；volume 是该次正式组的负荷合计（重量×次数，lb 已统一换算为 kg，可与 kg 动作直接比较）；avgRpe 是已完成组的平均 RPE；direction 是应用基于该动作近史的判定（up/down 要求首尾与后半段同向，否则 plateau，new 为首次出现），不是我的主观评价。program 里 item 层的 repsRange 是我当前计划的次数区间，仅供你了解现状；你输出区间时按下面的格式用 "reps": "8-12"。
+数据说明：done=false 的组是计划内未完成（数值可能是上次预填、也可能是用户填了但没点完成的意图，都不当作已验证的实际表现）；type="warmup" 的组是热身组（趋势、最好成绩、PR 都不统计热身）；condition 为当日整体状态（佳/一般/差）；restAfter 是该组之后实际休息的秒数（null 表示未记录，可用于分析恢复节奏）；settings.restNote 是用户对组间休息约束的自我说明（如场地时段限制），分析休息是否合理时要优先考虑；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe，选组按 最大重量→否则最长时间→否则最多次数），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）；volume 是该次正式组的负荷合计（重量×次数，lb 已统一换算为 kg，可与 kg 动作直接比较）；avgRpe 是已完成组的平均 RPE；direction 是应用基于该动作近史的判定（up/down 要求首尾与后半段同向，否则 plateau，new 为首次出现），不是我的主观评价。program 里 item 层的 repsRange 是我当前计划的次数区间，仅供你了解现状；你输出区间时按下面的格式用 "reps": "8-12"。settings 里的 weightStep/restSec/warmupRestSec 是我的应用操作设置（重量步进按钮的步长、正式组/热身组的组间休息秒数），不是训练数据，仅供你了解我的记录习惯。
 
 请只基于这份数据分析（不要泛泛而谈通用健身知识）：
 1. 各动作重量/次数/时长趋势，是否需要渐进超负荷

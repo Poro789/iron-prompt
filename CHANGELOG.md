@@ -2,6 +2,15 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.93]
+
+### 修复
+- 手改备份里的非法日期（如「2025-02-30」）不再显示「周undefined」或与日期打架的星期，只念日期本身
+- 导入方案时校验 mode/unit 写法：mode 写了就必须是 weight/band/bodyweight/time 之一，unit 必须是 kg/lb/null——此前「body-weight」或数字单位会被原样存下，界面默默落到重量分支
+
+### 新增
+- 给 AI 的输出模板补充 rpeLabel 字段（目标 RPE 的文字说明），并在字段规则里写明：判断无需调整时也要原样写回至少一日的计划（空的 program 会被导入拒绝），mode/unit 的取值范围、settings 各字段的口径也一并说明
+
 ## [0.9.92]
 
 ### 修复

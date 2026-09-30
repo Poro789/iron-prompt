@@ -145,7 +145,7 @@ const testScript = script + `
   toggleDrawer, closeDrawer,
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
-  localDateStr, trimSet, migrate, bindDrafts, clampPos,
+  localDateStr, fmtDate, trimSet, migrate, bindDrafts, clampPos,
   beep, unlockAudio, refreshPR,
   get restForPos(){ return restForPos; },
   get draft(){ return draft; },
@@ -2984,6 +2984,35 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('115 休息说明封顶 200 字', T.state.settings.restNote === '休'.repeat(200));
   T.state.profile.background = ''; T.state.settings.restNote = '';
   delete T.state.drafts.A;
+
+  /* ============================================================
+   * 116. 非法日历日期不念「周undefined」+ 导入校验补 mode/unit + schema 说明（v0.9.93）
+   * fmtDate：格式对但日历不存在（2025-02-30）→ 只念日期本身。
+   * validatePlan：写了 mode 必须是四种之一、unit 必须是字符串或 null（'LB' 这类历史写法放行）。
+   * PLAN_SCHEMA：rpeLabel 进模板（否则 AI 导入后目标 RPE 说明静默丢失）；
+   *   字段规则明说 program 至少一日（AI 判断无需调整时按旧指令输出空 program 必被拒）。
+   * ============================================================ */
+  console.log('== 116. 非法日历 + mode/unit 校验 + schema 完整性（v0.9.93）==');
+  check('116 2025-02-30 不出现 周undefined', T.fmtDate('2025-02-30') === '2025-02-30');
+  check('116 2025-13-01 不出现 周undefined', T.fmtDate('2025-13-01') === '2025-13-01');
+  check('116 真实闰日正常带星期', /周./.test(T.fmtDate('2024-02-29')));
+  check('116 缺 date 仍念未知日期', T.fmtDate('') === '未知日期');
+  const ex116 = { e116: { name: '测试动作', mode: 'weight', unit: 'kg' } };
+  const it116 = [{ section: '', exerciseId: 'e116', sets: [{ type: 'work', weight: 10, reps: 10, duration: null, rpe: 8, rpeLabel: '留 2 次', side: null }] }];
+  const bad116m = T.importPlan(JSON.stringify({ type: 'ai-plan', exercises: { e116: { name: 'x', mode: 'body-weight' } }, program: { A: it116 } }));
+  check('116 非法 mode 被拒', !bad116m.ok && /mode/.test(bad116m.error));
+  const bad116u = T.importPlan(JSON.stringify({ type: 'ai-plan', exercises: { e116: { name: 'x', mode: 'weight', unit: 7 } }, program: { A: it116 } }));
+  check('116 数字 unit 被拒', !bad116u.ok && /unit/.test(bad116u.error));
+  const bad116e = T.importPlan(JSON.stringify({ type: 'ai-plan', exercises: { e116: '不是对象' }, program: { A: it116 } }));
+  check('116 非对象 exercise 条目被拒', !bad116e.ok && /e116 必须是对象/.test(bad116e.error));
+  const bad116p = T.importPlan(JSON.stringify({ type: 'ai-plan', exercises: ex116, program: {} }));
+  check('116 空 program 仍被拒（与指令一致）', !bad116p.ok && /至少/.test(bad116p.error) === false && /必须包含 A 或 B/.test(bad116p.error));
+  const ok116 = T.importPlan(JSON.stringify({ type: 'ai-plan', day: 'A', exercises: { e116: { name: '测试动作', mode: 'weight', unit: 'kg' } }, program: { A: it116 } }));
+  check('116 合法导入通过', ok116.ok);
+  check('116 rpeLabel 随导入保留', T.state.program.A[0].sets[0].rpeLabel === '留 2 次');
+  check('116 schema 含 rpeLabel 与至少一日规则', T.PLAN_SCHEMA.includes('rpeLabel') && T.PLAN_SCHEMA.includes('至少要写一个日'));
+  check('116 数据说明含 settings 口径', T.buildPrompt(T.buildExport(4)).includes('不是训练数据'));
+  delete T.state.exercises.e116;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
