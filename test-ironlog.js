@@ -128,7 +128,7 @@ const testScript = script + `
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
-  reeditSession, closeSummary, showSummary, get lastEnded(){ return lastEnded; },
+  reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest,
   buildBackup, parseBackup, restoreBackupText,
@@ -1646,6 +1646,31 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.showSummary(entry59b);
   check('无记录时小结不显示该行（旧日志同样不显示）', !/平均休息/.test(String(elsById.get('summary-body').innerHTML)));
   T.closeSummary();
+
+  console.log('== 60. 放弃记录可在 6 秒内撤销（v0.9.38）==');
+  T.switchDay('A');
+  delete T.state.drafts.A;
+  const it60 = T.getItems('A');
+  it60[0].sets[0] = { done: true, weight: 30, reps: 8, duration: null, rpe: 8, type: 'work' };
+  T.state.sessions.A = { startedAt: 1700000900000, items: it60, condition: '差' };
+  T.discardSession();
+  T.answerConfirm(true);
+  await null;
+  check('放弃后记录清空', T.state.sessions.A === null);
+  check('提示条给出「撤销」按钮', /data-act="undo"/.test(htmlTouchedHTML('toast')));
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('撤销把记录放回编辑态（含数值与当日状态）',
+    !!T.state.sessions.A && T.state.sessions.A.items[0].sets[0].weight === 30 && T.state.sessions.A.condition === '差');
+  // 撤销时已经另开了新记录：不能覆盖
+  T.discardSession();
+  T.answerConfirm(true);
+  await null;
+  const fresh60 = { startedAt: 1700000900001, items: T.getItems('A'), condition: null };
+  T.state.sessions.A = fresh60;
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('已有新记录时撤销只提示，不覆盖',
+    T.state.sessions.A === fresh60 && T.state.sessions.A.startedAt === 1700000900001);
+  T.state.sessions.A = null;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

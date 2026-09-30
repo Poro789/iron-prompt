@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.37';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.38';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1045,8 +1045,10 @@ function endSession(){
 async function discardSession(){
   const day = curDay();
   if(!state.sessions[day]) return;
-  const ok = await askConfirm({ title: '放弃本次记录？', desc: '已确认的组数将丢失，不可恢复。', okLabel: '放弃' });
+  const ok = await askConfirm({ title: '放弃本次记录？', desc: '已确认的组数将丢失。放弃后 6 秒内可以撤销。', okLabel: '放弃' });
   if(!ok) return;
+  /* 误触「放弃」不该直接丢数据：和删除历史同一口径，快照后 6 秒内在提示条里可撤销 */
+  const snap = { day, session: state.sessions[day], cond: condDraft[day] };
   state.sessions[day] = null;
   delete draft[day];
   condDraft[day] = null;
@@ -1056,7 +1058,13 @@ async function discardSession(){
   clearTimer();
   flushSave();
   render();
-  toast('已放弃');
+  toast('已放弃', () => {
+    if(state.sessions[snap.day]){ toast('这一日已经有新的记录了'); return; }
+    state.sessions[snap.day] = snap.session;
+    condDraft[snap.day] = snap.cond;
+    flushSave();
+    render();
+  });
 }
 
 function showSummary(entry){

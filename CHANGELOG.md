@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.38]
+
+### 新增
+- 「放弃本次记录」现在可以在 6 秒内撤销：与删除历史同一口径，误触不再直接丢掉整次已确认的组
+
 ## [0.9.37]
 
 ### 修复
