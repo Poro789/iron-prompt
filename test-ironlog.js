@@ -3232,6 +3232,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('122 新动作的 alternatives/tempo 同样封顶', T.state.exercises.e122b.alternatives.length === 500 && T.state.exercises.e122b.tempo.length === 500);
   T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
 
+  /* ============================================================
+   * 123. 提示词告知 AI 文本字段会被截断（v0.9.100）
+   * v0.9.99 的封顶会让超长内容截半丢意思——schema 要提前说清上限。
+   * ============================================================ */
+  console.log('== 123. 提示词含文本字段上限说明（v0.9.100）==');
+  const prompt123 = T.buildPrompt({ recentLogs: [], trends: [], trendsSpan: 0, program: { A: [], B: [] }, exercises: {}, settings: { weightStep: 2.5, restSec: 90, warmupRestSec: 30, restNote: '' }, profile: {} });
+  check('123 字段规则里写明文本上限与截断后果', prompt123.includes('被截断') && prompt123.includes('名称 80 字') && prompt123.includes('个人注意 500 字'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

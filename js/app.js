@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.99';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.100';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -2161,7 +2161,8 @@ const PLAN_SCHEMA = `{
 - sets 的 weight/reps/duration/rpe 为数字或 null：weight/band 模式填 weight+reps，bodyweight 填 reps，time 填 duration；rpe 为目标 RPE；side 仅单侧动作填 L/R，否则 null
 - 如果想表达次数区间（如 8-12），在 item 层（sets 之外）加 "reps": "8-12"，它会显示为目标「N 组 × 8-12」；sets 内的 reps 仍是数字目标
 - exerciseId 必须存在于 exercises；program 只写需要更新的日（不更新的日不要写，也不要写空数组）
-- program 至少要写一个日：如果你判断无需调整，就把当前某一日的计划原样写回，空的 program 会被拒绝`;
+- program 至少要写一个日：如果你判断无需调整，就把当前某一日的计划原样写回，空的 program 会被拒绝
+- 文本字段（name/muscles/tips/pitfalls/tempo/alternatives/personal/rpeLabel/section）请保持精炼：超过上限（名称 80 字、个人注意 500 字、其余 1000 字）的内容会在导入时被截断，截半的句子会丢掉意思`;
 
 function buildPrompt(data){
   const logs = data.recentLogs;
