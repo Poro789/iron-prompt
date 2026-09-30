@@ -72,9 +72,10 @@
     </div>
     <div class="set-card">
       <h3>导入 AI 方案</h3>
-      <p>粘贴 AI 返回的 JSON（容忍 ```json 包裹与多余逗号）。只更新 Program 与动作库，不动训练日志；个人注意事项字段保留。</p>
+      <p>粘贴 AI 返回的 JSON（容忍 ```json 包裹与多余逗号）。只更新 Program 与动作库，不动训练日志；个人注意事项字段保留。导入前会先列出会改什么，导入后可以撤销这一次。</p>
       <textarea id="import-text" class="import-box" placeholder='{"type":"ai-plan","exercises":{...},"program":{"A":[...]}}'></textarea>
       <button class="import-btn" onclick="doImport()">导入</button>
+      <button class="discard-btn" id="undo-import" style="display:none;margin-top:6px" onclick="undoImport()">撤销上次导入</button>
       <div id="import-msg" class="import-msg"></div>
     </div>
     <div class="set-card">

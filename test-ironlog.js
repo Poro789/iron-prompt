@@ -120,6 +120,7 @@ const testScript = script + `
   set restStartsAt(v){ restStartsAt = v; },
   set restEndsAt(v){ restEndsAt = v; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
+  doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   reeditSession, closeSummary, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
@@ -1085,6 +1086,53 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   clickEl('hist-list', btnOf({ act: 'dellog', ts: '999', i: '' }));
   await null;
   check('对应记录已不在时只提示，不会删错', T.state.logs.length === 2);
+
+  console.log('== 33. 导入方案：先列出会改什么，导入后还能换回来 ==');
+  T.state.lastImport = null;
+  T.importPlan(planText);
+  const base33 = JSON.parse(planText);
+  const idsA33 = base33.program.A.map(it => it.exerciseId);
+  const oldLabel33 = T.targetLabel(T.normalizeItem(base33.program.A[0]));
+  const mod33 = JSON.parse(planText);
+  const dropped33 = mod33.program.A.pop();                       // 去掉最后一个动作
+  mod33.program.A[0].sets = [{ type: 'work', weight: 40, reps: 3 }, { type: 'work', weight: 40, reps: 3 }]; // 改目标
+  mod33.exercises.new_ex33 = { name: '新动作甲', mode: 'weight' };
+  mod33.program.A.push({ section: '', exerciseId: 'new_ex33', sets: [{ type: 'work', weight: 10, reps: 10 }] }); // 加动作
+  const diff33 = T.planDiffText(mod33);
+  check('差异说明写了 A 日的动作数变化', diff33.includes(`A 日 ${idsA33.length} → ${idsA33.length} 个动作`));
+  check('差异说明列出被移除的动作名', diff33.includes('移除 ' + base33.exercises[dropped33.exerciseId].name));
+  check('差异说明列出新增的动作', diff33.includes('新增 新动作甲'));
+  check('差异说明列出目标变化',
+    diff33.includes(`目标改为 ${base33.exercises[idsA33[0]].name} ${oldLabel33} → 2 × 3`));
+  check('差异说明写明日志不动', diff33.includes('日志不会改动'));
+  T.switchView('settings');
+  T.render();
+  document.getElementById('import-text').value = JSON.stringify(mod33);
+  check('没有快照时「撤销上次导入」不显示', document.getElementById('undo-import').style.display === 'none');
+  check('导入前计划里没有新动作', !T.state.program.A.some(i => i.exerciseId === 'new_ex33'));
+  T.doImport();
+  check('导入先弹确认', textOf('confirm-title') === '按这份方案更新计划？');
+  check('确认框里就是那份差异说明', textOf('confirm-desc') === diff33);
+  T.answerConfirm(false);
+  await null;
+  check('取消则计划一字未改', T.state.program.A.map(i => i.exerciseId).join() === idsA33.join());
+  check('取消则不留快照', T.state.lastImport === null);
+  T.doImport();
+  T.answerConfirm(true);
+  await null;
+  check('确认后才按计划替换',
+    T.state.program.A.some(i => i.exerciseId === 'new_ex33')
+    && !T.state.program.A.some(i => i.exerciseId === dropped33.exerciseId)
+    && T.state.program.A[0].sets[0].weight === 40);
+  check('替换前留了一份快照', !!T.state.lastImport && T.state.lastImport.program.A.map(i => i.exerciseId).join() === idsA33.join());
+  check('设置页出现「撤销上次导入」', document.getElementById('undo-import').style.display === '');
+  T.undoImport();
+  check('撤销后计划换回原样', T.state.program.A.map(i => i.exerciseId).join() === idsA33.join());
+  check('动作库也换回来了', !T.state.exercises.new_ex33);
+  check('快照只留一层，撤销后按钮消失',
+    T.state.lastImport === null && document.getElementById('undo-import').style.display === 'none');
+  check('没有快照时撤销只提示，不改数据',
+    (T.undoImport(), T.state.program.A.map(i => i.exerciseId).join() === idsA33.join()));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

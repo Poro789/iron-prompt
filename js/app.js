@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.8';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.9';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -192,6 +192,8 @@ function migrate(d){
   if(!d.condDraft || typeof d.condDraft !== 'object') d.condDraft = { A: null, B: null };
   if(!d.ui || typeof d.ui !== 'object') d.ui = {};
   if(!d.ui.curPos || typeof d.ui.curPos !== 'object') d.ui.curPos = {};
+  /* v0.9.9：导入方案前的快照，用于「撤销上次导入」（只留一层） */
+  if(!d.lastImport) d.lastImport = null;
   for(const day of ['A','B']){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);
@@ -1314,11 +1316,17 @@ function validatePlan(d){
   }
   return null;
 }
-function applyPlan(d){
+/* 有进行中记录的日不能换计划（组数据会对不上） */
+function planSessionConflict(d){
   for(const day of ['A','B']){
     if(d.program[day] !== undefined && state.sessions[day])
-      return { ok:false, error:`${day} 日有进行中的记录，请先结束或放弃后再导入` };
+      return `${day} 日有进行中的记录，请先结束或放弃后再导入`;
   }
+  return null;
+}
+function applyPlan(d){
+  const conflict = planSessionConflict(d);
+  if(conflict) return { ok:false, error:conflict };
   let exCount = 0;
   for(const [id, ex] of Object.entries(d.exercises)){
     const old = state.exercises[id] || {};
@@ -1340,6 +1348,8 @@ function applyPlan(d){
     if(d.program[day] === undefined) continue;
     state.program[day] = d.program[day].map(normalizeItem);
     delete draft[day];
+    state.ui.curPos[day] = 0;   // 计划换了，停在第几组可能已经不存在
+    if(curDay() === day) curPos = 0;
     daySummary.push(`${day} 日 ${state.program[day].length} 动作`);
   }
   if(typeof d.day === 'string' && (d.day === 'A' || d.day === 'B')) state.settings.lastDay = d.day;
@@ -1347,7 +1357,7 @@ function applyPlan(d){
   render();
   return { ok:true, summary:`导入完成：${daySummary.join('，')}；动作库 ${exCount} 项` };
 }
-function importPlan(text){
+function parsePlanInput(text){
   let t = stripFences(String(text || ''));
   t = t.replace(/,\s*([}\]])/g, '$1'); // 容忍多余尾逗号
   let data;
@@ -1355,16 +1365,105 @@ function importPlan(text){
   catch(e){ return { ok:false, error:'JSON 解析失败：' + e.message }; }
   const verr = validatePlan(data);
   if(verr) return { ok:false, error:'校验失败：' + verr };
-  return applyPlan(data);
+  return { ok:true, data };
 }
-function doImport(){
+function importPlan(text){
+  const p = parsePlanInput(text);
+  if(!p.ok) return p;
+  return applyPlan(p.data);
+}
+/* 导入前把当前计划存一份（只留一层），导入后能一键换回来 */
+function snapshotPlan(){
+  state.lastImport = {
+    at: Date.now(),
+    program: JSON.parse(JSON.stringify(state.program)),
+    exercises: JSON.parse(JSON.stringify(state.exercises))
+  };
+}
+function undoImport(){
+  const snap = state.lastImport;
+  if(!snap){ toast('没有可撤销的导入'); return; }
+  state.program = snap.program;
+  state.exercises = snap.exercises;
+  state.lastImport = null;
+  for(const day of ['A','B']){
+    delete draft[day];          // 草稿是按刚导入的计划生成的，一起丢掉
+    state.ui.curPos[day] = 0;   // 旧位置在新计划里未必存在
+    if(curDay() === day) curPos = 0;
+  }
+  flushSave();
+  render();
+  renderSettings();
+  toast('已恢复到导入前的方案');
+}
+function listCut(arr, n){
+  n = n || 4;
+  return arr.length > n ? arr.slice(0, n).join('、') + `…等 ${arr.length} 项` : arr.join('、');
+}
+/* 导入前说清「会改什么」：AI 一句话就能换掉整份计划，看不出来就只能事后后悔。
+ * 只列增减与目标变化，各列表最多 4 项。 */
+function planDiffText(d){
+  const oldName = id => (state.exercises[id] && state.exercises[id].name) || id;
+  const newName = id => (d.exercises[id] && d.exercises[id].name) || id;
+  const lines = [];
+  for(const day of ['A','B']){
+    if(!Array.isArray(d.program[day])) continue;
+    const before = state.program[day] || [];
+    const after = d.program[day].map(normalizeItem);
+    const bIds = before.map(it => it.exerciseId);
+    const aIds = after.map(it => it.exerciseId);
+    const removed = bIds.filter(id => !aIds.includes(id)).map(oldName);
+    const added = aIds.filter(id => !bIds.includes(id)).map(newName);
+    const changed = [];
+    for(const it of after){
+      const old = before.find(x => x.exerciseId === it.exerciseId);
+      if(!old) continue;
+      const a = targetLabel(it), b = targetLabel(old);
+      if(a !== b) changed.push(`${oldName(it.exerciseId)} ${b} → ${a}`);
+    }
+    let line = `${day} 日 ${before.length} → ${after.length} 个动作`;
+    const parts = [];
+    if(removed.length) parts.push('移除 ' + listCut(removed));
+    if(added.length) parts.push('新增 ' + listCut(added));
+    if(changed.length) parts.push('目标改为 ' + listCut(changed));
+    if(parts.length) line += '：' + parts.join('；');
+    lines.push(line);
+  }
+  lines.push(`动作库共 ${Object.keys(d.exercises || {}).length} 项（已有动作的个人注意不会被覆盖）`);
+  lines.push('日志不会改动。');
+  return lines.join('\n');
+}
+/* 导入是替换整份计划：先给差异、确认，再落数据（并留一份可撤销的快照） */
+async function doImport(){
   const msg = $('import-msg');
-  const r = importPlan($('import-text').value);
+  const p = parsePlanInput($('import-text').value);
+  if(!p.ok){
+    msg.className = 'import-msg err';
+    msg.textContent = p.error;   // textContent：校验错误里的 exerciseId 无需转义
+    return;
+  }
+  const conflict = planSessionConflict(p.data);
+  if(conflict){
+    msg.className = 'import-msg err';
+    msg.textContent = conflict;
+    return;
+  }
+  const ok = await askConfirm({ title: '按这份方案更新计划？', desc: planDiffText(p.data), okLabel: '导入' });
+  if(!ok){
+    msg.className = 'import-msg';
+    msg.textContent = '已取消，没有改动任何数据';
+    return;
+  }
+  snapshotPlan();
+  const r = applyPlan(p.data);
   msg.className = 'import-msg ' + (r.ok ? 'ok' : 'err');
-  msg.textContent = r.ok ? r.summary : r.error;   // textContent：校验错误里的 exerciseId 无需转义
-  if(r.ok) $('import-text').value = '';
+  msg.textContent = r.ok ? r.summary : r.error;
+  if(r.ok){
+    $('import-text').value = '';
+    renderSettings();   // 让「撤销上次导入」出现
+    toast('已导入新方案', undoImport);
+  }
 }
-
 /* ---------------- P0-3 导出给 AI ----------------
  * 由 logs 即时打包生成快照（不单独存储）：
  *   program + exercises + 最近 N 次日志 + 逐动作趋势（top 组 / 平均 RPE / 方向）
@@ -1613,6 +1712,9 @@ function renderSettings(){
   $('rest-sec').value = state.settings.restSec;
   $('warmup-rest-sec').value = state.settings.warmupRestSec;
   $('profile-bg').value = (state.profile && state.profile.background) || '';
+  /* 只有存在快照时才显示「撤销上次导入」（只留最近一次） */
+  const undoBtn = $('undo-import');
+  if(undoBtn) undoBtn.style.display = state.lastImport ? '' : 'none';
 }
 $('weight-step').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
