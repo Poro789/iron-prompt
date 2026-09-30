@@ -2371,6 +2371,40 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.program.A = []; T.state.program.B = [];
   delete T.state.exercises.t93;
 
+  /* ============================================================
+   * 94. 交互处理器也不把别日的表当成当前组的表（v0.9.71）
+   * 渲染守卫（93）之后，按钮行为必须同口径：删组/确认不连带清 A 的表；
+   * 在 B 上按「计时」是新起一张表（同时按单表规矩结算 A 的旧表）。
+   * ============================================================ */
+  console.log('== 94. 跨日错位下按钮不误碰别日的秒表（v0.9.71）==');
+  T.clearTimer(); T.resetRest();
+  T.state.exercises.t94 = { name: '计时94', mode: 'time', unit: null };
+  const plan94 = [{ exerciseId: 't94', sets: [{ duration: 30 }, { duration: 30 }] }];
+  T.state.program.A = JSON.parse(JSON.stringify(plan94));
+  T.state.program.B = JSON.parse(JSON.stringify(plan94));
+  delete T.state.drafts.A; delete T.state.drafts.B;
+  T.state.settings.lastDay = 'A';
+  T.startSessionIfNeeded('A');
+  T.startTimer(0, 0);                          // 秒表归属 A
+  advanceClock(20000);
+  T.state.settings.lastDay = 'B';              // 错位视图：正在看 B，表挂在 A
+  T.curPos = 0;
+  T.switchView('today'); T.render();
+  clickExList(btnOf({ act: 'delset', ex: 0 }));
+  check('94 在 B 上删组不清 A 的表', !!T.timerFor && !!T.state.timer && T.state.timer.day === 'A');
+  clickExList(btnOf({ act: 'confirm', ex: 0, set: 0 }));
+  check('94 在 B 上确认不吞 A 的表', !!T.timerFor && T.state.timer.day === 'A');
+  const itemsB94 = T.state.sessions.B && T.state.sessions.B.items;
+  check('94 B 的组照常记上', !!itemsB94 && itemsB94[0].sets[0].done === true);
+  check('94 A 的组时长仍是计划值', T.state.sessions.A.items[0].sets[0].duration === 30);
+  clickExList(btnOf({ act: 'timer', ex: 0, set: 0 }));
+  check('94 在 B 上按计时是新起一张表', !!T.timerFor && T.state.timer.day === 'B');
+  check('94 旧表按归属日结算进 A', T.state.sessions.A.items[0].sets[0].duration === 20);
+  T.clearTimer(); T.resetRest();
+  T.state.sessions = { A: null, B: null };
+  T.state.program.A = []; T.state.program.B = [];
+  delete T.state.exercises.t94;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.70';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.71';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -901,7 +901,8 @@ $('ex-list').addEventListener('click', e => {
     const lastIdx = item.sets.length - 1;
     const removed = item.sets[lastIdx];
     if(removed.done === true) return;
-    if(timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === lastIdx) clearTimer();
+    /* 秒表归属另一日时别连带清掉它（与渲染守卫 v0.9.70 同一口径） */
+    if(timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === lastIdx) clearTimer();
     item.sets.pop();
     saveSoon(); renderToday();
     toast('已删掉最后一组', () => {
@@ -934,7 +935,8 @@ $('ex-list').addEventListener('click', e => {
 
   if(act === 'timer'){
     // 计时动作（平板/拉伸/呼吸）：按一下开始，再按一下把经过的秒数填进这一组
-    if(timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
+    /* 只有表就挂在当前日时才按「按一下停」处理；归属别的日时这一下是新起一张表 */
+    if(timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
     else { stopTimer(); startTimer(exIdx, setIdx); }
     renderToday();
     return;
@@ -959,8 +961,8 @@ $('ex-list').addEventListener('click', e => {
 
   if(act === 'confirm'){
     if(restEndsAt !== null) finishRest();
-    // 确认时秒表还在跑：先停表填入时长，再记这一组，省掉「看表→打字」
-    if(timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
+    // 确认时秒表还在跑（且就挂在当前日）：先停表填入时长，再记这一组，省掉「看表→打字」
+    if(timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
     // 不做「幽灵点击抑制」：CSS 已对所有 button 设 touch-action:manipulation
     // （见 css/style.css:13），双击缩放不会发生；再加时间窗只会吞掉用户故意的快速撤销。
     cycleDone(day, exIdx, setIdx);
