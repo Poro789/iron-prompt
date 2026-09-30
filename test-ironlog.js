@@ -3391,6 +3391,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('132 正常数据不会生成 .bak', localStorage._d[lsKey132 + '.bak'] === undefined);
   localStorage._d[lsKey132] = JSON.stringify(T.state);
 
+  /* ============================================================
+   * 133. 长文本输入：UI maxlength 与代码封顶成对（测试加固，不升版本）
+   * 只留一边都会出问题：只有代码封顶→框里显示超长、存的却是截断值；
+   * 只有 maxlength→改代码上限时静默越界。两侧必须同时存在且数值一致。
+   * ============================================================ */
+  console.log('== 133. 备注类输入的 maxlength 与代码 slice 封顶成对（测试加固）==');
+  const uiMax133 = id => { const m = html.match(new RegExp('id="' + id + '"[^>]*maxlength="(\\d+)"')); return m ? +m[1] : 0; };
+  check('133 休息说明：maxlength=200 与代码封顶成对', uiMax133('rest-note') === 200 && /restNote = e\.target\.value\.trim\(\)\.slice\(0, 200\)/.test(script));
+  check('133 背景说明：maxlength=2000 与代码封顶成对', uiMax133('profile-bg') === 2000 && /state\.profile\.background = e\.target\.value\.slice\(0, 2000\)/.test(script));
+  check('133 个人备注：maxlength=500 与代码封顶成对', uiMax133('personal-note') === 500 && /personal = e\.target\.value\.trim\(\)\.slice\(0, 500\)/.test(script));
+  check('133 动作备注：maxlength=500 与代码封顶成对', /class="fs-exnote" maxlength="500"/.test(script) && /item\.note = inp\.value\.trim\(\)\.slice\(0, 500\)/.test(script));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
