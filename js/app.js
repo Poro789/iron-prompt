@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.28';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.29';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1380,7 +1380,16 @@ function renderHistory(){
 function stripFences(t){
   t = t.trim();
   const m = t.match(/^```(?:json|javascript)?\s*([\s\S]*?)\s*```$/i);
-  if(m) t = m[1].trim();
+  if(m) return m[1].trim();
+  /* 分析 prompt 要求 AI 输出「中文总结 + JSON 代码块」两段式：用户整段粘贴时，
+   * 取文本里最后一个代码块（最终方案在最后）；没有代码块就取首个 { 到末个 } 的跨度。 */
+  const blocks = t.match(/```(?:json|javascript)?\s*[\s\S]*?\s*```/gi);
+  if(blocks && blocks.length){
+    return blocks[blocks.length - 1]
+      .replace(/^```(?:json|javascript)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  }
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if(a !== -1 && b > a) return t.slice(a, b + 1);
   return t;
 }
 function validatePlan(d){

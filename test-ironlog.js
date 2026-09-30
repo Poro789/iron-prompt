@@ -1545,6 +1545,21 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('个人背景文本域 16px', rule16('.wide-area'));
   check('导入文本框 16px', rule16('#import-text'));
 
+  console.log('== 52. 整段粘贴 AI 两段式回复也能导入（v0.9.29）==');
+  const plan52 = { exercises: { test52: { name: '测试动作52', mode: 'weight' } },
+    program: { A: [{ exerciseId: 'test52', sets: [{ weight: 20, reps: 8 }] }] } };
+  const json52 = JSON.stringify(plan52);
+  const twoPart = '好的，我分析了你的数据。建议把测试动作52保留，重量维持。\n\n```json\n' + json52 + '\n```\n\n以上，注意热身。';
+  const r52a = T.importPlan(twoPart);
+  check('中文总结+代码块整段粘贴可导入', r52a.ok === true && (T.state.program.A[0] || {}).exerciseId === 'test52');
+  const r52b = T.importPlan('方案如下：' + json52 + ' （无代码块）');
+  check('无代码块时取首个{到末个}的跨度', r52b.ok === true);
+  const r52c = T.importPlan('抱歉，我没法给出方案。');
+  check('确实没有 JSON 时仍报解析失败', r52c.ok === false && /JSON 解析失败/.test(r52c.error));
+  const multi = '先给个示例：\n```json\n{"exercises":{},"program":{"A":[]}}\n```\n最终方案：\n```json\n' + json52 + '\n```';
+  const r52d = T.importPlan(multi);
+  check('多个代码块取最后一个（最终方案）', r52d.ok === true && (T.state.program.A[0] || {}).exerciseId === 'test52');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
