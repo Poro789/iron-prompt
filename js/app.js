@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.85';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.86';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -2214,8 +2214,10 @@ $('profile-bg').addEventListener('change', e => {
 async function clearAll(){
   const ok1 = await askConfirm({ title: '清除全部数据？', desc: '日志、计划、动作库、进行中的记录都会删除。', okLabel: '继续' });
   if(!ok1) return;
-  const ok2 = await askConfirm({ title: '再次确认', desc: '此操作不可恢复，且无法撤销。', okLabel: '全部清除' });
+  const ok2 = await askConfirm({ title: '再次确认', desc: '此操作不可恢复。清除前会尝试把备份复制到剪贴板，方便粘贴到别处留底。', okLabel: '全部清除' });
   if(!ok2) return;
+  // 尽力留个底：剪贴板不可用也不拦着清除（文案说的是「尝试」）
+  try { await copyText(JSON.stringify(buildBackup())); } catch(e){}
   clearingAll = true;
   localStorage.removeItem(LS_KEY);
   location.reload();

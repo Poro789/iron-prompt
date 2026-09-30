@@ -2425,6 +2425,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.clearAll();
   T.answerConfirm(true); await null;
   T.answerConfirm(true); await null;
+  await null; await null; await null;   // v0.9.86 起清除前还有一步 await copyText，多放行几拍
   check('95 清除后存储为空，卸载落盘没把它写回', global.localStorage._d['ironlog.v1'] === undefined);
   delete global.location;
   T.state.logs = [];
@@ -2793,6 +2794,39 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('108 其他按键/非训练输入框不触发', doneClicked108 === false);
   patchTarget = null;
   delete T.state.exercises.e108; delete T.state.drafts.A;
+
+  /* ============================================================
+   * 109. 清除全部数据前把备份尽力复制到剪贴板（v0.9.86）
+   * 双确认后、removeItem 前：copyText(JSON.stringify(buildBackup()))。
+   * 剪贴板不可用（无 writeText、execCommand 缺失）也不阻断清除。
+   * ============================================================ */
+  console.log('== 109. 清除前尝试留备份到剪贴板（v0.9.86）==');
+  T.state.logs = [{ date: '2026-01-02', day: 'A', startedAt: 991001, exercises: [] }];
+  // §95 之后模块 clearingAll 已为 true（只有重新加载会复位），flushSave 是空转——直接种存储
+  global.localStorage._d['ironlog.v1'] = 'seed109';
+  const nav109prev = Object.getOwnPropertyDescriptor(global, 'navigator');
+  let copied109 = '';
+  Object.defineProperty(global, 'navigator', { configurable: true, value: {
+    clipboard: { writeText(t){ copied109 = t; return Promise.resolve(); } }
+  } });
+  global.location = { reload(){} };
+  T.clearAll();
+  T.answerConfirm(true); await null;
+  T.answerConfirm(true); await null;   // 走到 copyText → 微任务，再放行一步
+  await null; await null;
+  check('109 剪贴板收到完整备份', /"type":"ironlog-backup"/.test(copied109) && /991001/.test(copied109));
+  check('109 清除照常执行', global.localStorage._d['ironlog.v1'] === undefined);
+  // 无剪贴板时不阻断清除
+  Object.defineProperty(global, 'navigator', { configurable: true, value: {} });
+  global.localStorage._d['ironlog.v1'] = 'seed109b';
+  T.clearAll();
+  T.answerConfirm(true); await null;
+  T.answerConfirm(true); await null;
+  await null; await null;
+  check('109 剪贴板不可用也能清除', global.localStorage._d['ironlog.v1'] === undefined);
+  delete global.location;
+  if(nav109prev) Object.defineProperty(global, 'navigator', nav109prev); else delete global.navigator;
+  T.state.logs = [];
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
