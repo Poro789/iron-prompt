@@ -1287,15 +1287,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.startTimer(ti36, 0);
   advanceClock(21000);
   T.importPlan(planText);
-  T.undoImport();           // 没有快照时只提示；先制造一次带快照的导入
+  T.undoImport();           // importPlan 不留快照：只有设置页的导入才留
   check('没有快照时撤销不动数据', T.state.lastImport === null);
+  // 手工构造可撤销快照，并让第二次导入真的往 A 计划加动作（旧断言曾空过）
+  const pre36 = { at: Date.now(), program: JSON.parse(JSON.stringify(T.state.program)), exercises: JSON.parse(JSON.stringify(T.state.exercises)) };
   const snapPlan = JSON.parse(planText);
-  snapPlan.exercises.marker36 = { name: '标记动作', mode: 'weight' };
-  T.importPlan(JSON.stringify(snapPlan));   // 这次会留快照
+  snapPlan.program.A.push({ exerciseId: 'marker36', sets: [{ weight: 1, reps: 1 }] });
+  snapPlan.exercises.marker36 = { name: '标记动作', mode: 'weight', unit: 'kg' };
+  T.startTimer(ti36, 0);
+  advanceClock(15000);
+  const r36 = T.importPlan(JSON.stringify(snapPlan));
+  check('第二次导入真的往 A 计划加了动作', r36.ok === true && T.state.program.A.some(i => i.exerciseId === 'marker36'));
   check('导入前秒表又被清空', T.timerFor === null);
+  T.state.lastImport = pre36;
   T.undoImport();
   check('撤销后计划换回原样且无秒表残留',
     !T.state.program.A.some(i => i.exerciseId === 'marker36') && T.timerFor === null);
+  delete T.state.exercises.marker36;
   Object.keys(T.draft).forEach(k => delete T.draft[k]);
 
   const snap36 = T.buildBackup();
