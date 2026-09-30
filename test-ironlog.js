@@ -247,7 +247,7 @@ T.state.logs.push(
 const exp = T.buildExport(4);
 check('type 为 ironlog-export', exp.type === 'ironlog-export');
 check('recentLogs 取最近 4 条', exp.recentLogs.length === 4);
-check('program/exercises 原样打包', exp.program === T.state.program && exp.exercises === T.state.exercises);
+check('program/exercises 原样打包', JSON.stringify(exp.program) === JSON.stringify(T.state.program) && exp.exercises === T.state.exercises);
 const gt = exp.trends.goblet_squat;
 check('趋势含 3 次会话', gt.sessions.length === 3);
 check('top 组取最大重量', gt.sessions[0].top.weight === 12.5 && gt.sessions[2].top.weight === 15);
@@ -2602,6 +2602,40 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('102 两段代码块取最后一版', r102.ok === true && !!r102.data.exercises.p102 && !r102.data.exercises.pold);
   check('102 无围栏的花括号跨度仍可用', T.parsePlanInput('最终方案 ' + j102 + ' （完）').ok === true);
   check('102 围栏未闭合也能取到内容', T.parsePlanInput('```json\n' + j102).ok === true);
+
+  /* ============================================================
+   * 103. 闭环回归：用户把自己的导出粘回导入
+   * 应用卖点是 记录→导出→AI→导入；导出 JSON 本身必须能通过 validatePlan 原样导回，
+   * 热身/侧别/次数区间/目标RPE/动作备注/个人备注都不能在回环中丢失。
+   * ============================================================ */
+  console.log('== 103. 导出→粘回导入闭环（字段不丢）==');
+  T.state.program.A = [{ exerciseId: 'e103', section: '主课', note: '组间歇看心率', reps: '8-12', sets: [
+    { type: 'warmup', weight: 20, reps: 10 },
+    { weight: 30, reps: 10, rpe: 8, side: 'L' }
+  ] }];
+  T.state.exercises.e103 = { name: '动作103', muscles: '肩', mode: 'weight', unit: 'kg', tips: 't', pitfalls: 'p', tempo: '3-1-1', alternatives: 'a', personal: '我的备注' };
+  delete T.state.drafts.A; delete T.state.sessions.A;
+  delete T.state.drafts.B; delete T.state.sessions.B; // 导出含 B 日计划时，B 有进行中记录会被拒
+  const exp103 = T.buildExport(4);
+  const r103 = T.importPlan(JSON.stringify(exp103));
+  if(!r103.ok) console.log('  DEBUG r103 =', String(r103.error).slice(0, 200));
+  check('103 自己的导出粘回来能导入', r103.ok === true, r103.error);
+  const s103 = T.state.program.A[0].sets;
+  check('103 热身/侧别/目标RPE 原样保留',
+    s103[0].type === 'warmup' && s103[1].rpe === 8 && s103[1].side === 'L');
+  check('103 空日不写进导出（粘回不会被「program.B 是空数组」拒绝）', exp103.program.B === undefined);
+  check('103 次数区间回环不丢（导出用 repsRange 拼写，导入要认）', T.state.program.A[0].repsRange === '8-12');
+  const x103 = T.state.exercises.e103;
+  check('103 动作库全字段回环（含个人备注与教学字段）',
+    x103.personal === '我的备注' && x103.muscles === '肩' && x103.tempo === '3-1-1' && x103.alternatives === 'a');
+  // 回环导入不应改变已有日志
+  const logCount103 = T.state.logs.length;
+  T.importPlan(JSON.stringify(T.buildExport(4)));
+  check('103 重复回环不增删日志', T.state.logs.length === logCount103);
+  // set 级 reps 字符串仍应被明确拒绝（区间的规范位置在 item 层）
+  const bad103 = T.importPlan('{"exercises":{"e103":{"name":"动作103"}},"program":{"A":[{"exerciseId":"e103","sets":[{"reps":"8-12"}]}]}}');
+  check('103 set 级字符串 reps 被明确拒绝', bad103.ok === false && /sets\[0\]\.reps 必须是数字或 null/.test(bad103.error));
+  delete T.state.exercises.e103;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

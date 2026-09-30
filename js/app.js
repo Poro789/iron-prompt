@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.79';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.80';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -168,7 +168,9 @@ function normalizeSet(s){
 function normalizeItem(raw){
   raw = raw || {};
   const section = typeof raw.section === 'string' ? raw.section : '';
-  const repsRange = typeof raw.reps === 'string' ? raw.reps : '';
+  // repsRange 是导出里的规范拼写（自己的导出粘回来不能丢）；手写的 item 级 "reps":"8-12" 也继续接受
+  const repsRange = typeof raw.repsRange === 'string' ? raw.repsRange
+    : (typeof raw.reps === 'string' ? raw.reps : '');
   let sets;
   if(Array.isArray(raw.sets)){
     sets = raw.sets.map(normalizeSet);
@@ -1926,12 +1928,16 @@ function buildExport(n){
   const logs = state.logs.slice(-n);
   // 趋势基于更长历史（最近 TREND_WINDOW 次）计算，否则 4 次窗口会把平台期误判成上升
   const trendLogs = state.logs.slice(-TREND_WINDOW);
+  // 空数组的日（用户手动清空过）不写进导出：导入规则本来就拒绝空数组日，
+  // 写出去反而让用户粘回自己的导出时被拒。不写 = 导入不动那个日，语义一致。
+  const program = {};
+  for(const day of ['A','B']) if(Array.isArray(state.program[day]) && state.program[day].length) program[day] = state.program[day];
   return {
     type: 'ironlog-export',
     version: 1,
     generatedAt: localDateStr(Date.now()),
     settings: { weightStep: state.settings.weightStep, restSec: state.settings.restSec, restNote: state.settings.restNote || '', warmupRestSec: state.settings.warmupRestSec },
-    program: state.program,
+    program,
     exercises: state.exercises,
     recentLogs: logs,
     trends: buildTrends(trendLogs),
@@ -1985,6 +1991,7 @@ const PLAN_SCHEMA = `{
 }
 字段规则：
 - sets 的 weight/reps/duration/rpe 为数字或 null：weight/band 模式填 weight+reps，bodyweight 填 reps，time 填 duration；rpe 为目标 RPE；side 仅单侧动作填 L/R，否则 null
+- 如果想表达次数区间（如 8-12），在 item 层（sets 之外）加 "reps": "8-12"，它会显示为目标「N 组 × 8-12」；sets 内的 reps 仍是数字目标
 - exerciseId 必须存在于 exercises；program 只写需要更新的日（不更新的日不要写，也不要写空数组）`;
 
 function buildPrompt(data){
