@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.58';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.59';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -207,6 +207,11 @@ function migrate(d){
   /* v0.9.57：休息计时器与秒表按时间戳持久化，刷新/浏览器杀进程后能接上继续 */
   d.rest = (d.rest && typeof d.rest === 'object' && d.rest.endsAt > 0) ? d.rest : null;
   d.timer = (d.timer && typeof d.timer === 'object' && d.timer.startsAt > 0) ? d.timer : null;
+  /* 备份整个缺 program/exercises（手工删字段/截断的 JSON）时全应用崩：
+   * state.program[day] 直接抛 TypeError，连设置页都进不去，用户只能清数据重来。
+   * 缺了就用内置种子补；是对象但某日缺则不动——清空计划是合法状态。 */
+  if(!d.program || typeof d.program !== 'object') d.program = JSON.parse(JSON.stringify(SEED.program));
+  if(!d.exercises || typeof d.exercises !== 'object') d.exercises = JSON.parse(JSON.stringify(SEED.exercises));
   for(const day of ['A','B']){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);

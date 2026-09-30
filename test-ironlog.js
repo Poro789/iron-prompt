@@ -2066,6 +2066,13 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('空白提交视为清除', T.state.exercises.test_pn.personal === '');
   delete T.state.exercises.test_pn; delete T.state.lastImport;
 
+  console.log('== 81. migrate 缺 program/exercises 用种子补（v0.9.59）==');
+  const m81 = T.migrate({ version: 1, program: null, exercises: 'oops' });
+  check('缺 program 补内置计划', Array.isArray(m81.program.A) && m81.program.A.length > 0);
+  check('缺 exercises 补内置动作库', typeof m81.exercises === 'object' && Object.keys(m81.exercises).length > 0);
+  const m81b = T.migrate({ version: 1, program: { A: [], B: [] }, exercises: {} });
+  check('合法的清空计划不被覆盖', m81b.program.A.length === 0 && Object.keys(m81b.exercises).length === 0);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

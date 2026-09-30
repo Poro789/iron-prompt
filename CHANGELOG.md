@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.59]
+
+### 修复
+- 手工编辑/截断的备份整个缺了 `program` 或 `exercises` 时，应用打开即白屏（只能清数据重来）；现在缺了自动用内置种子补回，清空计划这一合法状态不受影响
+
 ## [0.9.58]
 
 ### 新增
