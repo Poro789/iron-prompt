@@ -1560,6 +1560,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const r52d = T.importPlan(multi);
   check('多个代码块取最后一个（最终方案）', r52d.ok === true && (T.state.program.A[0] || {}).exerciseId === 'test52');
 
+  console.log('== 53. 历史详情标注单侧动作的左/右（v0.9.30）==');
+  T.state.exercises.test53 = { ...mk('测试单侧', 'weight'), unit: 'kg' };
+  const sideLog = { date: '2026-02-01', day: 'B', startedAt: 91, endedAt: 92, durationSec: 1, condition: null, exercises: [
+    { exerciseId: 'test53', note: null, sets: [
+      tset({ weight: 10, reps: 10, side: 'L' }),
+      tset({ weight: 10, reps: 10, side: 'R' })
+    ] }
+  ] };
+  const logsBak53 = T.state.logs;
+  T.state.logs = [sideLog];
+  T.switchView('history'); T.render();
+  const hist53 = htmlTouchedHTML('hist-list');
+  check('历史详情里 L/R 两组分别标左右侧', hist53.includes('左侧 10kg×10') && hist53.includes('右侧 10kg×10'));
+  T.state.logs = logsBak53;
+  delete T.state.exercises.test53;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

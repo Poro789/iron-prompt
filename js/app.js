@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.29';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.30';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1355,7 +1355,9 @@ function renderHistory(){
         else if(s.weight != null) base = fmtW(s.weight) + unit + '×' + (s.reps ?? '?');
         else base = (s.reps ?? '?') + ' 次';
         // 热身组标出来：历史里「60kg×10，20kg×10」连着看，分不清哪组是正式哪组是热身
-        return (s.type === 'warmup' ? '热身 ' : '') + base + (s.rpe ? ` (RPE ${s.rpe})` : '') + (s.isPR ? ' 🔥' : '');
+        // 单侧动作标「左/右」：保加利亚蹲这类 L/R 两组连着看，分不清哪边做了什么
+        const sideTag = (s.side === 'L' || s.side === 'R') ? (s.side === 'L' ? '左' : '右') + '侧 ' : '';
+        return sideTag + (s.type === 'warmup' ? '热身 ' : '') + base + (s.rpe ? ` (RPE ${s.rpe})` : '') + (s.isPR ? ' 🔥' : '');
       }).join('，');
       return `<div class="h-ex"><b>${esc(exName)}</b>${esc(sets)}${ex.note ? `<div class="h-note">${esc(ex.note)}</div>` : ''}</div>`;
     }).join('');
