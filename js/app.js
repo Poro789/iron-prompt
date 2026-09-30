@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.17';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.18';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -391,15 +391,21 @@ function switchDay(d){
   render();
 }
 
-/* 上次同动作的数值：跳过热身组，取最近一次日志中该动作最重的已完成组 */
+/* 上次同动作的数值：跳过热身组，取最近一次日志中该动作的「最好一组」。
+ * 按模式选主指标（weight/time/bodyweight → weight/duration/reps）：
+ * 计时动作（平板、拉伸）没有重量，旧写法按 weight 挑会落到第一个已完成组，
+ * 一次平板 30/45/60 秒时「上次最长」显示 30 秒，uselast 也填 30——应当是 60。 */
 function lastValues(exerciseId){
+  const ex = state.exercises[exerciseId];
+  const mode = (ex && ex.mode) || 'weight';
+  const f = mode === 'time' ? 'duration' : (mode === 'bodyweight' ? 'reps' : 'weight');
   for(let i = state.logs.length - 1; i >= 0; i--){
-    const ex = state.logs[i].exercises.find(e => e.exerciseId === exerciseId);
-    if(!ex) continue;
-    const done = ex.sets.filter(s => isDone(s) && s.type !== 'warmup');
+    const exl = state.logs[i].exercises.find(e => e.exerciseId === exerciseId);
+    if(!exl) continue;
+    const done = exl.sets.filter(s => isDone(s) && s.type !== 'warmup');
     if(!done.length) continue;
-    const f = done.reduce((a, b) => ((b.weight || 0) > (a.weight || 0) ? b : a));
-    return { weight: f.weight ?? null, reps: f.reps ?? null, duration: f.duration ?? null, date: state.logs[i].date || null };
+    const g = done.reduce((a, b) => ((b[f] || 0) > (a[f] || 0) ? b : a));
+    return { weight: g.weight ?? null, reps: g.reps ?? null, duration: g.duration ?? null, date: state.logs[i].date || null };
   }
   return { weight: null, reps: null, duration: null, date: null };
 }

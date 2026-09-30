@@ -1384,6 +1384,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('合法步进 1.5 生效', T.state.settings.weightStep === 1.5 && String(wsEl.value) === '1.5');
   T.state.settings.weightStep = 2.5;
 
+  console.log('== 42. lastValues 按模式取最好一组（v0.9.18）==');
+  const mk = (name, mode) => ({ name, muscles: '', mode, unit: null, tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' });
+  const tset = o => ({ weight: null, reps: null, duration: null, rpe: null, side: null, restAfter: null, done: true, ...o });
+  T.state.exercises.test_plank = mk('平板支撑', 'time');
+  T.state.exercises.test_bw = mk('引体向上', 'bodyweight');
+  T.state.logs.push({ date: '2026-03-01', day: 'A', startedAt: 1000, endedAt: 1001, durationSec: 1, condition: null, exercises: [
+    { exerciseId: 'test_plank', note: null, sets: [tset({ duration: 30 }), tset({ duration: 60 }), tset({ duration: 45 })] },
+    { exerciseId: 'test_bw', note: null, sets: [tset({ reps: 10 }), tset({ reps: 15 }), tset({ reps: 12 })] }
+  ] });
+  check('计时动作取最长时长（不是第一组）', T.lastValues('test_plank').duration === 60);
+  check('自重动作取最多次数', T.lastValues('test_bw').reps === 15);
+  T.state.logs.pop(); delete T.state.exercises.test_plank; delete T.state.exercises.test_bw;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
