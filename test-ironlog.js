@@ -117,6 +117,7 @@ const testScript = script + `
   toggleDrawer, closeDrawer,
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
+  localDateStr, trimSet, migrate, bindDrafts, clampPos,
   get restForPos(){ return restForPos; },
   get draft(){ return draft; },
   clearDraft(day){ delete draft[day]; },
@@ -595,6 +596,102 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const p2 = T.askConfirm({ title: 'x' });
   T.answerConfirm(false);
   check('点取消 resolve false', await p2 === false);
+
+  console.log('== 20. v0.9.2 日志日期与草稿存盘 ==');
+  const tsLocal = new Date(2026, 0, 5, 0, 30, 0).getTime();   // 本地时间 2026-01-05 00:30 结束训练
+  check('localDateStr 按本地日历取日期', T.localDateStr(tsLocal) === '2026-01-05');
+  check('对照：UTC 串在东八区会记成前一天',
+    new Date(tsLocal).getTimezoneOffset() < 0 ? new Date(tsLocal).toISOString().slice(0, 10) === '2026-01-04' : true);
+
+  T.resetRest();
+  T.switchDay('A');
+  T.state.sessions.A = null;
+  T.clearDraft('A');
+  const its20 = T.getItems('A');
+  its20[0].sets[0].weight = 42.5;                 // 输入过、但还没确认任何一组
+  check('草稿挂在 state 上（不再是内存变量）', T.state.drafts.A === its20);
+  check('草稿随 state 一起可序列化', JSON.parse(JSON.stringify(T.state)).drafts.A[0].sets[0].weight === 42.5);
+  const legacy = JSON.parse(JSON.stringify(T.state));
+  delete legacy.drafts; delete legacy.condDraft; delete legacy.ui;
+  const mig = T.migrate(legacy);
+  check('旧数据补出 drafts/condDraft/ui.curPos 默认值',
+    !!mig.drafts && !!mig.condDraft && typeof mig.ui.curPos === 'object');
+  const revived = T.migrate(JSON.parse(JSON.stringify(T.state)));
+  check('重启后草稿里的数值还在', revived.drafts.A[0].sets[0].weight === 42.5);
+  T.bindDrafts();                                  // 整体替换 state 后必须重新绑定（备份恢复同理）
+  T.cycleCondition('A');                           // 会话前的状态选择也要存得住
+  check('当日状态草稿进 state', T.state.condDraft.A === '佳');
+  check('当日状态可序列化', JSON.parse(JSON.stringify(T.state)).condDraft.A === '佳');
+
+  console.log('== 21. v0.9.2 浏览位置与过期草稿 ==');
+  T.switchView('today');       // render() 只渲染当前视图，位置写入发生在训练视图
+  T.curPos = 2; T.render();
+  check('位置写入 state.ui.curPos', T.state.ui.curPos.A === 2);
+  check('位置随 state 可序列化', JSON.parse(JSON.stringify(T.state)).ui.curPos.A === 2);
+  T.switchDay('B');
+  check('切到 B 不串到 A 的位置', T.curPos === (T.state.ui.curPos.B || 0));
+  T.switchDay('A');
+  check('切回 A 停在原来那组', T.curPos === 2);
+  const fullProgram = JSON.parse(JSON.stringify(T.state.program.A));
+  T.state.program.A = fullProgram.slice(0, 3);
+  check('计划变短后草稿重建，而不是对着不存在的组编辑', T.getItems('A').length === 3);
+  T.state.program.A = fullProgram;
+  check('计划恢复后草稿同样重建', T.getItems('A').length === fullProgram.length);
+
+  console.log('== 22. v0.9.2 PR 落盘与日志日期 ==');
+  T.state.logs = [{ date: '2026-01-01', day: 'A', exercises: [
+    { exerciseId: 'goblet_squat', note: null, sets: [
+      { weight: 60, reps: 8, duration: null, rpe: 8, done: true, type: 'work' }] }] }];
+  T.state.sessions.A = null;
+  T.clearDraft('A');
+  const items22 = T.getItems('A');
+  const gi = items22.findIndex(i => i.exerciseId === 'goblet_squat');
+  const gsi = items22[gi].sets.findIndex(s => s.type !== 'warmup');
+  items22[gi].sets[gsi].weight = 65;
+  T.curPos = T.flatPos('A').findIndex(p => p.exIdx === gi && p.setIdx === gsi);
+  T.cycleDone('A', gi, gsi);
+  check('确认时识别出 PR', items22[gi].sets[gsi].isPR === true);
+  T.endSession();
+  const entry22 = T.state.logs[T.state.logs.length - 1];
+  const glog = entry22.exercises.find(e => e.exerciseId === 'goblet_squat');
+  check('PR 写进日志（重开页面后还在）', glog.sets.some(s => s.isPR === true));
+  check('非 PR 组不带 isPR 字段（不增加体积）', glog.sets.filter(s => !s.isPR).every(s => !('isPR' in s)));
+  check('日志日期 = 本地结束日期', entry22.date === T.localDateStr(entry22.endedAt));
+  T.resetRest();
+
+  console.log('== 23. v0.9.2 导出瘦身 / 缺动作兜底 / RPE 范围 ==');
+  const trLogs = [{ date: '2026-01-01', day: 'A', exercises: [
+    { exerciseId: 'goblet_squat', sets: [
+      { weight: 60, reps: 8, duration: null, rpe: 8, done: true, type: 'work', restAfter: 90, side: 'L', isPR: true }] }] }];
+  const top0 = T.buildTrends(trLogs).goblet_squat.sessions[0].top;
+  check('趋势 top 只留可比较的四个数值', Object.keys(top0).sort().join(',') === 'duration,reps,rpe,weight');
+  check('瘦身后仍能取到最好一组的数值', top0.weight === 60 && top0.reps === 8 && top0.rpe === 8);
+
+  const savedEx = T.state.exercises.goblet_squat;
+  delete T.state.exercises.goblet_squat;
+  T.curPos = T.flatPos('A').findIndex(p => T.getItems('A')[p.exIdx].exerciseId === 'goblet_squat');
+  T.switchView('today');
+  T.render();
+  const card = htmlTouchedHTML('ex-list');
+  check('缺动作定义时不是死路（仍可确认与导航）', /data-act="confirm"/.test(card) && /data-act="next"/.test(card));
+  check('缺动作时点名是哪个 id', card.includes('动作库里没有 <b>goblet_squat</b>'));
+  T.state.exercises.goblet_squat = savedEx;
+  T.render();
+  check('补回定义后警示消失', !htmlTouchedHTML('ex-list').includes('warn-inline'));
+
+  const items23 = T.getItems('A');
+  let low = null;
+  items23.forEach((it, ei) => it.sets.forEach((s, si) => {
+    if(!low && s.targetRpe != null && s.targetRpe <= 4) low = { ei, si, s };
+  }));
+  check('计划里存在低目标 RPE 的组（拉伸/呼吸）', !!low);
+  const lowBtn = act => btnOf({ act, ex: String(low.ei), set: String(low.si) });
+  clickExList(lowBtn('dec'));
+  check('RPE 从目标值起步（不是固定 8.5）', low.s.rpe === low.s.targetRpe - 0.5);
+  for(let i = 0; i < 12; i++) clickExList(lowBtn('dec'));
+  check('RPE 能降到 1（旧代码下限卡在 5）', low.s.rpe === 1);
+  for(let i = 0; i < 40; i++) clickExList(lowBtn('inc'));
+  check('RPE 上限仍是 10', low.s.rpe === 10);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

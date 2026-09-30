@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.1';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.2';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -184,6 +184,14 @@ function migrate(d){
   if(typeof d.settings.warmupRestSec !== 'number' || !(d.settings.warmupRestSec >= 0)) d.settings.warmupRestSec = 30;
   if(!d.profile) d.profile = { background: '' };
   if(!d.sessions) d.sessions = { A: null, B: null };
+  /* v0.9.2：草稿与浏览位置进 state，刷新/崩溃不再丢数据
+   *   d.drafts[day]      未确认任何一组前的预填数据（含已输入但未确认的数值）
+   *   d.condDraft[day]   当日状态（佳/一般/差），会话建立前先存在这里
+   *   d.ui.curPos[day]   当前停在第几组（扁平位置） */
+  if(!d.drafts || typeof d.drafts !== 'object') d.drafts = {};
+  if(!d.condDraft || typeof d.condDraft !== 'object') d.condDraft = { A: null, B: null };
+  if(!d.ui || typeof d.ui !== 'object') d.ui = {};
+  if(!d.ui.curPos || typeof d.ui.curPos !== 'object') d.ui.curPos = {};
   for(const day of ['A','B']){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);
@@ -252,6 +260,12 @@ function fmtDate(dateStr){
   const d = new Date(dateStr + 'T00:00:00');
   return `${dateStr} 周${WEEK[d.getDay()]}`;
 }
+/* 本地日期串 YYYY-MM-DD。不能用 toISOString().slice(0,10)：那是 UTC，
+ * 东八区凌晨 00:30 结束的训练会被记到前一天，历史与趋势的日期全部错位。 */
+function localDateStr(ts){
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 const isDone = s => s.done === true;
 function sessionVolume(entry){
   return entry.exercises.reduce((sum, ex) =>
@@ -312,9 +326,16 @@ function closeDrawer(){
   $('drawer-overlay').classList.remove('show');
 }
 
-/* ---------------- 今日训练 ---------------- */
-let draft = {};    // 内存草稿：未开始（未确认任何一组）前的预填数据，按日分存
-let condDraft = { A: null, B: null }; // 当日状态草稿（会话建立前），点按循环切换
+/* ---------------- 今日训练 ----------------
+ * 草稿（未确认任何一组前的预填数据、当日状态选择）存在 state 里而不是内存变量：
+ * 训练中刷新页面 / 浏览器被系统回收，输入过的数值不再凭空消失。 */
+let draft = {};      // 指向 state.drafts（见下），保留局部名只为可读性
+let condDraft = {};  // 指向 state.condDraft
+function bindDrafts(){
+  draft = state.drafts;
+  condDraft = state.condDraft;
+}
+bindDrafts();
 
 const COND_ORDER = [null, '佳', '一般', '差'];
 const COND_LABEL = { '佳': '佳', '一般': '一般', '差': '差' };
@@ -331,6 +352,7 @@ function curDay(){ return state.settings.lastDay; }
 
 function switchDay(d){
   state.settings.lastDay = d;
+  curPos = state.ui.curPos[d] || 0;   // A/B 各记各的位置，切回来不用重找
   save();
   render();
 }
@@ -351,6 +373,9 @@ function lastValues(exerciseId){
 /* 当前日期的可编辑 items：有进行中记录用记录，否则用草稿（计划规格优先，上次数值兜底） */
 function getItems(day){
   if(state.sessions[day]) return state.sessions[day].items;
+  /* 草稿现在会存盘，所以要先确认它和当前计划还对得上：组数不一致（计划被改过、
+   * 或数据来自更早的版本）就丢掉重建，否则会出现「对着不存在的组编辑」。 */
+  if(draft[day] && draft[day].length !== (state.program[day] || []).length) delete draft[day];
   if(!draft[day]){
     draft[day] = (state.program[day] || []).map(p => {
       const lv = lastValues(p.exerciseId);
@@ -380,6 +405,7 @@ function startSessionIfNeeded(day){
   if(!state.sessions[day]){
     state.sessions[day] = { startedAt: Date.now(), items: getItems(day), condition: condDraft[day] || null };
     condDraft[day] = null;
+    delete draft[day];   // 草稿已升格为进行中记录，不留第二份引用
   }
 }
 
@@ -409,7 +435,7 @@ function targetLabel(item){
  * 三态：○ 未记录 → ✓ 完成（绿）→ ✗ 未完成（红）→ ○。
  * 组间休息集成在卡片内：确认一组后卡片切到休息态，倒计时结束自动切下一组。
  */
-let curPos = 0;      // 当前 (exIdx, setIdx) 扁平化位置
+let curPos = state.ui.curPos[curDay()] || 0;  // 当前 (exIdx, setIdx) 扁平化位置，从上次停下的地方继续
 let openNotes = {};  // 已展开的"要点/避坑"详情，key = day:exIdx
 
 function flatPos(day){
@@ -428,6 +454,8 @@ function clampPos(day){
   const n = flatPos(day).length;
   if(!n) return 0;
   curPos = Math.max(0, Math.min(curPos, n - 1));
+  /* 记住停在第几组：切走再回来 / 页面被回收后重开，不用从头找第几组。 */
+  if(state.ui.curPos[day] !== curPos){ state.ui.curPos[day] = curPos; saveSoon(); }
   return curPos;
 }
 function nextPos(day){
@@ -489,8 +517,17 @@ function fullScreenHTML(day){
   if(!program.length) return '<div class="empty-hint">该日暂无动作，等待导入训练计划。</div>';
   const p = clampPos(day);
   const pos = flatPos(day)[p];
-  const { ex, item, set } = posLabel(day, pos);
-  if(!ex || !item || !set) return '<div class="empty-hint">动作库缺少该动作（exerciseId 不在 exercises 中）。</div>';
+  const { ex: rawEx, item, set } = posLabel(day, pos);
+  if(!item || !set) return '<div class="empty-hint">没有可显示的组。</div>';
+  let ex = rawEx, missing = '';
+  if(!ex){
+    /* 动作库里没有这个 id（导入的计划只给了 id，没带动作定义）。
+     * 不能停在空白页——那样既记不了也切不走。合成一个最小动作：照常可导航可记录，
+     * 同时把问题讲明白，补上定义后要点自动恢复。 */
+    ex = { name: item.exerciseId, muscles: '', mode: 'weight', unit: 'kg',
+           tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' };
+    missing = `<div class="warn-inline">动作库里没有 <b>${esc(item.exerciseId)}</b> 的定义（导入计划时缺动作库条目）。数值照常记录，补上定义后要点会恢复。</div>`;
+  }
   const mode = ex.mode || 'weight';
   const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + esc(ex.unit || 'kg') : '';
   const sideTag = set.side ? `<span class="fs-side">${set.side === 'L' ? '左' : '右'}侧</span>` : '';
@@ -537,6 +574,7 @@ function fullScreenHTML(day){
         </div>
         <button class="fs-nav" data-act="next" aria-label="下一组">›</button>
       </div>
+      ${missing}
       ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
       <div class="fs-set">
         <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}${set.isPR ? ' <span class="pr-badge">🔥 PR</span>' : ''}</div>
@@ -681,8 +719,11 @@ $('ex-list').addEventListener('click', e => {
     return;
   }
   if(act === 'dec' || act === 'inc'){
-    set.rpe = act === 'inc' ? Math.min(10, round1((set.rpe || 7.5) + 0.5))
-                            : Math.max(5,  round1((set.rpe || 8.5) - 0.5));
+    /* 从目标 RPE 起步（计划里写了 targetRpe 就用它），范围 1–10：
+     * 拉伸/呼吸的目标只有 RPE 2–4，旧代码下限卡在 5，记不了真实强度。 */
+    const base = set.rpe ?? set.targetRpe ?? (act === 'inc' ? 7.5 : 8.5);
+    set.rpe = act === 'inc' ? Math.min(10, round1(base + 0.5))
+                            : Math.max(1,  round1(base - 0.5));
     saveSoon();
     if(!patchRpe(exIdx, setIdx)) renderToday();
   }
@@ -740,19 +781,23 @@ function endSession(){
     .map(it => ({
       exerciseId: it.exerciseId,
       note: (it.note || '').trim() || null,
-      sets: it.sets.map(s => ({
-        weight: s.weight ?? null, reps: s.reps ?? null,
-        duration: s.duration ?? null, rpe: s.rpe ?? null,
-        side: s.side ?? null, restAfter: s.restAfter ?? null,
-        done: s.done === true
-      }))
+      sets: it.sets.map(s => {
+        const o = {
+          weight: s.weight ?? null, reps: s.reps ?? null,
+          duration: s.duration ?? null, rpe: s.rpe ?? null,
+          side: s.side ?? null, restAfter: s.restAfter ?? null,
+          done: s.done === true
+        };
+        if(s.isPR === true) o.isPR = true;   // 只在真的破纪录时写，普通组不增加体积
+        return o;
+      })
     }))
     .filter(it => it.sets.some(isDone));
   if(!exercises.length){ toast('还没有确认任何一组'); return; }
 
   const endedAt = Date.now();
   const entry = {
-    date: new Date().toISOString().slice(0, 10),
+    date: localDateStr(endedAt),   // 本地日期：跨零点训练记在结束那天，不会跑到昨天
     day,
     startedAt: sess.startedAt,
     endedAt,
@@ -778,6 +823,7 @@ async function discardSession(){
   delete draft[day];
   condDraft[day] = null;
   curPos = 0;
+  state.ui.curPos[day] = 0;   // 放弃后回到第一组，别把旧位置留着
   resetRest();
   flushSave();
   render();
@@ -958,7 +1004,7 @@ function renderHistory(){
         if(s.duration != null) base = s.duration + 's';
         else if(s.weight != null) base = fmtW(s.weight) + '×' + (s.reps ?? '?');
         else base = (s.reps ?? '?') + ' 次';
-        return base + (s.rpe ? ` (RPE ${s.rpe})` : '') + (s.note ? `（${s.note}）` : '');
+        return base + (s.rpe ? ` (RPE ${s.rpe})` : '') + (s.isPR ? ' 🔥' : '');
       }).join('，');
       return `<div class="h-ex"><b>${esc(exName)}</b>${esc(sets)}${ex.note ? `<div class="h-note">${esc(ex.note)}</div>` : ''}</div>`;
     }).join('');
@@ -1078,6 +1124,12 @@ function topSet(sets){
   if(withD.length) return withD.reduce((a,b) => b.duration > a.duration ? b : a);
   return sets.reduce((a,b) => (b.reps||0) > (a.reps||0) ? b : a, { reps: null });
 }
+/* 趋势里的 top 只留能比较的四个数值：done/restAfter/side 对分析没用，
+ * 但会把导出里最大的一块（trends）撑大一倍。 */
+function trimSet(s){
+  return { weight: s.weight ?? null, reps: s.reps ?? null,
+           duration: s.duration ?? null, rpe: s.rpe ?? null };
+}
 function avgRpe(sets){
   const rs = sets.map(s => s.rpe).filter(v => v != null);
   return rs.length ? round1(rs.reduce((a,b) => a + b, 0) / rs.length) : null;
@@ -1091,7 +1143,7 @@ function buildTrends(logs){
       (byEx[ex.exerciseId] = byEx[ex.exerciseId] || []).push({
         date: entry.date,
         day: entry.day,
-        top: topSet(doneSets),
+        top: trimSet(topSet(doneSets)),
         avgRpe: avgRpe(doneSets),
         volume: Math.round(doneSets.reduce((s,st) => s + (st.weight||0) * (st.reps||0), 0)),
         sets: doneSets.length
@@ -1126,7 +1178,7 @@ function buildExport(n){
   return {
     type: 'ironlog-export',
     version: 1,
-    generatedAt: new Date().toISOString().slice(0, 10),
+    generatedAt: localDateStr(Date.now()),
     settings: { weightStep: state.settings.weightStep, restSec: state.settings.restSec, restNote: state.settings.restNote || '', warmupRestSec: state.settings.warmupRestSec },
     program: state.program,
     exercises: state.exercises,
@@ -1198,7 +1250,7 @@ ${bg}
 ${fence}json
 ${JSON.stringify(data, null, 2)}
 ${fence}
-数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；condition 为当日整体状态（佳/一般/差）；note 为组级/动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；trends 由已完成组聚合，回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
+数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；condition 为当日整体状态（佳/一般/差）；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
 
 请只基于这份数据分析（不要泛泛而谈通用健身知识）：
 1. 各动作重量/次数/时长趋势，是否需要渐进超负荷
