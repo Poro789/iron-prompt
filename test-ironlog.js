@@ -1603,10 +1603,12 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   console.log('== 57. 导入计划会说明丢弃了未确认草稿（v0.9.34）==');
   const plan57 = { exercises: { test57: { name: '测试动作57', mode: 'weight' } },
     program: { A: [{ exerciseId: 'test57', sets: [{ weight: 20, reps: 8 }] }] } };
-  T.state.drafts.A = { items: [{ exerciseId: 'test57', note: '', sets: [{ weight: 99, reps: 5, done: false }] }] };
+  // 生产里 getItems 写的 drafts[day] 就是 items 数组本身（见 section 54 的 drafts.A[0]），
+  // 不是 {items:[...]} 包装对象——fixture 必须用真实形状，否则测的是不存在的代码。
+  T.state.drafts.A = [{ exerciseId: 'test57', note: '', sets: [{ weight: 99, reps: 5, done: false }] }];
   const r57a = T.importPlan(JSON.stringify(plan57));
   check('只有预填数值的草稿不提丢弃', r57a.ok === true && !/已丢弃/.test(r57a.summary));
-  T.state.drafts.A = { items: [{ exerciseId: 'test57', note: '左肩不适', sets: [{ weight: 20, reps: 8, done: false }] }] };
+  T.state.drafts.A = [{ exerciseId: 'test57', note: '左肩不适', sets: [{ weight: 20, reps: 8, done: false }] }];
   const r57b = T.importPlan(JSON.stringify(plan57));
   check('有备注的草稿会说明已丢弃', r57b.ok === true && /已丢弃未确认草稿/.test(r57b.summary));
 

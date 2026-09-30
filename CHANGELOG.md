@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.37]
+
+### 修复
+- 导入计划时「已丢弃未确认草稿」的提示从未生效：检测代码按 `{items:[…]}` 包装对象读草稿，而草稿实际就是 items 数组本身（v0.9.34 引入）；测试 fixture 也改成真实形状，防止再测不存在的代码
+
 ## [0.9.36]
 
 ### 新增

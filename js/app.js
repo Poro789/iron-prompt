@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.36';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.37';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1481,7 +1481,7 @@ function applyPlan(d){
     // 必须在导入结果里说一声，否则换了计划数量后用户回头才发现「刚才填的东西没了」。
     // 只看 done/notes：新建草稿本身带着上次数值的预填，那不是用户输入，丢了不算损失。
     const dr = draft[day];
-    const draftDirty = dr && (dr.items || []).some(it =>
+    const draftDirty = Array.isArray(dr) && dr.some(it =>
       (it.note || '').trim() || (it.sets || []).some(s => s.done === true));
     state.program[day] = d.program[day].map(normalizeItem);
     delete draft[day];
