@@ -140,6 +140,7 @@ const testScript = script + `
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
   localDateStr, trimSet, migrate, bindDrafts, clampPos,
+  beep, unlockAudio, refreshPR,
   get restForPos(){ return restForPos; },
   get draft(){ return draft; },
   clearDraft(day){ delete draft[day]; },
@@ -1427,6 +1428,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'weight', dir: '1' }));   // +2.5（section 41 已把步进复位为 2.5）→ 105
   check('±步进把已确认组加到 105 → PR 点亮', prSet().isPR === true && prSet().weight === 105);
   T.state.logs.pop(); delete T.state.exercises.test_pr;
+
+  console.log('== 44. 用户手势解锁 AudioContext（v0.9.21）==');
+  let created44 = null;
+  global.window.AudioContext = function(){
+    created44 = this;
+    this.state = 'suspended';
+    this.resume = () => { this.state = 'running'; };
+    this.createOscillator = () => { throw new Error('stub'); };
+    this.destination = {};
+  };
+  T.beep._ctx = null;
+  clickExList(navBtn({ act: 'next' }));
+  check('点击训练卡片按钮时创建并恢复 AudioContext', !!created44 && created44.state === 'running');
+  clickExList(navBtn({ act: 'prev' }));
+  check('重复点击不重复创建', T.beep._ctx === created44);
+  T.beep._ctx = null;
+  global.window.AudioContext = null;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

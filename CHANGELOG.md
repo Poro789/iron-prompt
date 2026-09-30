@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.21]
+
+### 修复
+- iOS/Safari 上休息结束提示音可能永远静音：AudioContext 现在在第一次点击训练卡片按钮（用户手势）时创建并恢复，之后定时器回调里的提示音不再被浏览器静音策略拦截
+
 ## [0.9.20]
 
 ### 修复

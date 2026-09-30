@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.20';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.21';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -759,6 +759,7 @@ function patchRpe(exIdx, setIdx){
 $('ex-list').addEventListener('click', e => {
   const btn = e.target.closest('button[data-act]');
   if(!btn) return;
+  unlockAudio();   // 用户手势：解锁提示音用的 AudioContext（iOS 上之后定时器里无法解锁）
   const day = curDay();
   const act = btn.dataset.act;
 
@@ -1163,6 +1164,17 @@ function resetRest(){
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
 function restTotalSec(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); }
+
+/* iOS/Safari：AudioContext 必须在用户手势里创建或恢复，否则之后在定时器回调里
+ * 调用 resume() 无效——休息结束提示音会永远静音。第一次点训练卡片任意按钮时解锁。 */
+function unlockAudio(){
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    const ctx = beep._ctx || (beep._ctx = new Ctx());
+    if(ctx.state === 'suspended') ctx.resume();
+  }catch(e){}
+}
 
 /* 休息结束提示音（WebAudio，无外部资源；失败静默） */
 function beep(){
