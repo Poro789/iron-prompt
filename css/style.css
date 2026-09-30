@@ -138,6 +138,14 @@ header .ver{color:var(--muted);font-size:12px}
   color:var(--muted);font-size:15px;background:var(--panel2);border:1px solid var(--border);
   border-radius:10px;padding:14px 16px;text-align:center;
 }
+/* ± 步进按钮：一组一屏里数值改一次要点一次键盘，戴手套/单手时更难受。
+   按钮与输入框同高（64px），宽度 52px，够拇指点准；键盘只在需要精确值时用。 */
+.val-group{display:inline-flex;align-items:center;gap:8px}
+.fs-step{
+  width:52px;height:64px;border-radius:14px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text);font-size:24px;
+}
+.fs-step:active{background:var(--border)}
 /* RPE */
 .rpe-row{display:flex;align-items:center;justify-content:center;gap:8px}
 .rpe-label{color:var(--muted);font-size:13px}

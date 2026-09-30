@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.2';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.3';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -499,18 +499,22 @@ function setDoneState(day, exIdx, setIdx, val){
   if(!set) return;
   set.done = val;
 }
-/* 按模式生成输入框（无步进按钮；weight 小数、reps/duration 整数） */
+/* 按模式生成输入框 + ± 步进按钮。
+ * 训练中改数值最常见的动作是「比上次加 2.5kg」「少做 1 个」，键盘输入是这套流程里最烦的一步：
+ * weight 用设置里的重量步进，reps ±1，时长 ±5 秒；精确值仍然可以直接打字。 */
 function setInputsHTML(exIdx, setIdx, st, ex){
   const d = f => `data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}"`;
+  const step = (f, dir, label) => `<button class="fs-step" data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}" data-act="step" data-dir="${dir}" aria-label="${label}">${dir < 0 ? '−' : '＋'}</button>`;
   const mode = ex.mode || 'weight';
   if(mode === 'time'){
-    return `<input class="fs-input" ${d('duration')} inputmode="numeric" value="${st.duration ?? ''}" aria-label="时长（秒）"><span class="fs-unit">秒</span>`;
+    return `<span class="val-group">${step('duration', -1, '时长减少 5 秒')}<input class="fs-input" ${d('duration')} inputmode="numeric" value="${st.duration ?? ''}" aria-label="时长（秒）"><span class="fs-unit">秒</span>${step('duration', 1, '时长增加 5 秒')}</span>`;
   }
   if(mode === 'bodyweight'){
-    return `<span class="fs-bw">自重</span><input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>`;
+    return `<span class="fs-bw">自重</span><span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
   }
-  return `<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量"><span class="fs-unit">${esc(ex.unit || 'kg')}</span>
-    <input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>`;
+  const ws = state.settings.weightStep;
+  return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' kg')}<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量"><span class="fs-unit">${esc(ex.unit || 'kg')}</span>${step('weight', 1, '重量增加 ' + ws + ' kg')}</span>
+    <span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
 }
 function fullScreenHTML(day){
   const program = state.program[day] || [];
@@ -633,12 +637,20 @@ function renderToday(){
   renderRestBar();
 }
 
+/* 组内局部更新：只改一个输入框的值（保留焦点，不重建整屏） */
+function patchValue(exIdx, setIdx, f, val){
+  const inp = document.querySelector(`#ex-list input[data-f="${f}"][data-ex="${exIdx}"][data-set="${setIdx}"]`);
+  if(!inp) return false;
+  inp.value = val;
+  return true;
+}
 /* 组内局部更新：只替换 RPE 值（保留输入焦点）；其余变化走全量渲染 */
 function patchRpe(exIdx, setIdx){
   const day = curDay();
   const item = getItems(day)[exIdx];
   if(!item) return false;
-  const val = document.querySelector(`.rpe-val`);
+  // 限定在卡片容器内：全页 querySelector('.rpe-val') 会命中别的视图里的同名元素
+  const val = document.querySelector(`#ex-list .rpe-val`);
   if(!val) return false;
   val.textContent = item.sets[setIdx].rpe ?? '–';
   return true;
@@ -708,6 +720,18 @@ $('ex-list').addEventListener('click', e => {
   const setIdx = +btn.dataset.set;
   const set = item.sets[setIdx];
   if(!set) return;
+
+  if(act === 'step'){
+    // ± 步进：重量按设置里的步进，次数 ±1，时长 ±5 秒；下限 0（次数下限 1）
+    const f = btn.dataset.f;
+    const dir = +btn.dataset.dir;
+    const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
+    const next = Math.max(f === 'reps' ? 1 : 0, round1((Number(set[f]) || 0) + dir * inc));
+    set[f] = next;
+    saveSoon();
+    if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : next)) renderToday();
+    return;
+  }
 
   if(act === 'confirm'){
     if(restEndsAt !== null) finishRest();
@@ -1281,6 +1305,77 @@ function runExport(withPrompt){
 }
 function doExport(){ return runExport(true); }
 function doExportData(){ return runExport(false); }
+
+/* ---------------- 全量备份 / 恢复（换设备的唯一迁移路径） ----------------
+ * 「导出给 AI」只含最近 N 次日志，不能当备份用：这里导出的是完整 state，
+ * 包括日志、计划、动作库、进行中的记录、草稿、设置与浏览位置。 */
+function buildBackup(){
+  return {
+    type: 'ironlog-backup', version: 1, appVersion: APP_VERSION,
+    exportedAt: localDateStr(Date.now()),
+    counts: { logs: state.logs.length, exercises: Object.keys(state.exercises).length },
+    state: JSON.parse(JSON.stringify(state))
+  };
+}
+function parseBackup(text){
+  let d;
+  try{ d = JSON.parse(text); }catch(e){ return { ok: false, error: '不是有效 JSON（文件被截断或选错了文件）' }; }
+  if(!d || typeof d !== 'object') return { ok: false, error: '空文件' };
+  // 也接受直接粘出来的 state（手工编辑过的备份）
+  const st = (d.state && d.state.program) ? d.state : d;
+  if(st.version !== 1 || !st.program || !st.exercises){
+    return { ok: false, error: '缺少 version/program/exercises —— 不像 Iron Log 的备份文件' };
+  }
+  return { ok: true, state: st };
+}
+function doBackup(){
+  const data = buildBackup();
+  const name = 'ironlog-backup-' + data.exportedAt + '.json';
+  try{
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }catch(e){ console.warn('Iron Log: 下载备份失败', e); }
+  const msg = $('restore-msg');
+  msg.className = 'import-msg ok';
+  msg.textContent = `已生成 ${name}（${data.counts.logs} 条日志、${data.counts.exercises} 个动作）。换设备时把文件拷过去，再点「从备份文件恢复」。`;
+}
+function applyRestoredState(st){
+  state = migrate(st);
+  bindDrafts();                        // draft/condDraft 是指向旧 state 的别名，换 state 必须重新绑定
+  curPos = state.ui.curPos[curDay()] || 0;
+  resetRest();
+  flushSave();
+  render();
+}
+async function restoreBackupText(text){
+  const msg = $('restore-msg');
+  const r = parseBackup(text);
+  if(!r.ok){ msg.className = 'import-msg err'; msg.textContent = '恢复失败：' + r.error; return false; }
+  const n = (r.state.logs || []).length;
+  const ok = await askConfirm({
+    title: '用备份覆盖本机数据？',
+    desc: `备份含 ${n} 条日志、${Object.keys(r.state.exercises || {}).length} 个动作。当前数据会被整体替换（不确定的话先点「下载备份文件」存一份现在的）。`,
+    okLabel: '覆盖'
+  });
+  if(!ok){ msg.className = 'import-msg'; msg.textContent = '已取消，没有改动任何数据。'; return false; }
+  applyRestoredState(r.state);
+  msg.className = 'import-msg ok';
+  msg.textContent = '已恢复：' + n + ' 条日志。';
+  return true;
+}
+function pickBackup(){ $('restore-file').click(); }
+$('restore-file').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';                 // 清空，允许连续选同一个文件
+  if(!f) return;
+  let text;
+  try{ text = await f.text(); }
+  catch(err){ const m = $('restore-msg'); m.className = 'import-msg err'; m.textContent = '读文件失败：' + err; return; }
+  await restoreBackupText(text);
+});
 
 /* ---------------- 设置（v0.9：备注融合） ---------------- */
 function renderSettings(){

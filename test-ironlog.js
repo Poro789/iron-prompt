@@ -111,6 +111,7 @@ const testScript = script + `
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
+  buildBackup, parseBackup, restoreBackupText,
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   get openNotes(){ return openNotes; },
   startRestTimer, tickRest, finishRest, skipRest, resetRest, askConfirm, answerConfirm,
@@ -692,6 +693,72 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('RPE 能降到 1（旧代码下限卡在 5）', low.s.rpe === 1);
   for(let i = 0; i < 40; i++) clickExList(lowBtn('inc'));
   check('RPE 上限仍是 10', low.s.rpe === 10);
+
+  console.log('== 24. v0.9.3 ± 步进（训练中最常用的一步）==');
+  T.switchView('today');
+  const items24 = T.getItems('A');
+  const modeOf = id => (T.state.exercises[id] || {}).mode || 'weight';
+  const wEx = items24.findIndex(i => modeOf(i.exerciseId) === 'weight');
+  const tEx = items24.findIndex(i => modeOf(i.exerciseId) === 'time');
+  const stepBtn = (ex, set, f, dir) => btnOf({ act: 'step', ex: String(ex), set: String(set), f, dir: String(dir) });
+  T.state.settings.weightStep = 2.5;
+  items24[wEx].sets[0].weight = 20;
+  items24[wEx].sets[0].reps = 8;
+  clickExList(stepBtn(wEx, 0, 'weight', 1));
+  check('重量 + 一个步进', items24[wEx].sets[0].weight === 22.5);
+  clickExList(stepBtn(wEx, 0, 'weight', -1));
+  check('重量 − 一个步进', items24[wEx].sets[0].weight === 20);
+  clickExList(stepBtn(wEx, 0, 'reps', -1));
+  check('次数 −1', items24[wEx].sets[0].reps === 7);
+  items24[wEx].sets[0].reps = 1;
+  clickExList(stepBtn(wEx, 0, 'reps', -1));
+  check('次数不低于 1', items24[wEx].sets[0].reps === 1);
+  items24[wEx].sets[0].weight = 1.25;
+  clickExList(stepBtn(wEx, 0, 'weight', -1));
+  check('重量不会减成负数', items24[wEx].sets[0].weight === 0);
+  items24[tEx].sets[0].duration = 30;
+  clickExList(stepBtn(tEx, 0, 'duration', 1));
+  check('时长 +5 秒', items24[tEx].sets[0].duration === 35);
+  T.curPos = T.flatPos('A').findIndex(p => p.exIdx === wEx && p.setIdx === 0);
+  T.render();
+  const card24 = htmlTouchedHTML('ex-list');
+  check('卡片上渲染出四个步进按钮', (card24.match(/data-act="step"/g) || []).length === 4);
+  check('按钮有可读标签（含实际步进值）', card24.includes('aria-label="重量增加 2.5 kg"'));
+
+  console.log('== 25. v0.9.3 全量备份与恢复 ==');
+  const bk = T.buildBackup();
+  check('备份含完整 state（日志/计划/动作库/进行中记录）',
+    bk.state.logs.length === T.state.logs.length && !!bk.state.program.A
+    && Object.keys(bk.state.exercises).length === Object.keys(T.state.exercises).length
+    && 'A' in bk.state.sessions);
+  check('备份标记类型/版本/生成日期',
+    bk.type === 'ironlog-backup' && bk.version === 1 && bk.appVersion === T.APP_VERSION && /^\d{4}-\d{2}-\d{2}$/.test(bk.exportedAt));
+  check('拒绝非 JSON', !T.parseBackup('not json').ok && /不是有效 JSON/.test(T.parseBackup('not json').error));
+  check('拒绝不像备份的对象', !T.parseBackup('{"hello":1}').ok && /不像 Iron Log 的备份/.test(T.parseBackup('{"hello":1}').error));
+  check('接受去掉外壳的裸 state', T.parseBackup(JSON.stringify(bk.state)).ok === true);
+
+  const before25 = { logs: T.state.logs.length, ex: Object.keys(T.state.exercises).length };
+  T.state.profile.background = '恢复之后这行应该被备份里的旧值覆盖';
+  const snapText = JSON.stringify(bk);
+  const rp1 = T.restoreBackupText(snapText);
+  T.answerConfirm(false);
+  check('取消则不动数据', (await rp1) === false && T.state.profile.background === '恢复之后这行应该被备份里的旧值覆盖');
+  const rp2 = T.restoreBackupText(snapText);
+  T.answerConfirm(true);
+  check('确认后恢复成功', (await rp2) === true);
+  check('日志与动作库原样回来',
+    T.state.logs.length === before25.logs && Object.keys(T.state.exercises).length === before25.ex);
+  check('备份里的旧值覆盖了对当前数据的改动', T.state.profile.background !== '恢复之后这行应该被备份里的旧值覆盖');
+  check('恢复后草稿别名指向新 state（不会写回旧对象）', T.draft === T.state.drafts);
+  check('恢复后数据已落盘', JSON.parse(localStorage.getItem('ironlog.v1')).logs.length === before25.logs);
+  const oldBk = JSON.parse(snapText);
+  delete oldBk.state.drafts; delete oldBk.state.condDraft; delete oldBk.state.ui;
+  const rp3 = T.restoreBackupText(JSON.stringify(oldBk));
+  T.answerConfirm(true);
+  await rp3;
+  check('旧版本备份恢复后补出草稿/位置默认值',
+    !!T.state.drafts && !!T.state.condDraft && typeof T.state.ui.curPos === 'object');
+  check('恢复后仍能正常渲染', (T.switchView('today'), T.render(), /fs-done/.test(htmlTouchedHTML('ex-list'))));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
