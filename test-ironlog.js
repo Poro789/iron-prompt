@@ -2841,6 +2841,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const m110b = T.migrate({ version: 1, logs: [], settings: { restSec: 120, warmupRestSec: 0, weightStep: 5 } });
   check('110 正常值原样保留（0 仍是合法的关闭值）', m110b.settings.restSec === 120 && m110b.settings.warmupRestSec === 0 && m110b.settings.weightStep === 5);
 
+  /* ============================================================
+   * 111. trends.volume 与界面聚合同口径：lb 换算成 kg（v0.9.88）
+   * 35lb×12 的绳 ≈191 kg·次，不是 420；kg 动作原样。
+   * 数据说明要解释 volume/avgRpe/direction/top 选组口径。
+   * ============================================================ */
+  console.log('== 111. trends.volume 换算与数据说明覆盖（v0.9.88）==');
+  T.state.exercises.e111 = { name: '弹力绳111', mode: 'band', unit: 'lb' };
+  T.state.exercises.e111b = { name: '哑铃111', mode: 'weight', unit: 'kg' };
+  const logs111 = [{ date: '2026-02-01', day: 'A', startedAt: 1, exercises: [
+    { exerciseId: 'e111', sets: [{ weight: 35, reps: 12, done: true }] },
+    { exerciseId: 'e111b', sets: [{ weight: 10, reps: 10, done: true }] },
+  ] }];
+  const tr111 = T.buildTrends(logs111);
+  check('111 lb 容量换算成 kg·次', tr111.e111.sessions[0].volume === Math.round(35 * 0.45359237 * 12));
+  check('111 kg 容量原样', tr111.e111b.sessions[0].volume === 100);
+  T.state.logs = logs111;
+  const p111 = T.buildPrompt(T.buildExport(1));
+  check('111 数据说明解释 volume 口径', p111.includes('volume 是该次正式组的负荷合计') && p111.includes('lb 已统一换算为 kg'));
+  check('111 数据说明解释 direction 与 top 选组', p111.includes('direction 是应用基于该动作近史的判定') && p111.includes('最大重量→否则最长时间→否则最多次数'));
+  delete T.state.exercises.e111; delete T.state.exercises.e111b; T.state.logs = [];
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

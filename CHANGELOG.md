@@ -2,6 +2,14 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.88]
+
+### 修复
+- 导出给 AI 的 trends.volume 现在把 lb 动作先换算成 kg 再累加（与界面容量汇总同口径）；此前弹力绳（lb）的负荷会被当成和 kg 动作同单位直接比大小，AI 会高估绳类负荷
+
+### 变更
+- 数据说明补全 trends 字段口径：top 的选组规则（最大重量→时长→次数）、volume 定义与换算、avgRpe、direction 是应用判定而非主观评价——减少 AI 解读分歧
+
 ## [0.9.87]
 
 ### 修复

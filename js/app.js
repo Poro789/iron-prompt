@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.87';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.88';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1927,12 +1927,15 @@ function buildTrends(logs){
       // AI 拿到的 sets 数也会虚高（与 lastValues/detectPR 的口径一致；旧日志无 type 字段，按正式组处理）
       const doneSets = ex.sets.filter(s => isDone(s) && s.type !== 'warmup');
       if(!doneSets.length) continue;
+      // 容量与界面聚合同一口径：lb 动作先换算成 kg，不然 35lb 的绳看着比 11kg 的壶铃负荷大
+      const volUnit = String((state.exercises[ex.exerciseId] || {}).unit || '').trim().toLowerCase();
+      const volFactor = volUnit === 'lb' ? LB_TO_KG : 1;
       (byEx[ex.exerciseId] = byEx[ex.exerciseId] || []).push({
         date: entry.date,
         day: entry.day,
         top: trimSet(topSet(doneSets)),
         avgRpe: avgRpe(doneSets),
-        volume: Math.round(doneSets.reduce((s,st) => s + (st.weight||0) * (st.reps||0), 0)),
+        volume: Math.round(doneSets.reduce((s,st) => s + (st.weight||0) * volFactor * (st.reps||0), 0)),
         sets: doneSets.length
       });
     }
@@ -2042,7 +2045,7 @@ ${bg}
 ${fence}json
 ${JSON.stringify(data)}
 ${fence}
-数据说明：done=false 的组是计划内未完成（数值可能是上次预填、也可能是用户填了但没点完成的意图，都不当作已验证的实际表现）；type="warmup" 的组是热身组（趋势、最好成绩、PR 都不统计热身）；condition 为当日整体状态（佳/一般/差）；restAfter 是该组之后实际休息的秒数（null 表示未记录，可用于分析恢复节奏）；settings.restNote 是用户对组间休息约束的自我说明（如场地时段限制），分析休息是否合理时要优先考虑；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。program 里 item 层的 repsRange 是我当前计划的次数区间，仅供你了解现状；你输出区间时按下面的格式用 "reps": "8-12"。
+数据说明：done=false 的组是计划内未完成（数值可能是上次预填、也可能是用户填了但没点完成的意图，都不当作已验证的实际表现）；type="warmup" 的组是热身组（趋势、最好成绩、PR 都不统计热身）；condition 为当日整体状态（佳/一般/差）；restAfter 是该组之后实际休息的秒数（null 表示未记录，可用于分析恢复节奏）；settings.restNote 是用户对组间休息约束的自我说明（如场地时段限制），分析休息是否合理时要优先考虑；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe，选组按 最大重量→否则最长时间→否则最多次数），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）；volume 是该次正式组的负荷合计（重量×次数，lb 已统一换算为 kg，可与 kg 动作直接比较）；avgRpe 是已完成组的平均 RPE；direction 是应用基于该动作近史的判定（up/down 要求首尾与后半段同向，否则 plateau，new 为首次出现），不是我的主观评价。program 里 item 层的 repsRange 是我当前计划的次数区间，仅供你了解现状；你输出区间时按下面的格式用 "reps": "8-12"。
 
 请只基于这份数据分析（不要泛泛而谈通用健身知识）：
 1. 各动作重量/次数/时长趋势，是否需要渐进超负荷
