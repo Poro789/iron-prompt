@@ -3349,6 +3349,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('130 合法 JSON 字符串里的「, }」原样保留', r130d.ok && r130d.data.exercises.e130d.name === '名字, }含逗号');
   T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
 
+  /* ============================================================
+   * 131. data-act 覆盖静态扫描（v0.9.107 测试加固）
+   * 所有模板里发出的 data-act 必须被某个委托处理器接住：
+   * 要么有 act === 'x' 字符串比较，要么出现在 closest/matches 选择器里
+   * （dellog/undo 就是走选择器分支的）。反向也查：接了但没人发射=死代码。
+   * 防止将来改按钮名时留下点了没反应的死按钮。
+   * ============================================================ */
+  console.log('== 131. data-act 发射/处理集合互相覆盖（静态）==');
+  const emitActs131 = new Set();
+  for(const m of (script + html).matchAll(/data-act="([a-z]+)"/g)) emitActs131.add(m[1]);
+  const handled131 = new Set();
+  for(const m of script.matchAll(/act === '([a-z]+)'/g)) handled131.add(m[1]);
+  for(const m of script.matchAll(/(?:closest|matches)\('([^']*)'/g))
+    for(const a of m[1].matchAll(/data-act="([a-z]+)"/g)) handled131.add(a[1]);
+  const dead131 = [...emitActs131].filter(a => !handled131.has(a));
+  const orphan131 = [...handled131].filter(a => !emitActs131.has(a));
+  check('131 没有发了没人接的按钮（死按钮）', emitActs131.size >= 12 && dead131.length === 0);
+  if(dead131.length) console.log('  未接住的 act: ' + dead131.join(','));
+  check('131 没有接了没人发射的 act（死代码）', orphan131.length === 0);
+  if(orphan131.length) console.log('  无人发射的 act: ' + orphan131.join(','));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
