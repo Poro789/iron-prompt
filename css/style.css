@@ -120,6 +120,12 @@ header .ver{color:var(--muted);font-size:12px}
 /* 组内容（始终可见） */
 .fs-set{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:18px 0}
 .fs-sub{color:var(--muted);font-size:13px;text-align:center}
+/* 组点指示器：同动作逐组切换时给出「换组了」的视觉锚点 */
+.fs-dots{display:flex;justify-content:center;gap:8px}
+.fs-dot{width:9px;height:9px;border-radius:50%;background:var(--panel2);border:1px solid var(--border)}
+.fs-dot.ok{background:var(--green);border-color:var(--green)}
+.fs-dot.no{background:var(--red);border-color:var(--red)}
+.fs-dot.cur{outline:2px solid var(--accent);outline-offset:2px}
 .fs-values{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 .fs-input{
   width:110px;height:64px;text-align:center;font-size:30px;font-weight:700;
@@ -142,6 +148,7 @@ header .ver{color:var(--muted);font-size:12px}
 .rpe-btn:active{background:var(--border)}
 .rpe-val{min-width:44px;text-align:center;font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
 .rpe-target{color:var(--muted);font-size:12px}
+.rpe-target-label{color:var(--muted);opacity:.75;margin-left:6px;padding-left:6px;border-left:1px solid var(--border)}
 /* 二态完成按钮 */
 .fs-done{
   width:100%;height:64px;border-radius:14px;border:2px solid var(--border);

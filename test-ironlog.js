@@ -23,6 +23,7 @@ const touchedIds = new Set();   // 记录被访问过的元素 id，供测试断
 const missingIds = [];          // 桩在 HTML 中找不到的 id = 代码引用了不存在的元素
 const elsById = new Map();      // 同一 id 复用同一桩，便于断言渲染结果
 const timers = [];              // 捕获 setTimeout 回调，供防抖测试手动触发
+const handlers = new Map();     // (id + '|' + type) -> addEventListener 回调，供点击模拟测试
 let patchTarget = null;         // 增量渲染测试注入的 .sets 容器：{ matches, node }
 global.document = {
   visibilityState: 'visible',
@@ -32,13 +33,42 @@ global.document = {
   getElementById(id){
     touchedIds.add(id);
     if(!html.includes(`id="${id}"`)) missingIds.push(id);
-    if(!elsById.has(id)) elsById.set(id, makeEl(id));
+    if(!elsById.has(id)){
+      const e = makeEl(id);
+      if(id === 'ex-list'){
+        e.addEventListener = (type, fn) => handlers.set(id + '|' + type, fn);
+        e.querySelectorAll = () => [];
+        const desc = [];
+        Object.defineProperty(e, 'innerHTML', { get(){ return desc.join(''); }, set(v){ desc.length = 0; desc.push(String(v)); } });
+      }
+      elsById.set(id, e);
+    }
     return elsById.get(id);
   }
 };
+// 向 ex-list 的事件委托处理器派发一次按钮点击（target 需自带 closest）
+function clickExList(target){
+  const h = handlers.get('ex-list|click');
+  if(!h) throw new Error('ex-list click handler 未注册');
+  h({ target });
+}
+function btnOf(ds){ return { closest: sel => (sel === 'button[data-act]' ? { dataset: ds } : null) }; }
+function doneBtn(exIdx, setIdx){ return btnOf({ act: 'confirm', ex: String(exIdx), set: String(setIdx) }); }
+function navBtn(act){ return btnOf({ act }); }
+// 从当前渲染的 ex-list 中按组位置提取完成按钮。
+// 完成按钮在 HTML 中按「当前渲染位置」生成 data-ex/data-set，因此先校验它确实指向目标组，
+// 点击时按 DOM 的真实绑定派发（与真实浏览器一致）。
+function doneBtnFromDOM(exIdx, setIdx){
+  const h = elsById.get('ex-list').innerHTML;
+  const m = h.match(/class="fs-done[^"]*" data-ex="(\d+)" data-set="(\d+)" data-act="confirm"/);
+  if(!m) throw new Error('DOM 中未找到完成按钮');
+  if(+m[1] !== exIdx || +m[2] !== setIdx) throw new Error('渲染位置 ex=' + m[1] + ' set=' + m[2] + '，期望 ' + exIdx + '/' + setIdx);
+  return btnOf({ act: 'confirm', ex: m[1], set: m[2] });
+}
 // 只读容器桩内容；不存在的 id 返回 null（避免污染 missingIds）
 function htmlTouchedHTML(id){ return elsById.has(id) ? elsById.get(id).innerHTML : null; }
 function textOf(id){ return elsById.has(id) ? elsById.get(id).textContent : null; }
+// localStorage 桩：写入时深拷贝，隔离内存对象与已序列化快照（防止引用泄漏）
 global.localStorage = {
   _d: {},
   getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
@@ -50,8 +80,19 @@ global.clearTimeout = () => {};
 function runTimers(){ const n = timers.length; for(let i = 0; i < n; i++){ try{ timers[i](); }catch(e){} } timers.splice(0, n); }
 global.setInterval = () => 0;
 global.clearInterval = () => {};
+// 虚拟时钟：可手动推进，用于验证「500ms 内幽灵点击抑制」不随真实时间放行
+const RealDate = Date;
+let clockOffset = 0;
+// 必须用普通函数构造：类实例没有内部 [[DateValue]]，app.js 里 new Date(str) + 算术会 NaN；
+// own property 需齐全，否则被 eval 代码 JSON.stringify 时会丢字段
+global.Date = function(...a){ return a.length ? new RealDate(...a) : new RealDate(RealDate.now() + clockOffset); };
+global.Date.now = () => RealDate.now() + clockOffset;
+global.Date.parse = RealDate.parse;
+global.Date.UTC = RealDate.UTC;
+global.Date.prototype = RealDate.prototype;
+function advanceClock(ms){ clockOffset += ms; }
 global.confirm = () => true;
-global.window = { addEventListener(){}, AudioContext: null };
+global.window = { addEventListener(){}, scrollTo(){}, AudioContext: null };
 Object.defineProperty(globalThis, 'navigator', {
   value: { clipboard: { writeText: async t => { globalThis.copied = t; } } },
   configurable: true, writable: true
@@ -62,8 +103,10 @@ const testScript = script + `
   get state(){ return state; },
   get restEndsAt(){ return restEndsAt; },
   get restStartsAt(){ return restStartsAt; },
+  set restStartsAt(v){ restStartsAt = v; },
   get restTotal(){ return restTotalSec(); },
   get restDone(){ return restDone; },
+  set restStartsAt(v){ restStartsAt = v; },
   set restEndsAt(v){ restEndsAt = v; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
@@ -74,6 +117,9 @@ const testScript = script + `
   toggleDrawer, closeDrawer,
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
+  get restForPos(){ return restForPos; },
+  get draft(){ return draft; },
+  clearDraft(day){ delete draft[day]; },
   fullScreenHTML, flatPos, posLabel
 };`;
 (0, eval)(testScript);
@@ -322,6 +368,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     && /cp js\/app.js dist\/js\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
 
   console.log('== 14. P1 全屏交互（二态 / 导航 / 备注） ==');
+  T.resetRest();
   T.switchDay('A');
   T.switchView('today');
   T.render();
@@ -345,7 +392,85 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   it14[0].note = '今天状态一般';
   check('动作级备注可存', it14[0].note === '今天状态一般');
 
-  console.log('== 15. P2 无障碍与结构 ==');
+  console.log('== 14b. 快速点击与休息归属（v0.9.1） ==');
+  T.resetRest();
+  T.switchDay('A'); T.switchView('today');
+  T.state.logs = [];                     // 清空日志，避免前序用例完成组干扰渲染位置
+  T.state.sessions.A = null;
+  T.render();
+  T.getItems('A')[0].sets[0].done = false;
+  T.curPos = 0;
+  T.render();
+  const it14b = T.getItems('A');
+  clickExList(doneBtnFromDOM(0, 0));
+  check('点击完成按钮 → 当前组完成', it14b[0].sets[0].done === true);
+  check('点击后未跳到下一组', T.curPos === 0);
+  check('休息归属指向被确认的组', T.restForPos && T.restForPos.exIdx === 0 && T.restForPos.setIdx === 0);
+  it14b[0].sets[0].done = true;
+  clickExList(doneBtnFromDOM(0, 0));
+  check('紧接的第二次点击不被吞（故意的快速撤销立即生效）', it14b[0].sets[0].done === false);
+  clickExList(doneBtnFromDOM(0, 0));
+  check('再次点击重新完成该组', it14b[0].sets[0].done === true);
+  T.resetRest();
+
+  console.log('== 14c. 跳过休息与手动切组（v0.9.1 修复） ==');
+  T.resetRest();
+  T.switchDay('A'); T.switchView('today');
+  T.state.settings.restSec = 90;         // 前面的用例可能改过休息时长，确保计时开启
+  T.state.logs = [];                     // 清空日志，避免前序用例注入的完成组干扰
+  T.state.sessions.A = null;             // 结束进行中的会话
+  T.clearDraft('A');                     // 清空 A 日草稿（内存态）
+  T.render();
+  const it14c = T.getItems('A');
+  it14c[0].sets[0].done = false;
+  advanceClock(1000);                    // 让上一轮的计时状态过期
+  T.curPos = 0;
+  clickExList(doneBtnFromDOM(0, 0));     // 确认第 1 组 → 自动开始休息，停在第 1 组
+  check('确认组后休息计时启动', T.restEndsAt !== null);
+  check('确认组后停留在该组等待休息', T.curPos === 0);
+  clickExList(navBtn('next'));           // 用户手动切到下一组
+  check('手动切组前进', T.curPos === 1);
+  T.skipRest();                          // 再点休息条「跳过」→ 再前进一组（跳过=开始下一组）
+  check('已手动切组后跳过 → 再前进一组', T.curPos === 2);
+  T.resetRest();
+  T.state.sessions.A.items.forEach(it => it.sets.forEach(s => { s.done = false; }));
+  T.curPos = 0;
+  T.render();
+  const it14c2 = T.getItems('A');
+  advanceClock(1000);
+  it14c2[0].sets[0].done = false;        // 上一轮点击把该组标记为完成，先复位
+  T.curPos = 0;
+  clickExList(doneBtnFromDOM(0, 0));
+  check('确认组休息已启动', T.restEndsAt !== null);
+  T.skipRest();                          // 仍停在确认组时点跳过 → 前进一组
+  check('仍停在确认组时跳过 → 前进一组', T.curPos === 1);
+  T.resetRest();
+
+  console.log('== 14d. 热身组独立休息时长（v0.9.1 新增） ==');
+  T.resetRest();
+  T.state.settings.restSec = 90;
+  T.state.settings.warmupRestSec = 30;
+  // 找到含热身组的动作（goblet_squat：warmup,work,work），直接走函数层
+  const warmIdx = T.state.program.A.findIndex(it => it.sets.some(s => s.type === 'warmup'));
+  check('设置已写入（warm=' + T.state.settings.warmupRestSec + ' work=' + T.state.settings.restSec + '）', T.state.settings.warmupRestSec === 30 && T.state.settings.restSec === 90);
+  T.state.sessions.A = { startedAt: 0, items: T.getItems('A'), condition: null };
+  check('热身组类型确为 warmup（type=' + T.state.sessions.A.items[warmIdx].sets[0].type + '）', T.state.sessions.A.items[warmIdx].sets[0].type === 'warmup');
+  T.state.sessions.A.items[warmIdx].sets[0].done = false;
+  T.state.sessions.A.items[warmIdx].sets[1].done = false;
+  T.cycleDone('A', warmIdx, 0);          // 确认热身组
+  check('热身组休息时长 = warmupRestSec（starts=' + T.restStartsAt + ' ends=' + T.restEndsAt + '）', T.restEndsAt - T.restStartsAt === 30000);
+  T.resetRest();
+  T.cycleDone('A', warmIdx, 1);          // 确认正式组
+  check('正式组休息时长 = restSec（90s）', T.restEndsAt - T.restStartsAt === 90000);
+  // 诊断：startRestTimer 在调用方未传位置时会回退到 flatPos(curPos)，
+// 这里显式传入热身组位置，观察它是否按 warmupRestSec 启动
+  T.resetRest();
+  T.startRestTimer({ exIdx: warmIdx, setIdx: 0 });
+  check('显式传热身组位置 → 30s（ends-starts=' + (T.restEndsAt - T.restStartsAt) + '）', T.restEndsAt - T.restStartsAt === 30000);
+  T.resetRest();
+  T.startRestTimer({ exIdx: warmIdx, setIdx: 1 });
+  check('显式传正式组位置 → 90s', T.restEndsAt - T.restStartsAt === 90000);
+  T.resetRest();
   check('tablist + 三个 tab 角色', (html.match(/role="tab"/g) || []).length === 3 && html.includes('role="tablist"'));
   check('tab 有 aria-controls/aria-selected', (html.match(/aria-controls="view-/g) || []).length === 3
     && (html.match(/aria-selected=/g) || []).length >= 3);
@@ -354,13 +479,30 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('toast 是 status 实时区域', html.includes('id="toast" role="status" aria-live="polite"'));
   check('总结弹层是 dialog', html.includes('role="dialog"') && html.includes('aria-modal="true"'));
   T.resetRest(); // 清除 section 14 遗留的休息计时
+  T.switchDay('A');                      // 后续用例切到 B 日，这里显式切回 A
+  T.curPos = 0;  // 复位组位置，使渲染与断言针对同一组
   const fsA = T.fullScreenHTML('A');
+  const dotsCur = T.posLabel('A', T.flatPos('A')[T.curPos]).item;
   check('全屏卡片渲染（一次一组）', fsA.includes('fs-card'));
   check('二态完成按钮存在', /fs-done/.test(fsA));
   check('组导航按钮存在', /data-act="prev"/.test(fsA) && /data-act="next"/.test(fsA));
   check('无步进按钮（除 RPE）', !/step-btn/.test(fsA));
   check('完成按钮带 aria-pressed', /aria-pressed="(true|false)"/.test(fsA));
   check('进度条存在', /fs-progress/.test(fsA));
+  // 组点指示器：当前组带 cur，已完成带 ok，未完成带 no。
+  // 只统计渲染位置（完成按钮的 data-ex）所指动作的组点。
+  const renderEx = +fsA.match(/class="fs-done[^"]*" data-ex="(\d+)"/)[1];
+  const dotsSlice = (() => {
+    const i = fsA.indexOf('fs-dots');
+    if(i === -1) return '';
+    const j = fsA.indexOf('</div>', i);
+    return fsA.slice(i, j);
+  })();
+  const dotMatches = [...dotsSlice.matchAll(/class="fs-dot([^"]*)"/g)].map(m => m[1].trim());
+  const dotsItem = T.getItems('A')[renderEx];
+  check('组点数量与渲染动作组数一致（' + dotsItem.exerciseId + '：' + dotMatches.length + '/' + dotsItem.sets.length + '）', dotMatches.length === dotsItem.sets.length);
+  check('组点标记当前组', dotMatches.filter(d => /\bcur\b/.test(d)).length === 1);
+  T.switchDay('A');
   check('休息窄条不替换内容', !/fs-rest-bar/.test(fsA)); // 无休息时不显示
   T.switchDay('B');
   check('未禁用双指缩放（WCAG 1.4.4）', !/maximum-scale/.test(html));

@@ -11,13 +11,13 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.0';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.1';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
 const SEED = {
   version: 1,
-  settings: { lastDay: 'A', weightStep: 2.5, restSec: 90, restNote: '' },
+  settings: { lastDay: 'A', weightStep: 2.5, restSec: 90, restNote: '', warmupRestSec: 30 },
   profile: { background: '体态问题：X 型腿、肋骨外扩\n目标：增肌 + 改善体态\n（请补充：身高体重、训练水平、器械范围与上限）' },
   program: {
     A: [
@@ -160,6 +160,7 @@ function normalizeSet(s){
     reps: numOrNull(s.reps),
     duration: numOrNull(s.duration),
     rpe: numOrNull(s.rpe),
+    rpeLabel: typeof s.rpeLabel === 'string' ? s.rpeLabel : '',
     side: s.side === 'L' || s.side === 'R' ? s.side : null
   };
 }
@@ -180,6 +181,7 @@ function migrate(d){
   if(!d.settings) d.settings = {};
   if(d.settings.restNote === undefined) d.settings.restNote = '';
   if(typeof d.settings.restSec !== 'number' || !(d.settings.restSec >= 0)) d.settings.restSec = 90;
+  if(typeof d.settings.warmupRestSec !== 'number' || !(d.settings.warmupRestSec >= 0)) d.settings.warmupRestSec = 30;
   if(!d.profile) d.profile = { background: '' };
   if(!d.sessions) d.sessions = { A: null, B: null };
   for(const day of ['A','B']){
@@ -363,6 +365,7 @@ function getItems(day){
           rpe: null,
           side: spec.side ?? null,
           targetRpe: spec.rpe,
+          targetRpeLabel: spec.rpeLabel || '',
           restAfter: null,
           done: false
         }))
@@ -442,6 +445,7 @@ function cycleDone(day, exIdx, setIdx){
   if(!set) return;
   if(set.done === true){ set.done = false; set.isPR = false; }  // ✓ → ✗
   else {                                            // ✗ → ✓
+    startSessionIfNeeded(day);
     set.done = true;
     // PR 检测：仅正式组，对比上次同动作最重/最长/最多
     if(set.type !== 'warmup'){
@@ -457,8 +461,9 @@ function cycleDone(day, exIdx, setIdx){
         set.isPR = (set.weight != null && lv.weight != null && set.weight > lv.weight);
       }
     }
-    startSessionIfNeeded(day);
-    startRestTimer();
+    // 休息归属：始终指向被确认的这一组。不用 curPos——确认会重建 DOM，
+    // 用户此刻可能已经手动切组，用 curPos 会把休息时长写到别的组上。
+    startRestTimer({ exIdx, setIdx });
   }
 }
 function setDoneState(day, exIdx, setIdx, val){
@@ -497,7 +502,7 @@ function fullScreenHTML(day){
     ex.alternatives ? `<div class="note"><b>替代</b>${esc(ex.alternatives)}</div>` : '',
     ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
   ].join('');
-  const rpeTarget = set.targetRpe != null ? `<span class="rpe-target">目标 ${esc(set.targetRpe)}</span>` : '';
+  const rpeTarget = set.targetRpe != null ? `<span class="rpe-target">目标 ${esc(set.targetRpe)}${set.targetRpeLabel ? ` <span class="rpe-target-label">${esc(set.targetRpeLabel)}</span>` : ''}</span>` : '';
   const doneCls = set.done === true ? 'done' : 'undone';
   const doneIcon = set.done === true ? '✓' : '✗';
   const doneLabel = set.done === true ? '已完成' : '未完成';
@@ -535,6 +540,7 @@ function fullScreenHTML(day){
       ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
       <div class="fs-set">
         <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}${set.isPR ? ' <span class="pr-badge">🔥 PR</span>' : ''}</div>
+        <div class="fs-dots" aria-hidden="true">${item.sets.map((st, si) => `<span class="fs-dot${si === pos.setIdx ? ' cur' : ''}${st.done === true ? ' ok' : st.done === false ? ' no' : ''}"></span>`).join('')}</div>
         <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
         <div class="rpe-row">
           <span class="rpe-label">RPE</span>
@@ -667,6 +673,8 @@ $('ex-list').addEventListener('click', e => {
 
   if(act === 'confirm'){
     if(restEndsAt !== null) finishRest();
+    // 不做「幽灵点击抑制」：CSS 已对所有 button 设 touch-action:manipulation
+    // （见 css/style.css:13），双击缩放不会发生；再加时间窗只会吞掉用户故意的快速撤销。
     cycleDone(day, exIdx, setIdx);
     if(navigator.vibrate) navigator.vibrate(50);
     saveSoon(); renderToday();
@@ -811,17 +819,17 @@ let restTimer = null;
 let restDone = false;
 let restForPos = null;  // {exIdx, setIdx} 触发休息的组
 
-function startRestTimer(){
-  const sec = state.settings.restSec;
+function startRestTimer(atPos){
+  // 热身组用更短的休息时长（拉伸等动作本身有时长，计时器照常走完即可）
+  const at = atPos || flatPos(curDay())[curPos];
+  const set = at ? getItems(curDay())[at.exIdx]?.sets[at.setIdx] : null;
+  const sec = set && set.type === 'warmup' ? state.settings.warmupRestSec : state.settings.restSec;
   if(!(sec > 0)) return;
   restStartsAt = Date.now();
   restEndsAt = restStartsAt + sec * 1000;
   restDone = false;
-  restForPos = { exIdx: null, setIdx: null };
-  // 记录当前组位置
-  const day = curDay();
-  const pos = flatPos(day)[curPos];
-  if(pos) restForPos = pos;
+  // 触发休息的组：优先用调用方传入的位置，避免渲染后 curPos 已移动导致归属错位
+  restForPos = atPos || flatPos(curDay())[curPos] || null;
   renderRestBar();
   startRestTick();
 }
@@ -866,6 +874,8 @@ function finishRest(){
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
 function skipRest(){
+  // 休息条「跳过」：结束休息计时，并前进到下一组——无论用户此前是否手动切过组，
+  // 按下跳过的意图就是「我现在开始下一组」
   finishRest();
   nextPos(curDay());
   saveSoon();
@@ -1117,7 +1127,7 @@ function buildExport(n){
     type: 'ironlog-export',
     version: 1,
     generatedAt: new Date().toISOString().slice(0, 10),
-    settings: { weightStep: state.settings.weightStep, restSec: state.settings.restSec, restNote: state.settings.restNote || '' },
+    settings: { weightStep: state.settings.weightStep, restSec: state.settings.restSec, restNote: state.settings.restNote || '', warmupRestSec: state.settings.warmupRestSec },
     program: state.program,
     exercises: state.exercises,
     recentLogs: logs,
@@ -1224,6 +1234,7 @@ function doExportData(){ return runExport(false); }
 function renderSettings(){
   $('weight-step').value = state.settings.weightStep;
   $('rest-sec').value = state.settings.restSec;
+  $('warmup-rest-sec').value = state.settings.warmupRestSec;
   $('profile-bg').value = (state.profile && state.profile.background) || '';
 }
 $('weight-step').addEventListener('change', e => {
@@ -1237,7 +1248,14 @@ $('rest-sec').addEventListener('change', e => {
   state.settings.restSec = (isNaN(v) || v < 0) ? 90 : Math.min(1800, v);
   e.target.value = state.settings.restSec;
   flushSave();
-  toast(state.settings.restSec > 0 ? `组间休息：${state.settings.restSec} 秒` : '组间休息已关闭');
+  toast(state.settings.restSec > 0 ? `正式组间休息：${state.settings.restSec} 秒` : '正式组间休息已关闭');
+});
+$('warmup-rest-sec').addEventListener('change', e => {
+  const v = Math.round(parseFloat(e.target.value));
+  state.settings.warmupRestSec = (isNaN(v) || v < 0) ? 30 : Math.min(1800, v);
+  e.target.value = state.settings.warmupRestSec;
+  flushSave();
+  toast(state.settings.warmupRestSec > 0 ? `热身组间休息：${state.settings.warmupRestSec} 秒` : '热身组间休息已关闭');
 });
 $('profile-bg').addEventListener('change', e => {
   state.profile.background = e.target.value;
