@@ -8,6 +8,9 @@ body{
   background:var(--bg);color:var(--text);
   font-family:-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
   font-size:15px;line-height:1.5;
+  /* 长下划线动作名/URL 等无空格长词：允许在任意位置换行，不致溢出卡片或提示条
+     （带省略号截断的 nowrap 元素不受影响） */
+  overflow-wrap:break-word;
   padding-bottom:env(safe-area-inset-bottom);
 }
 button{font-family:inherit;touch-action:manipulation;cursor:pointer}

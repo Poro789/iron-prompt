@@ -3315,6 +3315,21 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.flushSave();
   check('128 存储恢复后写入照常', Object.keys(global.localStorage._d).length === 1);
 
+  /* ============================================================
+   * 129. 无空格长词必须换行而不是溢出（v0.9.106）
+   * 下划线动作名（AI 方案常见）、URL 是不可断行的长词，出现在备注卡、
+   * 导入差异、提示条、历史详情里会撑出卡片外。全局 overflow-wrap:break-word
+   * 兜底；带省略号截断的 nowrap 元素（全屏标题/趋势图例）不受影响，须原样保留。
+   * ============================================================ */
+  console.log('== 129. 无空格长词折行兜底（v0.9.106）==');
+  const css129 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+  check('129 body 有 overflow-wrap:break-word 兜底', /body\{[^}]*overflow-wrap:break-word/.test(css129));
+  const fsNameRule = css129.match(/\.fs-name\{[^}]*\}/)[0];
+  const lgNameRule = css129.match(/\.lg-name\{[^}]*\}/)[0];
+  check('129 省略号截断元素保持原样（不被兜底破坏）',
+    /white-space:nowrap/.test(fsNameRule) && /text-overflow:ellipsis/.test(fsNameRule) &&
+    /white-space:nowrap/.test(lgNameRule) && /text-overflow:ellipsis/.test(lgNameRule));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
