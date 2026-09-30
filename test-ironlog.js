@@ -1818,6 +1818,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = T.state.logs.filter(l => l.startedAt !== ts67);
   delete T.state.sessions.A; delete T.state.drafts.A;
 
+  console.log('== 68. 数字输入被纠正后写回输入框（v0.9.47）==');
+  T.state.exercises.test47 = { ...mk('测试深蹲47', 'weight'), unit: 'kg' };
+  T.state.program.A = [{ section: '', exerciseId: 'test47', repsRange: '', sets: [{ type: 'work', weight: 50, reps: 5, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  const inp47 = makeEl('fs-input-47');
+  inp47.dataset = { ex: '0', set: '0', f: 'weight' };
+  const fire47 = v => { inp47.value = v; handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? inp47 : null } }); };
+  const s47 = () => T.getItems('A')[0].sets[0];
+  fire47('abc');
+  check('乱字符：数据记 null，输入框不再显示乱字符', s47().weight === null && inp47.value === '');
+  fire47('62.49');
+  check('超精度：写回纠正后的值', s47().weight === 62.5 && String(inp47.value) === '62.5');
+  fire47('-3');
+  check('负数：纠正为 0 并写回', s47().weight === 0 && String(inp47.value) === '0');
+  fire47('70');
+  check('正常输入不被多改', s47().weight === 70 && String(inp47.value) === '70');
+  inp47.dataset.f = 'reps';
+  fire47('x2');
+  check('次数字段同样清空乱字符', s47().reps === null && inp47.value === '');
+  delete T.state.exercises.test47; delete T.state.drafts.A; delete T.state.sessions.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.46';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.47';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -951,6 +951,11 @@ $('ex-list').addEventListener('change', e => {
   }else{
     set.reps = isNaN(v) ? null : Math.max(0, Math.round(v));
   }
+  /* 内部纠正了就要写回输入框（与设置页步进同一规矩）：
+   * 否则框里还显示「abc」或「62.49」，存的却是 null / 62.5，显示和数据对不上。 */
+  const val = inp.dataset.f === 'weight' ? set.weight : inp.dataset.f === 'duration' ? set.duration : set.reps;
+  if(val === null){ if(inp.value !== '') inp.value = ''; }
+  else if(String(inp.value) !== String(val)) inp.value = val;
   refreshPR(day, exIdx, +inp.dataset.set);
   saveSoon();
   // 改数可能让 🔥 出现或消失（徽章在 .fs-sub 里）：状态变了就重画卡片。
