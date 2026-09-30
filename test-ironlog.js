@@ -131,6 +131,9 @@ const testScript = script + `
   get restDone(){ return restDone; },
   set restStartsAt(v){ restStartsAt = v; },
   set restEndsAt(v){ restEndsAt = v; },
+  // §110 的 clearAll 用空 reload 桩：真实浏览器 reload 会重置整个 JS 上下文，
+  // 桩里 clearingAll 会一直挂着 true 吞掉后续所有 save——测试需要显式放行。
+  get clearingAll(){ return clearingAll; }, set clearingAll(v){ clearingAll = v; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict, clearAll,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
@@ -3292,6 +3295,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('127 rpeLabel 截到 1000 字', it127.sets[0].rpeLabel.length === 1000);
   check('127 repsRange 截到 40 字', (it127.repsRange || '').length === 40);
   T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
+  /* ============================================================
+   * 128. 保存失败提示给出可行出路（v0.9.105）
+   * localStorage 满时之前只把英文 DOMException 弹出来，用户不知道能做什么。
+   * 提示必须包含出路（历史页删除旧记录 / 设置页导出备份后清理），且恢复后写入照常。
+   * ============================================================ */
+  console.log('== 128. 保存失败提示（v0.9.105）==');
+  T.clearingAll = false;                 // 见 __T 注释：clearAll 的 reload 桩不会重置守卫
+  runTimers();                           // 让挂着的撤销按钮按 6 秒过期（真实流程如此），保存失败提示走纯文案路径
+  const setItem128 = global.localStorage.setItem;
+  global.localStorage.setItem = () => { throw new Error('配额已满'); };
+  T.flushSave();
+  const msg128 = textOf('toast') || '';
+  check('128 保存失败会提示而不是静默', msg128.includes('保存失败'));
+  check('128 提示给出可行出路（备份/删除/清理）', msg128.includes('备份') && msg128.includes('删除') && msg128.includes('清理'));
+  global.localStorage.setItem = setItem128;
+  global.localStorage._d = {};                 // 清空后必须能重新写入完整状态
+  T.flushSave();
+  check('128 存储恢复后写入照常', Object.keys(global.localStorage._d).length === 1);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

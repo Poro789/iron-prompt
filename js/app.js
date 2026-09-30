@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.104';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.105';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -301,7 +301,9 @@ let clearingAll = false;
 function save(){
   if(clearingAll) return;
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
-  catch(e){ toast('保存失败：' + e.message); }
+  // 原始 DOMException 是英文的，用户看完不知道能做什么：说清楚可行的出路。
+  // 配额满与不可用（Safari 无痕）共用这条路径；不静默吞掉——最近改动可能没落盘。
+  catch(e){ toast('保存失败：本地存储已满或不可用。可到历史页删除旧记录，或到设置页导出备份后清理数据（' + e.message + '）'); }
 }
 
 /* 防抖写入：连点步进时合并为一次全量序列化；隐藏/卸载前强制落盘，不丢数据 */
