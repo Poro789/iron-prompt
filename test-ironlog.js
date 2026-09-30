@@ -130,7 +130,7 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   reeditSession, closeSummary, showSummary, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
-  sessionVolume,
+  sessionVolume, sessionAvgRest,
   buildBackup, parseBackup, restoreBackupText,
   buildTrendCharts, trendKind, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, get timerFor(){ return timerFor; },
@@ -1622,6 +1622,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('lb 组按 0.4536 换算后累加', Math.abs(vol58 - want58) < 1e-6);
   check('动作库缺失时按 kg 不换算', T.sessionVolume({ exercises: entry58.exercises.slice(0, 1) }) === 200);
   delete T.state.exercises.test58kg; delete T.state.exercises.test58lb;
+
+  console.log('== 59. 小结显示组间平均休息（v0.9.36）==');
+  const entry59 = { day: 'A', startedAt: 1, durationSec: 600, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [
+      { weight: 60, reps: 5, done: true, restAfter: 60 },
+      { weight: 60, reps: 5, done: true, restAfter: 90 },
+      { weight: 60, reps: 5, done: true, restAfter: 0 },
+      { weight: 60, reps: 5, done: true, restAfter: null }
+    ] }
+  ] };
+  check('restAfter 均值（含 0，忽略 null）', T.sessionAvgRest(entry59) === 50);
+  T.showSummary(entry59);
+  const sum59 = String(elsById.get('summary-body').innerHTML);
+  check('小结显示平均休息 0:50', /平均休息 <b>0:50<\/b>/.test(sum59));
+  T.closeSummary();
+  const entry59b = { day: 'A', startedAt: 1, durationSec: 600, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [{ weight: 60, reps: 5, done: true }] }
+  ] };
+  check('没有任何休息记录时返回 null', T.sessionAvgRest(entry59b) === null);
+  T.showSummary(entry59b);
+  check('无记录时小结不显示该行（旧日志同样不显示）', !/平均休息/.test(String(elsById.get('summary-body').innerHTML)));
+  T.closeSummary();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

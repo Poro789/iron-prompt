@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.36]
+
+### 新增
+- 训练小结显示「平均休息」：按本次记录里各组实际休息秒数（restAfter）求均值；一次都没记录过就不显示这一行
+
 ## [0.9.35]
 
 ### 修复
