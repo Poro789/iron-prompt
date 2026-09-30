@@ -2,6 +2,15 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.81]
+
+### 修复
+- 导出 prompt 的输出模板自洽：exerciseId 占位符此前是描述文字（照抄会校验失败），改为与 exercises 的 key 一致；数据说明补充「输入里的 repsRange 仅供了解现状，输出请用 "reps": "8-12"」
+
+### 测试
+- §104：输出模板必须能通过自家导入校验（模板或校验器改动会先在 CI 红）；备份→恢复回环
+- 测试挂起保护：await 永不 resolve 会让 node 以 0 静默退出（假全绿），现在会明确报 FAIL
+
 ## [0.9.80]
 
 ### 修复

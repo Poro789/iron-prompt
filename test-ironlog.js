@@ -8,6 +8,11 @@ const script = fs.readFileSync(path.join(__dirname, 'js/app.js'), 'utf8');
 if(script.length < 1000) { console.error('FAIL js/app.js 过短（' + script.length + ' 字符）'); process.exit(1); }
 // index.html 不得残留内联脚本/样式（拆分约定）
 if(/<script>/.test(html) || /<style>/.test(html)) { console.error('FAIL index.html 残留内联 <script>/<style>'); process.exit(1); }
+// 挂起保护：await 一个永不 resolve 的 Promise 会让 node 以退出码 0 静默结束（假全绿）。
+let __finished = false;
+process.on('beforeExit', () => {
+  if(!__finished){ console.error('FAIL 测试未跑到汇总行（疑似 await 挂起，事件循环已空）'); process.exit(1); }
+});
 
 // ---- DOM / 浏览器 API 桩 ----
 function makeClassList(){
@@ -131,7 +136,7 @@ const testScript = script + `
   reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
-  buildBackup, parseBackup, restoreBackupText,
+  buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA,
   buildTrendCharts, trendKind, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
@@ -2637,6 +2642,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('103 set 级字符串 reps 被明确拒绝', bad103.ok === false && /sets\[0\]\.reps 必须是数字或 null/.test(bad103.error));
   delete T.state.exercises.e103;
 
+  /* ============================================================
+   * 104. prompt 输出模板的自洽：AI 被要求照 PLAN_SCHEMA 输出，模板本身必须能通过自家校验器
+   * 若有人改了模板字段（或改了 validatePlan），这条会在 CI 里先红，而不是等用户粘贴报错。
+   * ============================================================ */
+  console.log('== 104. PLAN_SCHEMA 能通过自家导入校验 ==');
+  const bk104 = T.buildBackup();
+  const aBefore104 = JSON.stringify(T.state.program.A);
+  const bBefore104 = JSON.stringify(T.state.program.B);
+  const r104 = T.importPlan(T.PLAN_SCHEMA);
+  if(!r104.ok) console.log('  DEBUG r104 =', String(r104.error).slice(0, 200));
+  check('104 输出模板本身可被导入', r104.ok === true, r104.error);
+  check('104 模板只声明 A 日，不动 B 日', JSON.stringify(T.state.program.B) === bBefore104);
+  T.restoreBackupText(JSON.stringify(bk104));
+  T.answerConfirm(true);
+  await null;
+  check('104 测后状态完整还原（备份→恢复回环）',
+    JSON.stringify(T.state.program.A) === aBefore104 && JSON.stringify(T.state.program.B) === bBefore104);
+
   console.log(`\n${pass} passed, ${fail} failed`);
+  __finished = true;
   process.exit(fail ? 1 : 0);
 })();
