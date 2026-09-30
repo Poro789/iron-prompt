@@ -1446,6 +1446,13 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.beep._ctx = null;
   global.window.AudioContext = null;
 
+  console.log('== 45. 步进按钮 aria-label 与实际单位一致（v0.9.22）==');
+  T.state.exercises.test_pr = { name: '测试卧推', muscles: '', mode: 'weight', unit: 'lb', tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' };
+  T.state.sessions.A = null; delete T.state.drafts.A; T.curPos = 0;
+  const card45 = T.fullScreenHTML('A');
+  check('lb 动作的 ± 按钮读屏文案用 lb', card45.includes('aria-label="重量增加 2.5 lb"') && card45.includes('aria-label="重量减少 2.5 lb"'));
+  check('读屏文案不再硬编码 kg', !card45.includes('重量增加 2.5 kg'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

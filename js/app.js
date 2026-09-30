@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.21';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.22';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -609,7 +609,8 @@ function setInputsHTML(exIdx, setIdx, st, ex){
     return `<span class="fs-bw">自重</span><span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
   }
   const ws = state.settings.weightStep;
-  return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' kg')}<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量"><span class="fs-unit">${esc(ex.unit || 'kg')}</span>${step('weight', 1, '重量增加 ' + ws + ' kg')}</span>
+  const unitLbl = esc(ex.unit || 'kg');   // 读屏文案与实际显示的单位保持一致（lb/band 不再念成 kg）
+  return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' ' + unitLbl)}<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量"><span class="fs-unit">${unitLbl}</span>${step('weight', 1, '重量增加 ' + ws + ' ' + unitLbl)}</span>
     <span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
 }
 function fullScreenHTML(day){
