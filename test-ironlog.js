@@ -3451,6 +3451,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   }
   check('136 提示条仍是 role=status（回归）', /id="toast"[^>]*role="status"/.test(html));
 
+  /* ============================================================
+   * 137. clearAll 连 .bak 救援副本一起清（v0.9.112）
+   * 「此操作不可恢复」+ 腾配额是清除的语义；load() 写的 .bak
+   * 若幸存，既留了不该留的底，又把配额占用留在清除之后。
+   * ============================================================ */
+  console.log('== 137. clearAll 清除 .bak 救援副本（v0.9.112）==');
+  const prevNavDesc = Object.getOwnPropertyDescriptor(global, 'navigator');
+  Object.defineProperty(global, 'navigator', { configurable: true, value: {} }); // 无剪贴板：同步回退，节拍确定
+  global.location = { reload(){} };
+  global.localStorage._d['ironlog.v1'] = 'main137';
+  global.localStorage._d['ironlog.v1.bak'] = 'rescue137';
+  T.clearingAll = false;
+  T.clearAll();
+  T.answerConfirm(true); await null; await null;
+  T.answerConfirm(true); await null;
+  await null;
+  check('137 主键被清', global.localStorage._d['ironlog.v1'] === undefined);
+  check('137 .bak 一并被清', global.localStorage._d['ironlog.v1.bak'] === undefined);
+  delete global.location;
+  if(prevNavDesc) Object.defineProperty(global, 'navigator', prevNavDesc); else delete global.navigator;
+  T.clearingAll = false;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
