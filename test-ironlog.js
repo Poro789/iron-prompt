@@ -926,6 +926,76 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('历史详情：计时组写「45 秒」而不是 45s', /45 秒/.test(hist29) && !/45s/.test(hist29));
   check('历史详情：自重组写「15 次」', /15 次/.test(hist29));
 
+  console.log('== 30. 卡片上的「上次」一行（看到上次做到多少 + 一键沿用）==');
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  const modeOf30 = id => (T.state.exercises[id] || {}).mode || 'weight';
+  const items30 = T.getItems('A');
+  const itemsB30 = T.getItems('B');
+  /* 用「当前计划里真实存在的动作」造历史：前面的用例可能已经用备份替换过计划，
+   * 写死 goblet_squat/clamshell 会找不到位置。 */
+  const pick30 = (items, mode) => items.find(it => modeOf30(it.exerciseId) === mode && it.sets.some(st => st.type !== 'warmup'));
+  const wEx30 = pick30(items30, 'weight');
+  const tEx30 = pick30(items30, 'time');
+  const bInB30 = pick30(itemsB30, 'bodyweight');
+  const bEx30 = bInB30 || pick30(items30, 'bodyweight');
+  const bDay30 = bInB30 ? 'B' : 'A';
+  const bItems30 = bInB30 ? itemsB30 : items30;
+  T.state.logs = [{
+    date: '2026-06-01', day: 'A', startedAt: 0, endedAt: 0, durationSec: 1200, condition: null,
+    exercises: [
+      { exerciseId: wEx30.exerciseId, sets: [{ done: true, weight: 20, reps: 8, duration: null, rpe: 8 }] },
+      { exerciseId: tEx30.exerciseId, sets: [{ done: true, weight: null, reps: null, duration: 45, rpe: null }] },
+      { exerciseId: bEx30.exerciseId, sets: [{ done: true, weight: null, reps: 15, duration: null, rpe: null }] }
+    ]
+  }];
+  function goCard30(day, items, item, setIdx){
+    const exIdx = items.indexOf(item);
+    const at = T.flatPos(day).findIndex(p => p.exIdx === exIdx && p.setIdx === setIdx);
+    T.switchView('today');
+    T.curPos = at;
+    T.render();
+    return { exIdx, html: htmlTouchedHTML('ex-list') };
+  }
+  const gi30 = items30.indexOf(wEx30);
+  const gwork30 = wEx30.sets.findIndex(st => st.type !== 'warmup');
+  const c30 = goCard30('A', items30, wEx30, gwork30);
+  check('正式组卡片显示上次最重的数值', /上次最重 20kg×8/.test(c30.html));
+  check('并写清是哪一天记录的', /06-01/.test(c30.html));
+  check('这一行是可点的「点按沿用」', /data-act="uselast"/.test(c30.html) && /点按沿用/.test(c30.html));
+  // 沿用：先把这组改成别的数，再点按钮
+  wEx30.sets[gwork30].weight = 12.5;
+  wEx30.sets[gwork30].reps = 3;
+  clickExList(btnOf({ act: 'uselast', ex: String(gi30), set: String(gwork30) }));
+  check('点按沿用把上次的重量与次数填进这一组',
+    wEx30.sets[gwork30].weight === 20 && wEx30.sets[gwork30].reps === 8);
+  check('沿用只填数值，不会顺手把组标成完成', wEx30.sets[gwork30].done === false);
+  // 热身组：目标本来就比正式组低，不该出现「上次」
+  const warmIdx30 = items30.findIndex(it => it.sets.some(st => st.type === 'warmup'));
+  if(warmIdx30 < 0){
+    check('当前计划里没有热身组（跳过热身断言）', true);
+  }else{
+    const warmSet30 = items30[warmIdx30].sets.findIndex(st => st.type === 'warmup');
+    check('热身组卡片上不出现「上次」',
+      !/data-act="uselast"/.test(goCard30('A', items30, items30[warmIdx30], warmSet30).html));
+  }
+  // 没记录过的动作不该编造「上次」
+  const logged30 = new Set(T.state.logs.flatMap(l => (l.exercises || []).map(e => e.exerciseId)));
+  const fresh30 = items30.find(it => !logged30.has(it.exerciseId));
+  check('没有历史记录的动作不显示「上次」',
+    !/data-act="uselast"/.test(goCard30('A', items30, fresh30, 0).html));
+  // 计时动作按秒说，自重组按次说
+  check('计时动作显示「上次最长 45 秒」而不是重量', (() => {
+    const h = goCard30('A', items30, tEx30, tEx30.sets.findIndex(st => st.type !== 'warmup')).html;
+    return /上次最长 45 秒/.test(h) && !/上次最重/.test(h);
+  })());
+  const cB30 = goCard30(bDay30, bItems30, bEx30, 0);
+  check('自重组显示「上次最多 15 次」', /上次最多 15 次/.test(cB30.html));
+  check('自重组的「上次」不提重量', !/上次最重/.test(cB30.html));
+  bEx30.sets[0].reps = 4;
+  clickExList(btnOf({ act: 'uselast', ex: String(cB30.exIdx), set: '0' }));
+  check('自重组沿用后次数变成 15', bEx30.sets[0].reps === 15);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

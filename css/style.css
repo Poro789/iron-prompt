@@ -126,6 +126,11 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-dot.ok{background:var(--green);border-color:var(--green)}
 .fs-dot.no{background:var(--red);border-color:var(--red)}
 .fs-dot.cur{outline:2px solid var(--accent);outline-offset:2px}
+.fs-last{display:flex;align-items:center;gap:6px;width:100%;padding:8px 10px;background:transparent;
+         border:1px dashed var(--border);border-radius:9px;color:var(--muted);font-size:13px}
+.fs-last-date{color:var(--text);opacity:.55;font-size:12px}
+.fs-last-act{margin-left:auto;color:var(--accent);font-size:12px}
+.fs-last:active{border-color:var(--accent);background:var(--panel2);color:var(--text)}
 .fs-values{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 .fs-input{
   width:110px;height:64px;text-align:center;font-size:30px;font-weight:700;

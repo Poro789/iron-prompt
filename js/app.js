@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.5';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.6';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -374,9 +374,31 @@ function lastValues(exerciseId){
     const done = ex.sets.filter(s => isDone(s) && s.type !== 'warmup');
     if(!done.length) continue;
     const f = done.reduce((a, b) => ((b.weight || 0) > (a.weight || 0) ? b : a));
-    return { weight: f.weight ?? null, reps: f.reps ?? null, duration: f.duration ?? null };
+    return { weight: f.weight ?? null, reps: f.reps ?? null, duration: f.duration ?? null, date: state.logs[i].date || null };
   }
-  return { weight: null, reps: null, duration: null };
+  return { weight: null, reps: null, duration: null, date: null };
+}
+
+/* 卡片上的「上次」一行：训练中决定「要不要加」，前提是看得见上次做到了多少。
+ * 点一下就把上次的数值填进这一组，省掉照着记忆打字。热身组不显示（它的目标本来就比正式组低）。 */
+function lastHintHTML(exIdx, setIdx, exId, ex, set){
+  if(set.type === 'warmup') return '';
+  const lv = lastValues(exId);
+  const mode = ex.mode || 'weight';
+  let desc = '';
+  if(mode === 'time'){
+    if(lv.duration != null) desc = '上次最长 ' + Math.round(lv.duration) + ' 秒';
+  }else if(mode === 'bodyweight'){
+    if(lv.reps != null) desc = '上次最多 ' + lv.reps + ' 次';
+  }else{
+    const w = lv.weight != null ? fmtW(lv.weight) + esc(ex.unit || 'kg') : '';
+    const r = lv.reps != null ? '×' + lv.reps : '';
+    if(w || r) desc = '上次最重 ' + w + r;
+  }
+  if(!desc) return '';
+  const when = lv.date ? ' <span class="fs-last-date">' + esc(String(lv.date).slice(5)) + '</span>' : '';
+  return `<button class="fs-last" data-ex="${exIdx}" data-set="${setIdx}" data-act="uselast"
+          aria-label="沿用上次记录的数值">↑ ${desc}${when}<span class="fs-last-act">点按沿用</span></button>`;
 }
 
 /* 当前日期的可编辑 items：有进行中记录用记录，否则用草稿（计划规格优先，上次数值兜底） */
@@ -595,6 +617,7 @@ function fullScreenHTML(day){
       <div class="fs-set">
         <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}${set.isPR ? ' <span class="pr-badge">🔥 PR</span>' : ''}</div>
         <div class="fs-dots" aria-hidden="true">${item.sets.map((st, si) => `<span class="fs-dot${si === pos.setIdx ? ' cur' : ''}${st.done === true ? ' ok' : st.done === false ? ' no' : ''}"></span>`).join('')}</div>
+        ${lastHintHTML(pos.exIdx, pos.setIdx, item.exerciseId, ex, set)}
         <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
         <div class="rpe-row">
           <span class="rpe-label">RPE</span>
@@ -749,6 +772,19 @@ $('ex-list').addEventListener('click', e => {
     // 计时动作（平板/拉伸/呼吸）：按一下开始，再按一下把经过的秒数填进这一组
     if(timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
     else { stopTimer(); startTimer(exIdx, setIdx); }
+    renderToday();
+    return;
+  }
+
+  if(act === 'uselast'){
+    /* 沿用上次：只填上次真记录过的字段（没记录的不动），填完重画卡片让人看见变化。
+     * 这是「比上次加一点」的第一步——先拿到上次的数，再用 ± 往上加。 */
+    const lv = lastValues(item.exerciseId);
+    let used = false;
+    if(lv.weight != null){ set.weight = lv.weight; used = true; }
+    if(lv.reps != null){ set.reps = lv.reps; used = true; }
+    if(lv.duration != null){ set.duration = lv.duration; used = true; }
+    if(used) saveSoon();
     renderToday();
     return;
   }
