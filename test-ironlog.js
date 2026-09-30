@@ -2486,6 +2486,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
   delete T.state.exercises.e97;
 
+  /* ============================================================
+   * 98. 目标标签保留计划里的次数区间（v0.9.75）
+   * normalizeItem 把 reps:"8-12" 存成 item.repsRange，此前草稿不带，targetLabel 的区间分支是死代码。
+   * ============================================================ */
+  console.log('== 98. 目标标签保留 reps:"8-12"（v0.9.75）==');
+  T.state.exercises.e98 = { name: 'E98', mode: 'weight', unit: 'kg' };
+  T.state.logs = [];
+  const mk98 = () => [{}, {}, {}].map(s => ({ type: 'work', weight: null, reps: null, duration: null, rpe: null, side: null }));
+  T.state.program.A = [{ exerciseId: 'e98', repsRange: '8-12', sets: mk98() }];
+  T.state.sessions = { A: null, B: null };
+  delete T.state.drafts.A;
+  const it98 = T.getItems('A');
+  check('98 草稿带上次数区间', it98[0].repsRange === '8-12');
+  check('98 目标标签显示 3 × 8-12', T.targetLabel(it98[0]) === '3 × 8-12');
+  delete T.state.drafts.A;
+  T.state.program.A = [{ exerciseId: 'e98', sets: mk98() }];
+  check('98 无区间时仍是「3 组」', T.targetLabel(T.getItems('A')[0]) === '3 组');
+  T.state.program.A = [];
+  T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
+  delete T.state.exercises.e98;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
