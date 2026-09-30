@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.22';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.23';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -829,9 +829,12 @@ $('ex-list').addEventListener('click', e => {
     const dir = +btn.dataset.dir;
     const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
     const next = Math.max(f === 'reps' ? 1 : 0, round1((Number(set[f]) || 0) + dir * inc));
+    const wasPR = set.isPR === true;
     set[f] = next;
     refreshPR(day, exIdx, setIdx);
     saveSoon();
+    // PR 状态变了：🔥 徽章在 .fs-sub 里，patchValue 只改输入框，必须整卡重画才看得见变化
+    if(set.done === true && (set.isPR === true) !== wasPR){ renderToday(); return; }
     if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : next)) renderToday();
     return;
   }
@@ -894,6 +897,7 @@ $('ex-list').addEventListener('change', e => {
   }
   const set = item.sets[+inp.dataset.set];
   if(!set) return;
+  const wasPR = set.isPR === true;
   const v = parseFloat(inp.value);
   if(inp.dataset.f === 'weight'){
     set.weight = isNaN(v) ? null : Math.max(0, round1(v));
@@ -904,6 +908,9 @@ $('ex-list').addEventListener('change', e => {
   }
   refreshPR(day, exIdx, +inp.dataset.set);
   saveSoon();
+  // 改数可能让 🔥 出现或消失（徽章在 .fs-sub 里）：状态变了就重画卡片。
+  // change 在失焦/回车时触发，焦点已经离开输入框，重画不会打断输入。
+  if(set.done === true && (set.isPR === true) !== wasPR) renderToday();
 });
 
 /* 滑动切组（touch 手势：左滑=下一组，右滑=上一组） */

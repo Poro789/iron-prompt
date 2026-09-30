@@ -1453,6 +1453,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('lb 动作的 ± 按钮读屏文案用 lb', card45.includes('aria-label="重量增加 2.5 lb"') && card45.includes('aria-label="重量减少 2.5 lb"'));
   check('读屏文案不再硬编码 kg', !card45.includes('重量增加 2.5 kg'));
 
+  console.log('== 46. PR 状态翻转时卡片必须重画（🔥 徽章不残留，v0.9.23）==');
+  T.state.exercises.test_pr = mk('测试推举', 'weight');
+  T.state.logs.push({ date: '2026-04-01', day: 'A', startedAt: 2222, endedAt: 2223, durationSec: 1, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [tset({ weight: 100, reps: 5 })] }
+  ] });
+  T.state.program.A = [{ section: '', exerciseId: 'test_pr', repsRange: '', sets: [{ type: 'work', weight: 90, reps: 5, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; T.state.sessions.A = null; T.state.ui.curPos.A = 0;
+  T.state.settings.lastDay = 'A'; T.curPos = 0;
+  clickExList(doneBtn(0, 0));   // 确认 90：不是 PR，卡片上也不该有徽章
+  check('确认 90：数据与卡片都无 PR', prSet().isPR !== true && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  const inp46 = makeEl('fs-input-46');
+  inp46.dataset = { ex: '0', set: '0', f: 'weight' };
+  const fire46 = v => { inp46.value = v; handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? inp46 : null } }); };
+  fire46('105');
+  check('改成 105：徽章出现在重画后的卡片里', prSet().isPR === true && String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  fire46('95');
+  check('改回 95：徽章从卡片上消失', prSet().isPR === false && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  fire46('102.5');
+  clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'weight', dir: '1' }));   // +2.5 → 105，PR 点亮
+  check('±步进点亮徽章', prSet().isPR === true && String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'weight', dir: '-1' }));  // -2.5 → 102.5，仍是 PR
+  check('仍破纪录时徽章保留', prSet().isPR === true && String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'weight', dir: '-1' }));  // -2.5 → 100，等于历史最好，熄灭
+  check('步进到等于历史最好：徽章熄灭', prSet().isPR === false && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  T.state.logs.pop(); delete T.state.exercises.test_pr;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
