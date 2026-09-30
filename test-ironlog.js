@@ -1882,6 +1882,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('改过类型的动作不再进重量图（30/45 秒不会被画成 kg）', ch71.includes('test49') && !ch71.includes('test48'));
   check('没有同类型的旧记录时也不凭空生成时长图', !ch71.includes('时长（秒）'));
 
+  console.log('== 72. 手工编辑的日志缺 date/durationSec 不显示 NaN（v0.9.51）==');
+  const n72 = T.state.logs.length;
+  T.state.logs.push({ day: 'A', startedAt: 1700000800000,
+    exercises: [{ exerciseId: 'goblet_squat', sets: [{ weight: 20, reps: 5, done: true }] }] });
+  T.switchView('history'); T.render();
+  const hist72 = htmlTouchedHTML('hist-list');
+  check('缺 date 显示「未知日期」而不是 undefined 周NaN', hist72.includes('未知日期') && !/undefined 周NaN/.test(hist72));
+  check('缺 durationSec 显示破折号而不是 NaN:NaN:NaN', hist72.includes(' · —') && !/NaN:NaN/.test(hist72));
+  T.state.logs.splice(n72);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

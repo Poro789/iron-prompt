@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.51]
+
+### 修复
+- 手工编辑/截断备份里缺 date 或 durationSec 的记录：历史页显示「未知日期」和「—」，不再出现 undefined 周NaN、NaN:NaN:NaN
+
 ## [0.9.50]
 
 ### 修复

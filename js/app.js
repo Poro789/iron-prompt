@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.50';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.51';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -269,12 +269,14 @@ const esc = s => String(s).replace(/[&<>"']/g, c =>
   ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
 function fmtDuration(sec){
+  if(!(sec >= 0)) return '—';   // 手工编辑/截断的日志可能缺 durationSec：显示 NaN:NaN:NaN 不如一个破折号
   sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
   const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 function fmtDate(dateStr){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return '未知日期';
   const d = new Date(dateStr + 'T00:00:00');
   return `${dateStr} 周${WEEK[d.getDay()]}`;
 }
