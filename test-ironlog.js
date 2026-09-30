@@ -1516,6 +1516,21 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('没有 PR 时不显示该行（旧日志同样不显示）', !/破 PR/.test(String(elsById.get('summary-body').innerHTML)));
   T.closeSummary();
 
+  console.log('== 49. 文案不谎称单位/指标（v0.9.26）==');
+  T.state.exercises.test_hint = { ...mk('测试提示动作', 'weight') };
+  T.state.logs.push({ date: '2026-02-01', day: 'A', startedAt: 1, endedAt: 2, durationSec: 1, condition: null, exercises: [
+    { exerciseId: 'test_hint', note: null, sets: [tset({ weight: null, reps: 8 })] }
+  ] });
+  T.state.program.A = [{ exerciseId: 'test_hint', sets: [{ targetReps: 8 }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A;
+  T.switchView('today'); T.curPos = 0; T.render();
+  const hint49 = String(htmlTouchedHTML('ex-list'));
+  check('历史只有次数时提示「上次做过 ×8」而不是「上次最重」', hint49.includes('上次做过 ×8') && !hint49.includes('上次最重 ×8'));
+  handlers.get('weight-step|change')({ target: { value: '0.2' } });
+  check('步进提示不写死 kg 单位', String(elsById.get('toast').textContent) === '重量步进：2.5');
+  check('设置页标签不再声称步进是 kg', !html.includes('重量步进（kg）'));
+  T.state.logs.pop(); delete T.state.exercises.test_hint;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

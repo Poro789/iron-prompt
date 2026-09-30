@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.25';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.26';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -455,7 +455,8 @@ function lastHintHTML(exIdx, setIdx, exId, ex, set){
   }else{
     const w = lv.weight != null ? fmtW(lv.weight) + esc(ex.unit || 'kg') : '';
     const r = lv.reps != null ? '×' + lv.reps : '';
-    if(w || r) desc = '上次最重 ' + w + r;
+    if(w) desc = '上次最重 ' + w + r;
+    else if(r) desc = '上次做过 ' + r;   // 历史里没记重量（只填了次数），别谎称「最重」
   }
   if(!desc) return '';
   const when = lv.date ? ' <span class="fs-last-date">' + esc(String(lv.date).slice(5)) + '</span>' : '';
@@ -1821,7 +1822,7 @@ $('weight-step').addEventListener('change', e => {
   state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : round1(v);
   e.target.value = state.settings.weightStep;   // 非法输入被纠正后要把纠正结果写回输入框，否则显示 0.2 实际用 2.5
   save();
-  toast('重量步进：' + state.settings.weightStep + ' kg');
+  toast('重量步进：' + state.settings.weightStep);   // 步进是数字，按各动作自己的单位生效，不写死 kg
 });
 $('rest-sec').addEventListener('change', e => {
   const v = Math.round(parseFloat(e.target.value));
