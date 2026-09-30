@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.88';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.89';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1529,19 +1529,24 @@ function trendKind(t){
   if(top.duration != null) return 'duration';
   return 'reps';
 }
-/* 单次会话自己的指标类型（与 trendMetric 的优先级一致）。
+/* 单次会话自己的指标类型（与 trendMetric/trendKind 严格同序：weight 先）。
  * 动作改过类型（导入方案改了 time→weight 之类）时，历史里会混着秒和 kg；
  * 折线图只画与当前类型同指标的记录，秒不会被画进重量轴。导出/方向判定不受影响。 */
-const sessionKind = s => s.top.duration != null ? 'duration' : (s.top.weight != null ? 'weight' : 'reps');
+const sessionKind = s => s.top.weight != null ? 'weight' : (s.top.duration != null ? 'duration' : 'reps');
 function trendValText(v, kind){ return kind === 'weight' ? fmtW(v) : String(Math.round(v)); }
 function trendUnit(id, kind){
   if(kind !== 'weight') return kind === 'duration' ? '秒' : '次';
-  return (state.exercises[id] || {}).unit || '';
+  // 与分组标题、历史详情同口径：weight 类动作单位缺失按 kg 念，别出现「标题 kg、图例没单位」
+  return normUnit(id) || 'kg';
+}
+/* 单位归一：大小写/空格不敏感（AI 方案可能写 "LB"）——与 itemsVolume 同口径 */
+function normUnit(id){
+  return String((state.exercises[id] || {}).unit || '').trim().toLowerCase();
 }
 /* 单位混用的重量组：lb 先换算成 kg 再上同一条 Y 轴（与容量汇总同一口径）。
  * 单位一致的组保持原单位绘制，不换算。conv 只在混用组里为 true。 */
 function trendConvFactor(id, conv){
-  return conv && ((state.exercises[id] || {}).unit === 'lb') ? LB_TO_KG : 1;
+  return conv && normUnit(id) === 'lb' ? LB_TO_KG : 1;
 }
 /* 动作在计划里出现的先后顺序：用来稳定选线（练得一样多的时候按训练顺序排） */
 function programOrder(){
@@ -1622,7 +1627,7 @@ function buildTrendCharts(trends, maxLines){
      * 单位混用时全部换算成 kg 再画（30lb≈13.6kg 与 80kg 放同一条轴才可比），标题写 kg。 */
     let title = TREND_KIND_LABEL[kind], conv = false;
     if(kind === 'weight'){
-      const us = new Set(list.map(([id]) => (((state.exercises[id] || {}).unit || 'kg')).trim()));
+      const us = new Set(list.map(([id]) => normUnit(id) || 'kg'));
       const u = [...us];
       if(u.length > 1){ conv = true; title = '重量（kg）'; }
       else title = u[0] ? `重量（${esc(u[0])}）` : '重量';

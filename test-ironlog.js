@@ -137,7 +137,7 @@ const testScript = script + `
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
   buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA,
-  buildTrendCharts, trendKind, programOrder,
+  buildTrendCharts, trendKind, sessionKind, normUnit, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   get openNotes(){ return openNotes; },
@@ -2861,6 +2861,47 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('111 数据说明解释 volume 口径', p111.includes('volume 是该次正式组的负荷合计') && p111.includes('lb 已统一换算为 kg'));
   check('111 数据说明解释 direction 与 top 选组', p111.includes('direction 是应用基于该动作近史的判定') && p111.includes('最大重量→否则最长时间→否则最多次数'));
   delete T.state.exercises.e111; delete T.state.exercises.e111b; T.state.logs = [];
+
+  /* ============================================================
+   * 112. 趋势指标口径统一（v0.9.89）
+   * a) sessionKind 与 trendKind/trendMetric 同序（weight 先）——混合组不再被图内过滤剔除；
+   * b) 单位大小写归一："LB" 参与换算与分组；
+   * c) weight 类单位缺失时图例与标题一致念 kg。
+   * ============================================================ */
+  console.log('== 112. sessionKind 同序 / 单位归一 / 单位兜底（v0.9.89）==');
+  check('112 sessionKind 混合组按 weight（与 trendKind 同序）',
+    T.sessionKind({ top: { weight: 50, duration: 30 } }) === 'weight' &&
+    T.sessionKind({ top: { weight: null, duration: 30 } }) === 'duration' &&
+    T.sessionKind({ top: { weight: null, duration: null, reps: 8 } }) === 'reps');
+  const log112 = (id, w) => [{ date: '2026-02-02', day: 'A', startedAt: 1, exercises: [
+    { exerciseId: id, sets: [{ weight: w, reps: 10, done: true }] }] }];
+  const two112 = (id, w) => [{ date: '2026-02-01', day: 'A', startedAt: 1, exercises: [
+    { exerciseId: id, sets: [{ weight: w, reps: 10, done: true }] }] },
+    { date: '2026-02-02', day: 'A', startedAt: 2, exercises: [
+    { exerciseId: id, sets: [{ weight: w, reps: 10, done: true }] }] }];
+  // 混合组：LB + kg → 全部换算成 kg 画
+  T.state.exercises.e112a = { name: 'LB动作', mode: 'weight', unit: 'LB' };
+  T.state.exercises.e112b = { name: 'kg动作', mode: 'weight', unit: 'kg' };
+  T.state.logs = [
+    { date: '2026-02-01', day: 'A', startedAt: 1, exercises: [
+      { exerciseId: 'e112a', sets: [{ weight: 50, reps: 10, done: true }] },
+      { exerciseId: 'e112b', sets: [{ weight: 100, reps: 10, done: true }] }] },
+    { date: '2026-02-02', day: 'A', startedAt: 2, exercises: [
+      { exerciseId: 'e112a', sets: [{ weight: 50, reps: 10, done: true }] },
+      { exerciseId: 'e112b', sets: [{ weight: 100, reps: 10, done: true }] }] },
+  ];
+  const ch112 = T.buildTrendCharts(T.buildTrends(T.state.logs), 5);
+  check('112 LB 参与换算画在 kg 轴', /重量（kg）/.test(ch112) && ch112.includes('22.68'));
+  // 单一 LB 组：标题念 lb、不换算
+  T.state.exercises.e112b.unit = 'lb';
+  const ch112b = T.buildTrendCharts(T.buildTrends(T.state.logs), 5);
+  check('112 单位一致保持原单位', /重量（lb）/.test(ch112b) && !ch112b.includes('22.7') && ch112b.includes('50 lb'));
+  // weight 类 unit:null：图例与标题一致念 kg
+  T.state.exercises.e112b.unit = null;
+  const ch112c = T.buildTrendCharts(T.buildTrends(two112('e112b', 100)), 5);
+  check('112 单位缺失图例念 kg（与标题一致）', /重量（kg）/.test(ch112c) && ch112c.includes('100 kg'));
+  check('112 normUnit 归一大小写与空格', (() => { T.state.exercises.e112a.unit = ' Lb '; return T.normUnit('e112a') === 'lb'; })());
+  delete T.state.exercises.e112a; delete T.state.exercises.e112b; T.state.logs = [];
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
