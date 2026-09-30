@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.40';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.41';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -994,7 +994,8 @@ $('hist-list').addEventListener('click', async e => {
       startedAt: Date.now(),   // 时钟从本次编辑起算；原时间戳存在 keepMeta 里
       items: entry.exercises.map(it => ({ exerciseId: it.exerciseId, note: it.note ?? '', sets: it.sets.map(s => ({ ...s })) })),
       condition: entry.condition ?? null,
-      keepMeta: { date: entry.date, startedAt: entry.startedAt ?? null, endedAt: entry.endedAt ?? null, durationSec: entry.durationSec ?? null }
+      keepMeta: { date: entry.date, startedAt: entry.startedAt ?? null, endedAt: entry.endedAt ?? null, durationSec: entry.durationSec ?? null },
+      originalEntry: entry   // 放弃这次编辑时原记录要能原样放回
     };
     condDraft[day] = entry.condition ?? null;
     switchView('today'); switchDay(day);
@@ -1032,6 +1033,12 @@ $('toast').addEventListener('click', e => {
 /* 刚结束的那次记录：summary 里的「改一下」用它把记录放回编辑态，
  * 关掉小结或另开一次记录后就失效（不留悬挂引用）。 */
 let lastEnded = null;
+
+/* 日志按 startedAt 保持时间序：正常结束插在末尾；「改一下」的旧记录按原时间戳回到原位 */
+function insertLog(entry){
+  const ins = state.logs.findIndex(l => (l.startedAt ?? 0) > (entry.startedAt ?? 0));
+  if(ins >= 0) state.logs.splice(ins, 0, entry); else state.logs.push(entry);
+}
 
 function endSession(){
   const day = curDay();
@@ -1079,9 +1086,12 @@ function endSession(){
     condition: sess.condition ?? null,
     exercises
   };
-  // 按 startedAt 插入：正常结束插在末尾（行为不变）；改一下旧记录按原时间戳回到原位置
-  const ins = state.logs.findIndex(l => (l.startedAt ?? 0) > (entry.startedAt ?? 0));
-  if(ins >= 0) state.logs.splice(ins, 0, entry); else state.logs.push(entry);
+  // 改一下 → 放弃 → 撤销 → 再结束：原记录还留在日志里，先摘掉避免同一时间戳写两条
+  if(km){
+    const dup = state.logs.findIndex(l => (l.startedAt ?? -1) === (entry.startedAt ?? -2));
+    if(dup >= 0) state.logs.splice(dup, 1);
+  }
+  insertLog(entry);
   lastEnded = { day, entry, items: sess.items, startedAt: sess.startedAt, condition: sess.condition ?? null };
   state.sessions[day] = null;
   delete draft[day];
@@ -1098,6 +1108,9 @@ async function discardSession(){
   if(!ok) return;
   /* 误触「放弃」不该直接丢数据：和删除历史同一口径，快照后 6 秒内在提示条里可撤销 */
   const snap = { day, session: state.sessions[day], cond: condDraft[day] };
+  /* 放弃的是「改一下」的旧记录：原记录原样放回日志，编辑失败不该等于删掉数据 */
+  const orig = snap.session.originalEntry;
+  if(orig && !state.logs.some(l => (l.startedAt ?? -1) === (orig.startedAt ?? -2))) insertLog(orig);
   state.sessions[day] = null;
   delete draft[day];
   condDraft[day] = null;

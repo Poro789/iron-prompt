@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.41]
+
+### 修复
+- 放弃「改一下」的编辑时，原记录原样放回历史——编辑失败不再等于删掉数据；同一时间戳也不会重复写两条
+
 ## [0.9.40]
 
 ### 新增

@@ -1714,6 +1714,29 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = T.state.logs.filter(l => l !== back62 && l !== newerLog);
   delete T.state.sessions.A; delete T.state.drafts.A;
 
+  console.log('== 63. 放弃「改一下」的编辑时，原记录原样放回（v0.9.41）==');
+  const ts63 = 1700000111000;
+  const log63 = { date: '2023-11-16', day: 'A', startedAt: ts63, endedAt: ts63 + 1000, durationSec: 1, condition: null,
+    exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 70, reps: 5, done: true }] }] };
+  T.state.logs.push(log63);
+  T.switchView('history'); T.render();
+  clickEl('hist-list', btnOf({ act: 'reeditlog', ts: String(ts63), i: '0' }));
+  check('进入编辑态（日志里暂摘）', !!T.state.sessions.A && T.state.logs.indexOf(log63) === -1);
+  T.discardSession(); T.answerConfirm(true); await null;
+  check('放弃编辑后原记录原样放回', T.state.logs.indexOf(log63) !== -1 && T.state.logs[0].exercises[0].sets[0].weight === 70);
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('6 秒内撤销仍回到编辑态', !!T.state.sessions.A && T.state.sessions.A.items[0].sets[0].weight === 70);
+  T.state.sessions.A.items[0].sets[0].weight = 60;
+  T.endSession(); T.closeSummary();
+  const same63 = T.state.logs.filter(l => l.startedAt === ts63);
+  check('再结束不重复写两条（原条目被替换）', same63.length === 1 && same63[0].exercises[0].sets[0].weight === 60);
+  T.state.sessions.A = { startedAt: Date.now(), items: [{ exerciseId: 'test_pr', note: '', sets: [{ weight: 1, reps: 1, done: true }] }], condition: null };
+  const before63 = T.state.logs.length;
+  T.discardSession(); T.answerConfirm(true); await null;
+  check('普通记录的放弃不会往日志里塞东西', T.state.logs.length === before63);
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== ts63);
+  delete T.state.sessions.A; delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
