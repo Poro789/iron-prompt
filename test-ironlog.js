@@ -2044,6 +2044,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.clearTimer(); T.resetRest();
   delete T.state.exercises.test_rt; delete T.state.drafts.A; delete T.state.sessions.A;
 
+  console.log('== 80. 设置页「动作个人备注」（v0.9.58）==');
+  T.state.exercises.test_pn = { name: '测试动作', muscles: '', mode: 'weight', unit: 'kg', tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '原始备注' };
+  T.switchView('settings');
+  const sel80 = elsById.get('personal-ex');
+  check('动作下拉包含新动作', sel80 && sel80.innerHTML.includes('test_pn'));
+  handlers.get('personal-ex|change')({ target: { value: 'test_pn' } });
+  const note80 = elsById.get('personal-note');
+  check('选中动作后文本框显示已有备注', note80.value === '原始备注');
+  note80.value = '弹响就换正握';
+  handlers.get('personal-note|change')({ target: note80 });
+  check('保存写入动作定义', T.state.exercises.test_pn.personal === '弹响就换正握');
+  // 导入新计划：计划里没带 personal 字段时保留本地值（applyPlan 的合并规则）
+  const imp80 = T.importPlan(JSON.stringify({
+    exercises: { test_pn: { name: '测试动作', mode: 'weight' } },
+    program: { A: [{ exerciseId: 'test_pn', sets: [{ type: 'work', weight: 10, reps: 10 }] }] }
+  }));
+  check('导入计划后个人备注保留', imp80.ok && T.state.exercises.test_pn.personal === '弹响就换正握');
+  note80.value = '   ';
+  handlers.get('personal-note|change')({ target: note80 });
+  check('空白提交视为清除', T.state.exercises.test_pn.personal === '');
+  delete T.state.exercises.test_pn; delete T.state.lastImport;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

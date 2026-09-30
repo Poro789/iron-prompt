@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.57';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.58';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1998,10 +1998,31 @@ function renderSettings(){
   $('warmup-rest-sec').value = state.settings.warmupRestSec;
   $('rest-note').value = state.settings.restNote || '';
   $('profile-bg').value = (state.profile && state.profile.background) || '';
+  renderPersonalPicker();
   /* 只有存在快照时才显示「撤销上次导入」（只留最近一次） */
   const undoBtn = $('undo-import');
   if(undoBtn) undoBtn.style.display = state.lastImport ? '' : 'none';
 }
+/* 设置页「动作个人备注」：编辑 state.exercises[id].personal（卡片上显示，导入计划时保留本地值）。
+ * 此前该字段只能靠 AI 计划写入，用户自己没有任何入口能记。 */
+let personalExId = '';
+function renderPersonalPicker(){
+  const sel = $('personal-ex'); if(!sel) return;
+  const ids = Object.keys(state.exercises)
+    .sort((a, b) => String(state.exercises[a].name || a).localeCompare(String(state.exercises[b].name || b), 'zh'));
+  if(!ids.includes(personalExId)) personalExId = ids[0] || '';
+  sel.innerHTML = ids.map(id =>
+    `<option value="${esc(id)}"${id === personalExId ? ' selected' : ''}>${esc(state.exercises[id].name || id)}</option>`).join('');
+  $('personal-note').value = personalExId ? (state.exercises[personalExId].personal || '') : '';
+}
+$('personal-ex').addEventListener('change', e => { personalExId = e.target.value; renderPersonalPicker(); });
+$('personal-note').addEventListener('change', e => {
+  if(!personalExId || !state.exercises[personalExId]) return;
+  state.exercises[personalExId].personal = e.target.value.trim();
+  e.target.value = state.exercises[personalExId].personal;
+  save();
+  toast(state.exercises[personalExId].personal ? '个人备注已保存' : '个人备注已清除');
+});
 $('weight-step').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
   state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : round1(v);

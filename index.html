@@ -120,6 +120,15 @@
       <textarea id="profile-bg" class="wide-area" placeholder="身高体重、体态问题、目标、训练水平、器械范围、伤病备注…"></textarea>
     </div>
     <div class="set-card">
+      <h3>动作个人备注</h3>
+      <p>自己记的提醒（如「底部弹响就降重」），会显示在该动作的训练卡片上；导入新计划时不会被覆盖。</p>
+      <div class="set-row2" style="margin-top:10px">
+        <label for="personal-ex">选择动作</label>
+        <select id="personal-ex"></select>
+      </div>
+      <textarea id="personal-note" class="wide-area" placeholder="例：超过 12kg 换正握；第 3 组前先做一组热身"></textarea>
+    </div>
+    <div class="set-card">
       <h3>危险区</h3>
       <p>清除全部数据（日志、计划、动作库、进行中的记录），不可恢复。</p>
       <button class="danger-btn" onclick="clearAll()">清除全部数据</button>
