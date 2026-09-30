@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.77';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.78';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -385,6 +385,16 @@ function hideToast(){
 /* 第二个参数传函数时，提示条里多一个「撤销」按钮，并停留更久（6s） */
 function toast(msg, action){
   const t = $('toast');
+  if(typeof action !== 'function' && toastAction){
+    // 待撤销的删除还没过期时来了个普通提示（复制成功、保存失败…）：
+    // 不能把它悄悄吞掉——吞掉后删除就再也救不回来了。保留撤销按钮，只换文案、续期。
+    t.innerHTML = esc(msg) + '<button class="toast-act" data-act="undo">撤销</button>';
+    t.classList.add('with-act');
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 6000);
+    return;
+  }
   toastAction = typeof action === 'function' ? action : null;
   t.classList.remove('with-act');
   if(toastAction){

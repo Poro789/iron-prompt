@@ -1538,7 +1538,9 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const hint49 = String(htmlTouchedHTML('ex-list'));
   check('历史只有次数时提示「上次做过 ×8」而不是「上次最重」', hint49.includes('上次做过 ×8') && !hint49.includes('上次最重 ×8'));
   handlers.get('weight-step|change')({ target: { value: '0.2' } });
-  check('步进提示不写死 kg 单位', String(elsById.get('toast').textContent) === '重量步进：2.5');
+  // 提示文案走两个通道：无待撤销时是 textContent；有（测试残留的）待撤销时保留撤销按钮、文案进 innerHTML（v0.9.78）
+  const toast49 = String(elsById.get('toast').textContent) + String(htmlTouchedHTML('toast') || '');
+  check('步进提示不写死 kg 单位', toast49.includes('重量步进：2.5') && !toast49.includes('重量步进：2.5kg'));
   check('设置页标签不再声称步进是 kg', !html.includes('重量步进（kg）'));
   T.state.logs.pop(); delete T.state.exercises.test_hint;
 
@@ -2558,6 +2560,31 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   // 正常备份恢复不受影响
   const bk100 = T.buildBackup();
   check('100 正常备份仍可恢复', T.parseBackup(JSON.stringify(bk100)).ok === true && bk100.version === 1);
+
+  /* ============================================================
+   * 101. 普通提示不吞掉待撤销的「撤销」（v0.9.78）
+   * toast() 无队列：旧逻辑里任何新提示都会覆盖 toastAction——
+   * 删除记录后先来一个「已复制」，撤销按钮就悄悄没了，删除再也救不回来。
+   * ============================================================ */
+  console.log('== 101. 普通提示不吞掉待撤销（v0.9.78）==');
+  let undo101 = 0;
+  T.toast('已删除这次记录', () => { undo101++; });
+  T.toast('已复制');
+  check('101 撤销按钮仍在', /data-act="undo"/.test(htmlTouchedHTML('toast')));
+  check('101 新提示更新了文案', String(htmlTouchedHTML('toast')).includes('已复制'));
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('101 撤销仍可点且生效', undo101 === 1);
+  T.toast('只是一个提示');
+  // 真实 DOM 里 textContent 赋值会替换全部子节点（按钮消失）；stub 不建模这一点，改从行为断言：无待撤销时点撤销不生效
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('101 无待撤销时普通提示不带按钮', undo101 === 1);
+  let undo101b = 0, undo101c = 0;
+  T.toast('删除A', () => { undo101b++; });
+  T.toast('删除B', () => { undo101c++; });
+  T.toast('已复制');
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('101 新动作替换旧动作（最后一个操作优先）', undo101c === 1 && undo101b === 0);
+  T.toast('清场');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
