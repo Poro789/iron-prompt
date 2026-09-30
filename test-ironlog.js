@@ -2186,6 +2186,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.clearTimer(); T.resetRest();
   delete T.state.drafts.A; delete T.state.drafts.B; delete T.state.exercises.l86a; delete T.state.exercises.l86b;
 
+  /* ============================================================
+   * 87. 手工编辑备份的日志加固：缺 sets 的动作条目丢弃、字符串数值归一化（v0.9.64）
+   * ============================================================ */
+  const l87 = { version: 1, logs: [{
+    date: '2026-01-01', day: 'A', startedAt: 111000, condition: null,
+    exercises: [
+      { exerciseId: 'goblet_squat', sets: [{ done: true, weight: '12.5', reps: '10', type: 'work' }] },
+      { exerciseId: 'rdl', sets: 'not-an-array' },
+      { exerciseId: 'wall_angel', sets: [{ done: true, weight: 'abc', reps: 8 }] }
+    ]
+  }] };
+  const m87 = T.migrate(JSON.parse(JSON.stringify(l87)));
+  const ex87 = m87.logs[0].exercises;
+  check('sets 不是数组的动作条目被丢弃', ex87.length === 2 && ex87.every(it => it.exerciseId !== 'rdl'));
+  check('字符串形式的数值字段转成数字', ex87[0].sets[0].weight === 12.5 && ex87[0].sets[0].reps === 10);
+  check('转不了的非数字串归 null（等同未填）', ex87[1].sets[0].weight === null);
+  check('归一化后容量是实数而不是 NaN', T.sessionVolume(m87.logs[0]) === 125);
+  const tr87 = T.buildTrends(m87.logs);
+  check('趋势不被字符串重量污染', tr87.goblet_squat && tr87.goblet_squat.sessions[0].top.weight === 12.5);
+  const m87b = T.migrate({ version: 1, logs: [], sessions: { A: { startedAt: 1, items: [{ exerciseId: 'goblet_squat', sets: [{ done: true, weight: '20', reps: '5' }] }] }, B: null } });
+  check('进行时会话里的字符串数值同样处理', m87b.sessions.A.items[0].sets[0].weight === 20 && m87b.sessions.A.items[0].sets[0].reps === 5);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

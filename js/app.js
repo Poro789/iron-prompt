@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.63';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.64';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -177,6 +177,17 @@ function normalizeItem(raw){
   }
   return { section, exerciseId: raw.exerciseId, repsRange, sets };
 }
+/* 已存日志/会话里的数值字段：手工编辑备份可能把重量写成字符串（"12"），
+ * 容量与趋势的乘法会把 NaN 传染给整次训练；能转的转成数，转不了的归 null（等同未填）。 */
+function coerceSetNums(sets){
+  if(!Array.isArray(sets)) return;
+  for(const s of sets){
+    if(!s || typeof s !== 'object') continue;
+    for(const k of ['weight', 'reps', 'duration', 'rpe']){
+      if(s[k] != null && typeof s[k] !== 'number') s[k] = numOrNull(s[k]);
+    }
+  }
+}
 function migrate(d){
   if(!d.settings) d.settings = {};
   if(d.settings.restNote === undefined) d.settings.restNote = '';
@@ -188,8 +199,14 @@ function migrate(d){
   if(typeof d.settings.weightStep !== 'number' || !(d.settings.weightStep > 0)) d.settings.weightStep = 2.5;
   if(!Array.isArray(d.logs)) d.logs = [];
   /* 手工编辑/截断的备份里混进坏条目（null、缺 exercises）会让历史/趋势/导出整页崩。
-   * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。 */
+   * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。
+   * 动作条目再筛一层：sets 不是数组的会在 reduce 时崩，直接丢弃该动作；
+   * 组里的非数值字段顺手归一化（见 coerceSetNums）。 */
   d.logs = d.logs.filter(l => l && typeof l === 'object' && Array.isArray(l.exercises));
+  d.logs.forEach(l => {
+    l.exercises = l.exercises.filter(it => it && typeof it === 'object' && Array.isArray(it.sets));
+    l.exercises.forEach(it => coerceSetNums(it.sets));
+  });
   if(!d.profile) d.profile = { background: '' };
   /* profile 被手改成字符串（有人直接在备份里写背景）：保住内容，形状纠正 */
   else if(typeof d.profile !== 'object') d.profile = { background: String(d.profile) };
@@ -221,6 +238,7 @@ function migrate(d){
       d.sessions[day].items.forEach(it => (it.sets || []).forEach(s => {
         if(s.done === null || s.done === undefined) s.done = false;
       }));
+      d.sessions[day].items.forEach(it => coerceSetNums(it.sets));
     }
   }
   return d;
