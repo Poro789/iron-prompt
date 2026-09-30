@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.52';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.53';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1128,7 +1128,8 @@ async function discardSession(){
   const orig = snap.session.originalEntry;
   if(orig && !state.logs.some(l => (l.startedAt ?? -1) === (orig.startedAt ?? -2))) insertLog(orig);
   state.sessions[day] = null;
-  delete draft[day];
+  // 「改一下」的旧记录被放弃：当日草稿属于今天的新训练，不是这条旧记录的，别清掉（与 endSession 同一口径）
+  if(!orig) delete draft[day];
   condDraft[day] = null;
   curPos = 0;
   state.ui.curPos[day] = 0;   // 放弃后回到第一组，别把旧位置留着

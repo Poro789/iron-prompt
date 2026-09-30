@@ -1899,6 +1899,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const m73b = T.migrate({ ...bare73, profile: null });
   check('缺失 profile 补默认空背景', m73b.profile && m73b.profile.background === '');
 
+  console.log('== 74. 放弃「改一下」的旧记录不清当日草稿（v0.9.53）==');
+  const ts74 = 1700000740000;
+  const log74 = { date: '2023-11-14', day: 'A', startedAt: ts74, endedAt: ts74 + 60000, durationSec: 60, condition: null,
+    exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 40, reps: 5, done: true }] }] };
+  T.state.sessions.A = null;
+  T.state.logs.push(log74);
+  T.state.drafts.A = [{ exerciseId: 'test_pr', note: '今天的笔记74', sets: [{ weight: null, reps: null, done: false }] }];
+  T.switchView('history'); T.render();
+  clickEl('hist-list', btnOf({ act: 'reeditlog', ts: String(ts74), i: '0' }));
+  check('进入旧记录编辑态', !!T.state.sessions.A && T.state.sessions.A.originalEntry === log74);
+  T.discardSession(); T.answerConfirm(true); await null;
+  check('放弃后原记录放回日志', T.state.logs.includes(log74));
+  check('放弃旧记录不动当日草稿', Array.isArray(T.state.drafts.A) && T.state.drafts.A[0].note === '今天的笔记74');
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('撤销回到旧记录编辑态', !!T.state.sessions.A && T.state.sessions.A.originalEntry === log74);
+  T.state.sessions.A = null;
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== ts74);
+  delete T.state.drafts.A; delete T.state.sessions.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
