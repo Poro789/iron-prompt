@@ -2754,6 +2754,46 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.condDraft.A = null;
   delete T.state.exercises.e107; delete T.state.exercises.e107b;
 
+  /* ============================================================
+   * 108. 训练卡里的回车推进流（v0.9.85）
+   * 重量框 Enter → 先提交再聚焦次数框；次数/时长框 Enter → 先提交再点完成。
+   * 用 patchTarget 桩 document.querySelector：处理器按分支只查一种选择器，逐条断言。
+   * ============================================================ */
+  console.log('== 108. Enter：重量→次数跳转；次数→完成 ==');
+  T.state.exercises.e108 = { name: '回车流', mode: 'weight', unit: 'kg' };
+  T.state.program.A = [{ exerciseId: 'e108', sets: [{ weight: 5, reps: 5 }] }];
+  T.state.program.B = [];
+  T.state.settings.lastDay = 'A';
+  delete T.state.drafts.A;
+  const mkInp108 = f => ({
+    dataset: { ex: '0', set: '0', f }, value: '',
+    classList: { contains: () => false },
+    closest(sel){ return /^input(\.fs-input)?$/.test(sel) ? this : null; },
+    dispatchEvent(ev){ if(ev.type === 'change') handlers.get('ex-list|change')({ target: this }); },
+    focus(){ this.focused = true; }
+  });
+  const key108 = inp => handlers.get('ex-list|keydown')({ key: 'Enter', target: inp, preventDefault(){} });
+  const wInp108 = mkInp108('weight'); wInp108.value = '50';
+  const rInp108 = mkInp108('reps');
+  patchTarget = { matches: sel => sel.includes('data-f="reps"'), node: rInp108 };
+  key108(wInp108);
+  const it108 = T.state.drafts.A && T.state.drafts.A[0];
+  check('108 重量框 Enter：先提交 50', !!it108 && it108.sets[0].weight === 50);
+  check('108 重量框 Enter：聚焦次数框而不是完成', rInp108.focused === true && it108.sets[0].done !== true);
+  let doneClicked108 = false;
+  patchTarget = { matches: sel => sel.includes('fs-done'), node: { click(){ doneClicked108 = true; } } };
+  const rInp2 = mkInp108('reps'); rInp2.value = '8';
+  key108(rInp2);
+  check('108 次数框 Enter：提交 8 并点完成',
+    T.state.drafts.A[0].sets[0].reps === 8 && doneClicked108 === true);
+  // 非 Enter 键与非输入框都不动作
+  doneClicked108 = false;
+  handlers.get('ex-list|keydown')({ key: 'a', target: mkInp108('reps'), preventDefault(){} });
+  handlers.get('ex-list|keydown')({ key: 'Enter', target: { closest: () => null }, preventDefault(){} });
+  check('108 其他按键/非训练输入框不触发', doneClicked108 === false);
+  patchTarget = null;
+  delete T.state.exercises.e108; delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

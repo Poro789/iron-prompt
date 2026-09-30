@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.84';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.85';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1068,6 +1068,24 @@ $('ex-list').addEventListener('change', e => {
   // 改数可能让 🔥 出现或消失（徽章在 .fs-sub 里）：状态变了就重画卡片。
   // change 在失焦/回车时触发，焦点已经离开输入框，重画不会打断输入。
   if(set.done === true && (set.isPR === true) !== wasPR) renderToday();
+});
+
+/* 回车推进流（桌面/PWA 常见）：重量框回车 → 跳到次数框；次数/时长框回车 → 完成这一组。
+ * 先按 change 委托同一路径提交当前输入，再跳转或完成——否则 Enter 抢在失焦提交前，
+ * 完成的是旧值。移动端数字键盘通常显示「下一项」，不触发 Enter，不会添乱。 */
+$('ex-list').addEventListener('keydown', e => {
+  if(e.key !== 'Enter') return;
+  const inp = e.target.closest && e.target.closest('input.fs-input');
+  if(!inp) return;
+  e.preventDefault();
+  inp.dispatchEvent(new Event('change', { bubbles:true }));
+  const ex = inp.dataset.ex, set = inp.dataset.set;
+  const next = inp.dataset.f === 'weight'
+    ? document.querySelector(`#ex-list .fs-input[data-ex="${ex}"][data-set="${set}"][data-f="reps"]`)
+    : null;
+  if(next){ next.focus(); return; }
+  const done = document.querySelector(`#ex-list .fs-done[data-ex="${ex}"][data-set="${set}"]`);
+  if(done) done.click();
 });
 
 /* 滑动切组（touch 手势：左滑=下一组，右滑=上一组） */
