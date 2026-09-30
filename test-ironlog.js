@@ -1817,6 +1817,8 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const log67 = { date: '2023-11-14', day: 'A', startedAt: ts67, endedAt: ts67 + 60000, durationSec: 60, condition: null,
     exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 40, reps: 5, done: true }] }] };
   T.state.logs.push(log67);
+  // 草稿必须与当前计划的动作 id 对齐（v0.9.98 起换动作会重建草稿），fixture 自带计划
+  T.state.program.A = [{ section: '', exerciseId: 'test_pr', repsRange: '', sets: [{ type: 'work', weight: null, reps: null, duration: null, rpe: null, rpeLabel: '', side: null }] }];
   T.state.drafts.A = [{ exerciseId: 'test_pr', note: '今天肩膀有点响', sets: [{ weight: null, reps: null, done: false }] }];
   T.switchView('history'); T.render();
   clickEl('hist-list', btnOf({ act: 'reeditlog', ts: String(ts67), i: '0' }));
@@ -1923,7 +1925,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 40, reps: 5, done: true }] }] };
   T.state.sessions.A = null;
   T.state.logs.push(log74);
-  T.state.drafts.A = [{ exerciseId: 'test_pr', note: '今天的笔记74', sets: [{ weight: null, reps: null, done: false }] }];
+  T.state.drafts.A = [{ exerciseId: 'test47', note: '今天的笔记74', sets: [{ weight: null, reps: null, done: false }] }];
   T.switchView('history'); T.render();
   clickEl('hist-list', btnOf({ act: 'reeditlog', ts: String(ts74), i: '0' }));
   check('进入旧记录编辑态', !!T.state.sessions.A && T.state.sessions.A.originalEntry === log74);
@@ -3155,6 +3157,61 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     ch120.includes('重量（kg）') && ch120.includes('15.88 kg') && !/>35 kg</.test(ch120));
   delete T.state.exercises.e120; delete T.state.exercises.e120b; delete T.state.exercises.e120c;
   T.state.logs = [];
+
+  /* ============================================================
+   * 121. 审计 #9：导入数值上限 / sets 封顶 / 草稿与计划对齐 / 尾逗号兜底 / 导入守卫与提示（v0.9.98）
+   * F2 1e400→Infinity 当场拒收；F3 sets 数组封顶 100 + targetLabel 不展开；F4 同数不同 id 重建草稿；
+   * F1 另一日导入不得改正在记录动作的类型/单位；F5 撤销丢弃草稿要说明；
+   * F6 尾逗号只作兜底（不动字符串）；F7 解析失败中文文案；F8 步进框允许 1.25。
+   * ============================================================ */
+  console.log('== 121. 导入数值/结构上限 + 草稿对齐 + 导入撤销提示（v0.9.98）==');
+  T.state.exercises = { e121: { name: '动作121', mode: 'weight', unit: 'kg' } };
+  const plan121 = w => '{"exercises":{"e121":{"name":"动作121","mode":"weight","unit":"kg"}},"program":{"A":[{"exerciseId":"e121","sets":[{"weight":' + w + ',"reps":10}]}]}}';
+  const r121a = T.importPlan(plan121('1e400'));
+  check('121 导入 1e400（Infinity）被拒并说清原因', !r121a.ok && /有限数字/.test(r121a.error));
+  check('121 导入超 1e6 数值被拒', !T.importPlan(plan121('2e6')).ok);
+  const m121 = T.migrate({ version: 1, logs: [{ date: '2026-01-01', day: 'A', exercises: [
+    { exerciseId: 'e121', sets: [{ weight: 1e400, reps: 5, done: true }] }] }] });
+  check('121 手编备份里的 1e400 恢复时归 null（不再保存后静默消失）', m121.logs[0].exercises[0].sets[0].weight === null);
+  const big121 = JSON.stringify({ exercises: { e121: { name: '动作121', mode: 'weight', unit: 'kg' } },
+    program: { A: [{ exerciseId: 'e121', sets: Array.from({ length: 150 }, () => ({ reps: 8 })) }] } });
+  const r121c = T.importPlan(big121);
+  check('121 sets 数组同样封顶 100 组', r121c.ok && T.state.program.A[0].sets.length === 100);
+  check('121 百组目标标签正常（reduce 极值，不再撞 Math.min 展开上限）', T.targetLabel(T.getItems('A')[0]) === '100 × 8');
+  T.state.drafts.A = null;
+  T.state.exercises.e121b = { name: '替换动作', mode: 'weight', unit: 'kg' };
+  T.getItems('A');
+  T.state.program.A = [{ exerciseId: 'e121b', sets: [{ reps: 8 }] }];
+  check('121 同组数但换了动作 id：草稿按新计划重建（名实不错位）', T.getItems('A')[0].exerciseId === 'e121b');
+  T.state.drafts.A = null;
+  T.state.sessions.A = { startedAt: 1, items: [{ exerciseId: 'e121b', sets: [{ weight: 10, reps: 10, done: true }] }] };
+  const planB121 = JSON.stringify({ exercises: { e121b: { name: '替换动作', mode: 'time', unit: null } },
+    program: { B: [{ exerciseId: 'e121b', sets: [{ duration: 30 }] }] } });
+  const r121d = T.importPlan(planB121);
+  check('121 只含另一日的导入不能改掉正在记录动作的类型', !r121d.ok && /正在记录的动作会被这次导入改成类型/.test(r121d.error));
+  const planU121 = JSON.stringify({ exercises: { e121b: { name: '替换动作', mode: 'weight', unit: 'lb' } },
+    program: { B: [{ exerciseId: 'e121b', sets: [{ weight: 30 }] }] } });
+  check('121 正在记录的动作换单位同样被拦', !T.importPlan(planU121).ok && /单位/.test(T.importPlan(planU121).error));
+  T.state.sessions.A = null;
+  const r121e = T.importPlan(planU121);
+  // importPlan 本身不拍快照（只有界面 doImport 流程会），撤销测试需手工构造 lastImport
+  T.state.lastImport = { at: Date.now(),
+    program: { A: JSON.parse(JSON.stringify(T.state.program.A)), B: [] },
+    exercises: JSON.parse(JSON.stringify(T.state.exercises)) };
+  const draft121 = T.getItems('A');
+  draft121[0].note = '刚写的备注';
+  T.undoImport();
+  check('121 撤销导入丢弃已填草稿时在提示里说明', String(elsById.get('toast').textContent).includes('已丢弃未确认草稿'));
+  const keep121 = T.parsePlanInput('{"exercises":{"e121":{"name":"a, } b","mode":"weight"}},"program":{"A":[{"exerciseId":"e121","sets":[{"reps":8}]}]}}');
+  check('121 合法 JSON 里字符串含 ", }" 原样保留（兜底正则不先动原文）', keep121.ok && keep121.data.exercises.e121.name === 'a, } b');
+  const ok121 = T.parsePlanInput('{"exercises":{"e121":{"name":"a","mode":"weight"}},"program":{"A":[{"exerciseId":"e121","sets":[{"reps":8}], }],},}');
+  check('121 尾逗号只在解析失败后作兜底', ok121.ok && ok121.data.program.A[0].exerciseId === 'e121');
+  const bad121 = T.parsePlanInput('');
+  check('121 空输入给可操作的中文说明', !bad121.ok && bad121.error.includes('请检查是否完整粘贴'));
+  check('121 重量步进输入框允许 1.25 微片', /id="weight-step"[^>]*step="0\.25"/.test(html));
+  T.state.sessions.A = null; T.state.sessions.B = null;
+  T.state.drafts.A = null; T.state.drafts.B = null;
+  T.state.lastImport = null; T.state.logs = []; T.state.program = { A: [], B: [] }; T.state.exercises = {};
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

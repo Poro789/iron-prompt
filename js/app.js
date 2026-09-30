@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.97';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.98';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -150,8 +150,10 @@ const SEED = {
 function numOrNull(v){
   if(v === null || v === undefined || v === '') return null;
   const n = Number(v);
-  // 重量/次数/时长/RPE 都没有负数语义：负值等同未填，否则会以负贡献混进容量与趋势
-  return isNaN(n) || n < 0 ? null : n;
+  // 重量/次数/时长/RPE 都没有负数语义：负值等同未填，否则会以负贡献混进容量与趋势。
+  // 非有限（手编备份里的 1e400 → Infinity）同样等同未填：保存时 JSON.stringify 会把它
+  // 静默变成 null，刷新后「凭空消失」，不如归一时就归 null。上限与手动输入路径同口径（1e6）。
+  return !Number.isFinite(n) || n < 0 || n > 1e6 ? null : n;
 }
 function normalizeSet(s){
   s = s || {};
@@ -173,7 +175,9 @@ function normalizeItem(raw){
     : (typeof raw.reps === 'string' ? raw.reps : '');
   let sets;
   if(Array.isArray(raw.sets)){
-    sets = raw.sets.map(normalizeSet);
+    // 与数字分支同口径封顶 100 组：超长数组（手编/失控 AI 输出）会让每次渲染的
+    // 目标标签、预填映射都在无训练意义的组上打转，Math.min 展开还会炸实参上限。
+    sets = raw.sets.slice(0, 100).map(normalizeSet);
   }else{
     // 手编备份的 sets 可能是天文数字：1e9 会当场耗尽堆内存、2^32 直接 RangeError（整个数据被静默重置）。
     // 封顶 100 组——再多也没有训练意义，导入路径本来也要求 sets 是数组。
@@ -189,7 +193,9 @@ function coerceSetNums(sets){
   for(const s of sets){
     if(!s || typeof s !== 'object') continue;
     for(const k of ['weight', 'reps', 'duration', 'rpe']){
-      if(s[k] != null && typeof s[k] !== 'number') s[k] = numOrNull(s[k]);
+      // 非数字走 numOrNull；数字里的非有限值（手编备份 1e400→Infinity）也归一：
+      // 它在保存时会被 JSON.stringify 静默写成 null，留着只会「刷新后凭空消失」
+      if(s[k] != null && (typeof s[k] !== 'number' || !Number.isFinite(s[k]))) s[k] = numOrNull(s[k]);
     }
   }
 }
@@ -603,9 +609,12 @@ function lastHintHTML(exIdx, setIdx, exId, ex, set){
 /* 当前日期的可编辑 items：有进行中记录用记录，否则用草稿（计划规格优先，上次数值兜底） */
 function getItems(day){
   if(state.sessions[day]) return state.sessions[day].items;
-  /* 草稿现在会存盘，所以要先确认它和当前计划还对得上：组数不一致（计划被改过、
-   * 或数据来自更早的版本）就丢掉重建，否则会出现「对着不存在的组编辑」。 */
-  if(draft[day] && draft[day].length !== (state.program[day] || []).length) delete draft[day];
+  /* 草稿现在会存盘，所以要先确认它和当前计划还对得上：动作序列不一致（计划被改过、
+   * 手改备份换了动作 id、或数据来自更早的版本）就丢掉重建，
+   * 否则会出现「对着不存在的组编辑」，或卡片数值与标题里的动作名错位。 */
+  const plan = state.program[day] || [];
+  if(draft[day] && (draft[day].length !== plan.length ||
+     draft[day].some((it, i) => it.exerciseId !== plan[i].exerciseId))) delete draft[day];
   if(!draft[day]){
     draft[day] = (state.program[day] || []).map(p => {
       const lv = lastValues(p.exerciseId);
@@ -649,12 +658,13 @@ function targetLabel(item){
   const warm = warmOnly ? 0 : item.sets.length - work.length;
   let core;
   if(work.length && work.every(s => s.duration != null)){
-    const ds = work.map(s => s.duration);
-    const dmin = Math.min(...ds), dmax = Math.max(...ds);
+    // reduce 求极值而不是 Math.min(...)：组数大时展开实参会撞 V8 参数上限（RangeError）
+    const dmin = work.reduce((m, s) => Math.min(m, s.duration), Infinity);
+    const dmax = work.reduce((m, s) => Math.max(m, s.duration), -Infinity);
     core = work.length + ' × ' + (dmin === dmax ? dmin : dmin + '-' + dmax) + 's';
   }else if(work.length && work.every(s => s.reps != null)){
-    const rs = work.map(s => s.reps);
-    const rmin = Math.min(...rs), rmax = Math.max(...rs);
+    const rmin = work.reduce((m, s) => Math.min(m, s.reps), Infinity);
+    const rmax = work.reduce((m, s) => Math.max(m, s.reps), -Infinity);
     core = work.length + ' × ' + (rmin === rmax ? rmin : rmin + '-' + rmax);
   }else if(item.repsRange){
     core = work.length + ' × ' + item.repsRange;
@@ -1780,9 +1790,26 @@ function validatePlan(d){
         for(const k of ['weight','reps','duration','rpe']){
           if(s[k] !== null && s[k] !== undefined && typeof s[k] !== 'number')
             return `program.${day}[${i}].sets[${j}].${k} 必须是数字或 null`;
+          // 1e400 这类字面量 JSON.parse 出 Infinity：过输入框、假 PR，保存后还会静默变 null——当场拒收
+          if(typeof s[k] === 'number' && (!Number.isFinite(s[k]) || s[k] > 1e6))
+            return `program.${day}[${i}].sets[${j}].${k} 必须是有限数字（≤1000000）`;
         }
       }
     }
+  }
+  return null;
+}
+/* 导入会改变某动作的类型/单位吗？（exercises map 是全局套用的：只含另一日的导入
+ * 也能改到正在记录的动作。会话的字段是按旧 mode 填的，之后按新 mode 念会张冠李戴：
+ * 10kg×10 的残留字段在历史里显示成「30 秒」、趋势把旧单位数值画进新单位轴。） */
+function metricChange(d, id){
+  const ex = d.exercises[id];
+  if(!ex) return null;
+  const old = state.exercises[id] || {};
+  if(ex.mode && ex.mode !== (old.mode || 'weight')) return `类型（${old.mode || 'weight'}→${ex.mode}）`;
+  if(ex.unit !== undefined){
+    const nu = String(ex.unit ?? '').trim().toLowerCase(), ou = String(old.unit ?? '').trim().toLowerCase();
+    if(nu !== ou) return `单位（${ou || '无'}→${nu || '无'}）`;
   }
   return null;
 }
@@ -1791,6 +1818,14 @@ function planSessionConflict(d){
   for(const day of ['A','B']){
     if(d.program[day] !== undefined && state.sessions[day])
       return `${day} 日有进行中的记录，请先结束或放弃后再导入`;
+  }
+  for(const day of ['A','B']){
+    const sess = state.sessions[day];
+    if(!sess) continue;
+    for(const id of new Set(sess.items.map(it => it.exerciseId))){
+      const ch = metricChange(d, id);
+      if(ch) return `${day} 日正在记录的动作会被这次导入改成${ch}，请先结束或放弃当天记录再导入`;
+    }
   }
   return null;
 }
@@ -1825,9 +1860,11 @@ function applyPlan(d){
     // 草稿会被整体删掉重建。若里面有用户真实产生过的内容（确认过的组、手写备注），
     // 必须在导入结果里说一声，否则换了计划数量后用户回头才发现「刚才填的东西没了」。
     // 只看 done/notes：新建草稿本身带着上次数值的预填，那不是用户输入，丢了不算损失。
+    // 例外：草稿引用的动作会被这次导入改类型/单位——旧数值按新口径念会张冠李戴，
+    // 这种丢弃要说明（哪怕内容只是预填），并入 dirty 判定。
     const dr = draft[day];
     const draftDirty = Array.isArray(dr) && dr.some(it =>
-      (it.note || '').trim() || (it.sets || []).some(s => s.done === true));
+      (it.note || '').trim() || (it.sets || []).some(s => s.done === true) || metricChange(d, it.exerciseId));
     state.program[day] = d.program[day].map(normalizeItem);
     delete draft[day];
     state.ui.curPos[day] = 0;   // 计划换了，停在第几组可能已经不存在
@@ -1844,11 +1881,14 @@ function applyPlan(d){
   return { ok:true, summary:`导入完成：${daySummary.join('，')}；动作库 ${exCount} 项` };
 }
 function parsePlanInput(text){
-  let t = stripFences(String(text || ''));
-  t = t.replace(/,\s*([}\]])/g, '$1'); // 容忍多余尾逗号
+  const t = stripFences(String(text || ''));
   let data;
+  // 先原样解析：尾逗号修复会连字符串里的「, }」一起删逗号，只作失败后的兜底重试
   try{ data = JSON.parse(t); }
-  catch(e){ return { ok:false, error:'JSON 解析失败：' + e.message }; }
+  catch(e1){
+    try{ data = JSON.parse(t.replace(/,\s*([}\]])/g, '$1')); }
+    catch(e){ return { ok:false, error:'JSON 解析失败——请检查是否完整粘贴、引号与逗号是否配对（' + e.message + '）' }; }
+  }
   const verr = validatePlan(data);
   if(verr) return { ok:false, error:'校验失败：' + verr };
   return { ok:true, data };
@@ -1878,6 +1918,13 @@ function undoImport(){
   // 按表的归属日判断（不是当前查看的日）：归属日有进行中记录时表还有可写的地方，不该误清。
   if(timerFor && !state.sessions[timerForDay]) clearTimer();
   state.program = snap.program;
+  /* 与 applyPlan 同政策：草稿里用户真实产生过的内容（确认过的组、手写备注）随撤销丢弃时
+   * 要在结果里说一声——撤销按钮常驻，导入后填了东西再撤销完全在预期路径上。 */
+  const undoDraftDirty = ['A','B'].some(day => {
+    const dr = draft[day];
+    return Array.isArray(dr) && dr.some(it =>
+      (it.note || '').trim() || (it.sets || []).some(s => s.done === true));
+  });
   /* 动作库按快照恢复字段，但个人备注保留当前值——与 applyPlan 同一政策（AI 不许覆盖用户备注，
    * 撤销也不该）：撤销按钮一直存在，用户完全可能导入后写了备注再来撤销，整体回滚会无声吞掉它。
    * 导入新增的动作不随撤销移出库（applyPlan 从不删库条目，计划恢复后它们自然不可见）。 */
@@ -1898,7 +1945,7 @@ function undoImport(){
   flushSave();
   render();
   renderSettings();
-  toast('已恢复到导入前的方案');
+  toast('已恢复到导入前的方案' + (undoDraftDirty ? '（已丢弃未确认草稿）' : ''));
 }
 function listCut(arr, n){
   n = n || 4;
