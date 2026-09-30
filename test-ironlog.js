@@ -1200,6 +1200,64 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.resetRest();
   T.switchDay('A');
 
+  console.log('== 35. PR 判定：只有刷新历史最好成绩才算（v0.9.11）==');
+  T.resetRest();
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.state.logs = [];
+  T.switchView('today');
+  T.switchDay('A');
+  const mkLog35 = (date, w) => ({ date, day: 'A', startedAt: 0, endedAt: 1, durationSec: 1, condition: null,
+    exercises: [{ exerciseId: 'goblet_squat', note: null,
+      sets: [{ weight: w, reps: 5, duration: null, rpe: 8, side: null, restAfter: null, done: true }] }] });
+  T.state.logs.push(mkLog35('2026-01-01', 100), mkLog35('2026-02-01', 50));   // 更早 100，最近 50（减载）
+  const it35 = T.getItems('A');
+  const g35 = it35.findIndex(i => i.exerciseId === 'goblet_squat');
+  const w35 = it35[g35].sets.findIndex(s => s.type !== 'warmup');
+  const w35b = it35[g35].sets.findIndex((s, i) => i > w35 && s.type !== 'warmup');
+  T.state.sessions.A = { startedAt: Date.now() - 1000, items: it35, condition: null };
+  it35[g35].sets[w35].weight = 60;
+  T.cycleDone('A', g35, w35);
+  check('减载后 60kg 不超过历史最好 100：不算 PR（旧逻辑按「上次的 50」会误标）',
+    it35[g35].sets[w35].isPR === false);
+  it35[g35].sets[w35].done = false;
+  it35[g35].sets[w35].weight = 105;
+  T.cycleDone('A', g35, w35);
+  check('105kg 超过历史最好 100 → PR', it35[g35].sets[w35].isPR === true);
+  it35[g35].sets[w35b].weight = 60;
+  T.cycleDone('A', g35, w35b);
+  check('本次会话已确认过 105：60 再超过历史也不算破纪录',
+    it35[g35].sets[w35b].isPR === false);
+  T.endSession();
+  const log35 = T.state.logs[T.state.logs.length - 1];
+  const gl35 = log35.exercises.find(e => e.exerciseId === 'goblet_squat');
+  check('热身组在日志里带 type 标记（正式组不带，不增加体积）',
+    gl35.sets[0].type === 'warmup' && gl35.sets[1].type === undefined);
+
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.state.logs = [];
+  const it35c = T.getItems('A');
+  T.state.sessions.A = { startedAt: Date.now() - 1000, items: it35c, condition: null };
+  T.cycleDone('A', g35, 0);   // 只确认 goblet 的热身组
+  check('热身组不挂 PR 徽章', it35c[g35].sets[0].isPR !== true);
+  T.endSession();
+  check('只完成热身组不会提供「上次」数值', T.lastValues('goblet_squat').weight === null);
+
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  const it35d = T.getItems('A');
+  const g35d = it35d.findIndex(i => i.exerciseId === 'goblet_squat');
+  const n35 = it35d[g35d].sets.length;
+  it35d[g35d].sets[n35 - 1].targetRpe = 8;
+  it35d[g35d].sets[n35 - 1].targetRpeLabel = '留 2 次';
+  clickExList(btnOf({ act: 'addset', ex: String(g35d) }));
+  check('addset 会带上目标 RPE 与其说明',
+    it35d[g35d].sets.length === n35 + 1 && it35d[g35d].sets[n35].targetRpe === 8 &&
+    it35d[g35d].sets[n35].targetRpeLabel === '留 2 次');
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

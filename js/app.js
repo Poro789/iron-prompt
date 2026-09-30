@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.10';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.11';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -399,6 +399,37 @@ function lastValues(exerciseId){
   return { weight: null, reps: null, duration: null, date: null };
 }
 
+/* PR 判定：只有刷新历史最好成绩才算。两个对比对象缺一不可：
+ * 1) 全部历史日志的最好成绩——不是「上一次」：减载周之后按最近一次比，
+ *    会把远离纪录的数值误标成 PR（历史 100、上次 50、这次 60 不是纪录）。
+ * 2) 本次会话里同动作的其他已完成正式组——刚确认过 85，再确认 52 不算破纪录。
+ * 没有任何历史记录时不算 PR（与「上次」显示一致，不给第一组刷徽章）。 */
+function detectPR(day, exIdx, setIdx, exerciseId){
+  const ex = state.exercises[exerciseId];
+  const mode = (ex && ex.mode) || 'weight';
+  const f = mode === 'time' ? 'duration' : (mode === 'bodyweight' ? 'reps' : 'weight');
+  const cur = getItems(day)[exIdx].sets[setIdx][f];
+  if(cur == null) return false;
+  let best = null;
+  for(const log of state.logs){
+    const le = log.exercises.find(e => e.exerciseId === exerciseId);
+    if(!le) continue;
+    for(const s of le.sets){
+      if(!isDone(s) || s.type === 'warmup') continue;
+      if(s[f] != null && (best === null || s[f] > best)) best = s[f];
+    }
+  }
+  if(best === null) return false;
+  const siblings = getItems(day)[exIdx].sets;
+  for(let i = 0; i < siblings.length; i++){
+    if(i === setIdx) continue;
+    const s = siblings[i];
+    if(!isDone(s) || s.type === 'warmup') continue;
+    if(s[f] != null && s[f] >= cur) return false;
+  }
+  return cur > best;
+}
+
 /* 卡片上的「上次」一行：训练中决定「要不要加」，前提是看得见上次做到了多少。
  * 点一下就把上次的数值填进这一组，省掉照着记忆打字。热身组不显示（它的目标本来就比正式组低）。 */
 function lastHintHTML(exIdx, setIdx, exId, ex, set){
@@ -526,19 +557,10 @@ function cycleDone(day, exIdx, setIdx){
   else {                                            // ✗ → ✓
     startSessionIfNeeded(day);
     set.done = true;
-    // PR 检测：仅正式组，对比上次同动作最重/最长/最多
+    // PR 检测：仅正式组，对比历史最好成绩 + 本次会话同动作其他已完成组
     if(set.type !== 'warmup'){
       const item = getItems(day)[exIdx];
-      const lv = lastValues(item.exerciseId);
-      const ex = state.exercises[item.exerciseId];
-      const mode = (ex && ex.mode) || 'weight';
-      if(mode === 'time'){
-        set.isPR = (set.duration != null && lv.duration != null && set.duration > lv.duration);
-      } else if(mode === 'bodyweight'){
-        set.isPR = (set.reps != null && lv.reps != null && set.reps > lv.reps);
-      } else {
-        set.isPR = (set.weight != null && lv.weight != null && set.weight > lv.weight);
-      }
+      set.isPR = detectPR(day, exIdx, setIdx, item.exerciseId);
     }
     // 休息归属：始终指向被确认的这一组。不用 curPos——确认会重建 DOM，
     // 用户此刻可能已经手动切组，用 curPos 会把休息时长写到别的组上。
@@ -765,6 +787,7 @@ $('ex-list').addEventListener('click', e => {
       rpe: null,
       side: null,
       targetRpe: last ? last.targetRpe : null,
+      targetRpeLabel: last ? (last.targetRpeLabel || '') : '',
       restAfter: null,
       done: false
     });
@@ -936,6 +959,7 @@ function endSession(){
           done: s.done === true
         };
         if(s.isPR === true) o.isPR = true;   // 只在真的破纪录时写，普通组不增加体积
+        if(s.type === 'warmup') o.type = 'warmup';   // 只有热身组需要标记：「上次」/PR 不能把热身组算进去（旧日志无此字段，按普通组处理）
         return o;
       })
     }))
