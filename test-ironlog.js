@@ -1967,6 +1967,45 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('重复沿用不产生假 PR', prSet().isPR === false && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
   T.state.logs.pop(); delete T.state.exercises.test_pr; delete T.state.drafts.A; delete T.state.sessions.A;
 
+  console.log('== 78. 全链路回归网：确认→结束→改一下→改数值→再结束→删除→撤销 ==');
+  T.state.exercises.test_lc = { ...mk('测试链路', 'weight'), unit: 'kg' };
+  // 先放一条历史最好 60：PR 徽章的定义是「打破已有最好成绩」，首次记录不点亮（设计如此）
+  T.state.logs.push({ date: '2026-05-01', day: 'A', startedAt: 1700000780000, endedAt: 1700000790000, durationSec: 10, condition: null, exercises: [
+    { exerciseId: 'test_lc', note: null, sets: [tset({ weight: 60, reps: 5 })] }
+  ] });
+  const lcBase = T.state.logs.length;   // 基线含刚放的历史最好 60
+  T.state.program.A = [{ section: '', exerciseId: 'test_lc', repsRange: '', sets: [{ type: 'work', weight: 80, reps: 5, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.switchView('today');
+  clickExList(doneBtn(0, 0));   // 确认 80：无历史可比 → PR
+  check('链路：确认点亮 PR', prSet().isPR === true);
+  T.endSession();
+  check('链路：结束写入一条日志', T.state.logs.length === lcBase + 1 && T.state.logs[T.state.logs.length - 1].exercises[0].sets[0].weight === 80);
+  const lcEntry = T.state.logs[T.state.logs.length - 1];
+  check('链路：小结显示破 PR', /破 PR <b>1<\/b>/.test(String(elsById.get('summary-body').innerHTML)));
+  T.reeditSession();   // 小结「改一下」
+  check('链路：编辑中原记录不在日志、originalEntry 在会话上',
+    T.state.logs.length === lcBase && T.state.sessions.A && T.state.sessions.A.originalEntry === lcEntry);
+  const inp78 = makeEl('fs-input-78');
+  inp78.dataset = { ex: '0', set: '0', f: 'weight' };
+  inp78.value = '75';
+  handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? inp78 : null } });
+  T.endSession(); T.closeSummary();
+  check('链路：再结束仍只有一条（按时间戳去重）', T.state.logs.length === lcBase + 1);
+  const lc2 = T.state.logs[T.state.logs.length - 1];
+  check('链路：新值已保存且日期/时间戳保持原样',
+    lc2.exercises[0].sets[0].weight === 75 && lc2.startedAt === lcEntry.startedAt &&
+    lc2.endedAt === lcEntry.endedAt && lc2.durationSec === lcEntry.durationSec && lc2.date === lcEntry.date);
+  check('链路：再结束 75 仍破历史最好 60，判 PR', lc2.exercises[0].sets[0].isPR === true);
+  T.switchView('history'); T.render();
+  clickEl('hist-list', btnOf({ act: 'dellog', ts: String(lc2.startedAt), i: '0' }));
+  T.answerConfirm(true); await null;
+  check('链路：删除后回到基线', T.state.logs.length === lcBase);
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('链路：撤销恢复的是改过的那版', T.state.logs.length === lcBase + 1 && T.state.logs[T.state.logs.length - 1].exercises[0].sets[0].weight === 75);
+  T.state.logs = T.state.logs.filter(l => (l.startedAt ?? -1) !== (lcEntry.startedAt ?? -2) && (l.startedAt ?? -1) !== 1700000780000);
+  delete T.state.exercises.test_lc; delete T.state.drafts.A; delete T.state.sessions.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
