@@ -1595,6 +1595,10 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   delete T.state.drafts.A;
   check('无段落名时不渲染该元素', !T.fullScreenHTML('A').includes('fs-section'));
 
+  console.log('== 56. prompt 数据说明解释 restAfter（v0.9.33）==');
+  const prompt56 = T.buildPrompt(T.buildExport(5));
+  check('说明含 restAfter 含义', prompt56.includes('restAfter 是该组之后实际休息的秒数'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

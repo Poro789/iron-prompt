@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.33]
+
+### 修复
+- 给 AI 的数据说明里补上 restAfter 的含义（该组之后实际休息的秒数）——导出数据一直带着这个字段，但 AI 不知道它是什么
+
 ## [0.9.32]
 
 ### 新增
