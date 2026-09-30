@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.12';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.13';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -182,6 +182,11 @@ function migrate(d){
   if(d.settings.restNote === undefined) d.settings.restNote = '';
   if(typeof d.settings.restSec !== 'number' || !(d.settings.restSec >= 0)) d.settings.restSec = 90;
   if(typeof d.settings.warmupRestSec !== 'number' || !(d.settings.warmupRestSec >= 0)) d.settings.warmupRestSec = 30;
+  /* 手工编辑/旧版备份可能缺这些：缺了就补默认值，别让 curDay() 拿到 undefined、
+   * ±步进算出 NaN、或设置页显示 "undefined" */
+  if(d.settings.lastDay !== 'A' && d.settings.lastDay !== 'B') d.settings.lastDay = 'A';
+  if(typeof d.settings.weightStep !== 'number' || !(d.settings.weightStep > 0)) d.settings.weightStep = 2.5;
+  if(!Array.isArray(d.logs)) d.logs = [];
   if(!d.profile) d.profile = { background: '' };
   if(!d.sessions) d.sessions = { A: null, B: null };
   /* v0.9.2：草稿与浏览位置进 state，刷新/崩溃不再丢数据

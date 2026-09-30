@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.13]
+
+### 修复
+- 恢复手工编辑过或不完整的备份文件时自动补默认值：缺 logs 补空数组、lastDay 非法值回退 A、weightStep 缺失或 ≤0 回退 2.5。以前这些情况会让当日页空白、±步进算出 NaN、设置页显示 "undefined"
+
 ## [0.9.12]
 
 ### 修复

@@ -1301,6 +1301,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('恢复后的草稿不带旧秒表读数', it36d[ti36].sets[0].duration !== 25);
   T.state.lastImport = null;
 
+  console.log('== 37. migrate 给不完整备份补默认值（v0.9.13）==');
+  const bare = { version: 1, program: { A: [], B: [] }, exercises: {} };
+  const m37 = T.migrate(JSON.parse(JSON.stringify(bare)));
+  check('logs 缺省补 []', Array.isArray(m37.logs) && m37.logs.length === 0);
+  check('lastDay 缺省补 A', m37.settings.lastDay === 'A');
+  check('weightStep 缺省补 2.5', m37.settings.weightStep === 2.5);
+  const bad37 = { version: 1, program: { A: [], B: [] }, exercises: {},
+    settings: { lastDay: 'C', weightStep: 0 }, logs: 'x' };
+  const m37b = T.migrate(bad37);
+  check('非法 lastDay 被纠正', m37b.settings.lastDay === 'A');
+  check('weightStep<=0 被纠正', m37b.settings.weightStep === 2.5);
+  check('logs 非数组被纠正', Array.isArray(m37b.logs));
+
+  // 端到端：恢复一个只有 version/program/exercises 的备份，之后 app 仍可用
+  T.restoreBackupText(JSON.stringify(bare));
+  T.answerConfirm(true);
+  await null;
+  check('恢复极简备份后状态被补全',
+    T.state.settings.lastDay === 'A' && Array.isArray(T.state.logs) && T.state.logs.length === 0);
+  T.switchView('today');
+  check('恢复后仍能安全渲染', String(document.getElementById('today-view').innerHTML).indexOf('undefined') < 0);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
