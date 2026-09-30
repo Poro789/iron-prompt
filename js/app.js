@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.83';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.84';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1108,6 +1108,8 @@ $('hist-list').addEventListener('click', async e => {
     // 不在这里 resetRest：休息属于另一日（本日的进行中记录已被上面的守卫挡掉），
     // 紧接着的 switchDay 会按归属日把它结算到对应的组上——无差别清掉会永久丢掉 restAfter。
     // clearTimer 也不必：switchDay 自己会清秒表引用（读数本来就实时写在输入框里）。
+    // condDraft 也不动：这条路径没有会话、condDraft 存的是用户今天刚选的状态，
+    // 覆盖成旧记录的状态会在结束/放弃后把它悄悄吞掉（小结里的「改一下」另有恢复逻辑）。
     state.sessions[day] = {
       startedAt: Date.now(),   // 时钟从本次编辑起算；原时间戳存在 keepMeta 里
       items: entry.exercises.map(it => ({ exerciseId: it.exerciseId, note: it.note ?? '', sets: it.sets.map(s => ({ ...s })) })),
@@ -1115,7 +1117,6 @@ $('hist-list').addEventListener('click', async e => {
       keepMeta: { date: entry.date, startedAt: entry.startedAt ?? null, endedAt: entry.endedAt ?? null, durationSec: entry.durationSec ?? null },
       originalEntry: entry   // 放弃这次编辑时原记录要能原样放回
     };
-    condDraft[day] = entry.condition ?? null;
     switchView('today'); switchDay(day);
     flushSave();
     toast('已放回编辑，改完点「结束训练」会按原日期写回');
@@ -1752,6 +1753,7 @@ function applyPlan(d){
   /* 导入可能把视图切去另一日：模块里的组位置必须跟着当前日走，
    * 不能留着旧日的位置去新日里悬空（该日位置上面已归 0，这里只是把视图对齐）。 */
   curPos = state.ui.curPos[curDay()] || 0;
+  openNotes = {};   // 展开的「要点」按位置记忆：计划换了，别把展开状态跟到不相干的动作上
   save();
   render();
   return { ok:true, summary:`导入完成：${daySummary.join('，')}；动作库 ${exCount} 项` };
@@ -1782,6 +1784,11 @@ function snapshotPlan(){
 function undoImport(){
   const snap = state.lastImport;
   if(!snap){ toast('没有可撤销的导入'); return; }
+  // 与 applyPlan 同政策：有进行中记录时不换计划。会话的组是按导入后的计划生成的，
+  // 换回旧计划会让分区/编号对不上号，还会白白把进度位置清零。
+  for(const day of ['A','B']){
+    if(state.sessions[day]){ toast(`${day} 日有进行中的记录，请先结束或放弃后再撤销`); return; }
+  }
   // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组。
   // 按表的归属日判断（不是当前查看的日）：归属日有进行中记录时表还有可写的地方，不该误清。
   if(timerFor && !state.sessions[timerForDay]) clearTimer();
@@ -1794,6 +1801,7 @@ function undoImport(){
     state.ui.curPos[day] = 0;   // 旧位置在新计划里未必存在
     if(curDay() === day) curPos = 0;
   }
+  openNotes = {};   // 同 applyPlan：换计划后展开状态不该跟到不相干的动作上
   flushSave();
   render();
   renderSettings();
@@ -2085,6 +2093,7 @@ function applyRestoredState(st){
   state = migrate(st);
   bindDrafts();                        // draft/condDraft 是指向旧 state 的别名，换 state 必须重新绑定
   curPos = state.ui.curPos[curDay()] || 0;
+  openNotes = {};   // 同 applyPlan：全量替换后展开状态属于旧数据
   resetRest();
   clearTimer();   // 备份恢复是全量替换：挂着的秒表属于旧数据，丢掉，不让它的读数写进恢复后的组
   flushSave();

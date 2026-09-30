@@ -150,7 +150,7 @@ const testScript = script + `
   get restForPos(){ return restForPos; },
   get draft(){ return draft; },
   clearDraft(day){ delete draft[day]; },
-  fullScreenHTML, flatPos, posLabel
+  fullScreenHTML, flatPos, posLabel, openNotes: () => openNotes
 };`;
 (0, eval)(testScript);
 const T = globalThis.__T;
@@ -2715,6 +2715,44 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.restoreBackupText(JSON.stringify(bk106)); T.answerConfirm(true); await null;
   check('106 恢复这种备份不炸：形状被纠正而不是应用失败',
     !!T.state.sessions.A && Array.isArray(T.state.sessions.A.items) && T.state.sessions.A.items.length === 0);
+
+  /* ============================================================
+   * 107. 撤销导入/再编辑/展开状态的一致性（审计 #4 缺陷 4、5、6，v0.9.84）
+   * a) 有进行中记录时「撤销上次导入」应被拒绝（与导入同政策），不能把会话对着的计划换掉；
+   * b) 历史「改一下」不覆盖用户今天在卡片上刚选的当日状态；
+   * c) 换计划（导入/撤销/恢复）后「要点」展开状态清零，不跟到不相干的动作上。
+   * ============================================================ */
+  console.log('== 107. 撤销导入守卫 / 改一下不吞状态选择 / 换计划清展开 ==');
+  T.resetRest(); T.clearTimer();
+  const p107 = { exercises: { e107: { name: '撤销守卫', mode: 'weight', unit: 'kg' } },
+    program: { B: [{ exerciseId: 'e107', sets: [{ weight: 10, reps: 5 }] }] } };
+  check('107 只含 B 日的导入成功（A 有进行中记录不受影响）', T.importPlan(JSON.stringify(p107)).ok === true);
+  T.state.sessions.A = { startedAt: 999000, items: [{ exerciseId: 'x107', sets: [{ done: true, weight: 1, reps: 1 }] }] };
+  T.state.lastImport = { at: Date.now(), program: JSON.parse(JSON.stringify(T.state.program)), exercises: JSON.parse(JSON.stringify(T.state.exercises)) };
+  const progSnap107 = JSON.stringify(T.state.program);
+  T.undoImport();
+  check('107 有进行中记录时撤销被拒绝（计划与快照都不动）',
+    !!T.state.lastImport && JSON.stringify(T.state.program) === progSnap107);
+  // c) 展开状态：先置一个展开标记，再换 A 日计划
+  T.state.sessions.A = null;
+  T.openNotes()['A:0'] = true;
+  const pA107 = { exercises: { e107b: { name: '展开清零', mode: 'weight', unit: 'kg' } },
+    program: { A: [{ exerciseId: 'e107b', sets: [{ weight: 5, reps: 5 }] }] } };
+  check('107 A 日导入成功', T.importPlan(JSON.stringify(pA107)).ok === true);
+  check('107 换计划后要点展开状态被清', !T.openNotes()['A:0']);
+  // b) 改一下不吞 condDraft：用户先在 A 日卡片选了「差」，再去历史改一条 B 的旧记录
+  T.state.sessions = { A: null, B: null };
+  T.state.condDraft.A = '差';   // 就地改：模块持有 condDraft 的别名
+  const old107 = { date: '2026-09-02', day: 'B', startedAt: 888001,
+    exercises: [{ exerciseId: 'e107', sets: [{ done: true, weight: 10, reps: 5 }] }] };
+  T.state.logs.push(old107);
+  clickEl('hist-list', btnOf({ act: 'reeditlog', ts: '888001', i: String(T.state.logs.length - 1) }));
+  check('107 改一下不覆盖用户刚选的当日状态', T.state.condDraft.A === '差');
+  check('107 B 日正常进入编辑态', !!T.state.sessions.B);
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== 888001);
+  T.state.sessions = { A: null, B: null };
+  T.state.condDraft.A = null;
+  delete T.state.exercises.e107; delete T.state.exercises.e107b;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
