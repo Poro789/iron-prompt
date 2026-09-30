@@ -1531,6 +1531,12 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('设置页标签不再声称步进是 kg', !html.includes('重量步进（kg）'));
   T.state.logs.pop(); delete T.state.exercises.test_hint;
 
+  console.log('== 50. 卡片不渲染源码注释（v0.9.27）==');
+  T.switchView('today'); T.render();
+  const card50 = String(htmlTouchedHTML('ex-list'));
+  check('卡片里有正常的组点结构', card50.includes('fs-dots'));
+  check('写在模板字符串里的 // 注释不再原样显示在卡片上', !card50.includes('二态模型') && !/\/\/\s/.test(card50));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

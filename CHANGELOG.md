@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.27]
+
+### 修复
+- 训练卡片不再把源码注释当文字渲染出来（有一段说明写在模板字符串内部，被原样显示在组点和组信息之间）
+
 ## [0.9.26]
 
 ### 修复
