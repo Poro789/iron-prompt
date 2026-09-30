@@ -128,7 +128,7 @@ const testScript = script + `
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
-  reeditSession, closeSummary, get lastEnded(){ return lastEnded; },
+  reeditSession, closeSummary, showSummary, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   buildBackup, parseBackup, restoreBackupText,
   buildTrendCharts, trendKind, programOrder,
@@ -1497,6 +1497,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   ]), 5);
   check('单位混用时标题不带任何单位（图例各自标注）', /class="trend-title">重量</.test(mixCharts) && !/重量（(kg|lb)）/.test(mixCharts));
   delete T.state.exercises.test_lb1; delete T.state.exercises.test_lb2; delete T.state.exercises.test_kg1;
+
+  console.log('== 48. 训练小结显示破 PR 组数（v0.9.25）==');
+  const entry48 = { day: 'A', startedAt: 1, durationSec: 600, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [
+      { weight: 105, reps: 5, done: true, isPR: true },
+      { weight: 90, reps: 5, done: true },
+      { weight: 60, reps: 5, done: true, type: 'warmup' }
+    ] }
+  ] };
+  T.showSummary(entry48);
+  const sumHtml = String(elsById.get('summary-body').innerHTML);
+  check('小结列出破 PR 组数', /破 PR <b>1<\/b>/.test(sumHtml));
+  const entry48b = { day: 'A', startedAt: 1, durationSec: 600, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [{ weight: 90, reps: 5, done: true }] }
+  ] };
+  T.showSummary(entry48b);
+  check('没有 PR 时不显示该行（旧日志同样不显示）', !/破 PR/.test(String(elsById.get('summary-body').innerHTML)));
+  T.closeSummary();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

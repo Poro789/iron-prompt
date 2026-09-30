@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.25]
+
+### 新增
+- 训练小结会显示本次破掉的 PR 组数（「破 PR N 组 🔥」），没有破纪录时不显示该行
+
 ## [0.9.24]
 
 ### 修复

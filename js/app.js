@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.24';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.25';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1038,12 +1038,15 @@ async function discardSession(){
 
 function showSummary(entry){
   const vol = Math.round(sessionVolume(entry));
+  /* 本次会话破掉的 PR 组数（isPR 只在确认/改数字时按全历史严格比较写入） */
+  const prs = entry.exercises.reduce((n, ex) => n + (ex.sets || []).filter(s => s.isPR === true).length, 0);
   $('summary-title').textContent = `${entry.day} 日训练完成`;
   $('summary-body').innerHTML = `
     <div class="stat">动作 <b>${entry.exercises.length}</b> 个</div>
     <div class="stat">总组数 <b>${sessionSets(entry)}</b> 组</div>
     <div class="stat">总容量 <b>${vol.toLocaleString()} kg</b></div>
     <div class="stat">用时 <b>${fmtDuration(entry.durationSec)}</b></div>
+    ${prs ? `<div class="stat">破 PR <b>${prs}</b> 组 🔥</div>` : ''}
     ${entry.condition ? `<div class="stat">状态 <b>${esc(entry.condition)}</b></div>` : ''}`;
   // 记错了不必重来：只要这条记录还在最末尾，就把它放回编辑态
   const re = $('summary-reedit');
