@@ -1586,6 +1586,15 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('补的组继承最后一组的 side=R', sets54.length === 2 && sets54[1].side === 'R');
   check('补的组卡片上带右侧标记', htmlTouchedHTML('ex-list').includes('右侧'));
 
+  console.log('== 55. 卡片显示计划段落名（v0.9.32）==');
+  T.state.program.A[0].section = '2. 主课力量';
+  delete T.state.drafts.A;
+  const cardSec = T.fullScreenHTML('A');
+  check('卡片带段落名', cardSec.includes('fs-section') && cardSec.includes('2. 主课力量'));
+  T.state.program.A[0].section = '';
+  delete T.state.drafts.A;
+  check('无段落名时不渲染该元素', !T.fullScreenHTML('A').includes('fs-section'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

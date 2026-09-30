@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.31';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.32';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -635,6 +635,10 @@ function fullScreenHTML(day){
   const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + esc(ex.unit || 'kg') : '';
   const sideTag = set.side ? `<span class="fs-side">${set.side === 'L' ? '左' : '右'}侧</span>` : '';
   const warmTag = set.type === 'warmup' ? '<span class="fs-warm">热身</span>' : '';
+  // 计划段落名（如「1. 动态升温与激活」「主课」）此前在界面上完全不出现：
+  // 翻卡片只看到动作编号，分不清现在在热身段还是主课段。位置与 program 一一对应（getItems 有长度守卫）。
+  const secName = (program[pos.exIdx] || {}).section || '';
+  const sectionLine = secName ? `<div class="fs-section">${esc(secName)}</div>` : '';
   const notes = [
     ex.tips ? `<div class="note"><b>要点</b>${esc(ex.tips)}</div>` : '',
     ex.pitfalls ? `<div class="note"><b>避坑</b>${esc(ex.pitfalls)}</div>` : '',
@@ -666,6 +670,7 @@ function fullScreenHTML(day){
   return `
     <div class="fs-card">
       <div class="fs-progress" aria-hidden="true"><div class="fs-progress-fill" style="width:${pct}%"></div></div>
+       ${sectionLine}
       ${restActive ? `
       <div class="fs-rest-bar" role="timer" aria-label="组间休息计时">
         <span class="rest-label">休息</span>
