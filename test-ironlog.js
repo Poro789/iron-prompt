@@ -2422,6 +2422,40 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   delete global.location;
   T.state.logs = [];
 
+  /* ============================================================
+   * 96. 历史「改一下」：分区名与编号按计划走，不按筛短后的 items（v0.9.73）
+   * 记录时只保留做过的动作；从历史再编辑时 items 可能比 program 短。
+   * ============================================================ */
+  console.log('== 96. 历史改一下不串分区名/编号（v0.9.73）==');
+  T.state.exercises.e96a = { name: 'A96', mode: 'weight', unit: 'kg' };
+  T.state.exercises.e96b = { name: 'B96', mode: 'weight', unit: 'kg' };
+  T.state.exercises.e96c = { name: 'C96', mode: 'weight', unit: 'kg' };
+  T.state.program.A = [
+    { exerciseId: 'e96a', section: '热身段', sets: [{ weight: 1, reps: 1 }] },
+    { exerciseId: 'e96b', section: '主课段', sets: [{ weight: 2, reps: 2 }] },
+    { exerciseId: 'e96c', section: '主课段', sets: [{ weight: 3, reps: 3 }] },
+  ];
+  T.state.sessions = { A: null, B: null };
+  delete T.state.drafts.A;
+  T.state.settings.lastDay = 'A';
+  T.curPos = 0;
+  T.switchView('today'); T.render();
+  const h96n = htmlTouchedHTML('ex-list');
+  check('96 正常视图：第 1 个动作 + 热身段', /fs-num">1\./.test(h96n) && /fs-section">热身段/.test(h96n));
+  T.state.logs = [{ date: '2026-01-01', day: 'A', startedAt: 777, condition: null,
+    exercises: [{ exerciseId: 'e96b', sets: [{ type: 'work', weight: 50, reps: 8, duration: null, rpe: null, side: null, done: true }] }] }];
+  T.switchView('history'); T.render();
+  clickEl('hist-list', btnOf({ act: 'reeditlog', ts: '777', i: '0' }));
+  T.switchView('today'); T.curPos = 0; T.render();
+  const h96 = htmlTouchedHTML('ex-list');
+  check('96 再编辑卡片按计划编号（2.）', /fs-num">2\./.test(h96));
+  check('96 再编辑分区名跟着计划（主课段）', /fs-section">主课段/.test(h96) && !/fs-section">热身段/.test(h96));
+  check('96 名称是实际编辑的动作 B96', /B96/.test(h96));
+  T.state.sessions = { A: null, B: null };
+  T.state.logs = [];
+  T.state.program.A = [];
+  delete T.state.exercises.e96a; delete T.state.exercises.e96b; delete T.state.exercises.e96c;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

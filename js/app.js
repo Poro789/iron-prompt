@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.72';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.73';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -706,9 +706,14 @@ function fullScreenHTML(day){
   const unitTag = (mode === 'weight' || mode === 'band') ? ' · ' + esc(ex.unit || 'kg') : '';
   const sideTag = set.side ? `<span class="fs-side">${set.side === 'L' ? '左' : '右'}侧</span>` : '';
   const warmTag = set.type === 'warmup' ? '<span class="fs-warm">热身</span>' : '';
-  // 计划段落名（如「1. 动态升温与激活」「主课」）此前在界面上完全不出现：
-  // 翻卡片只看到动作编号，分不清现在在热身段还是主课段。位置与 program 一一对应（getItems 有长度守卫）。
-  const secName = (program[pos.exIdx] || {}).section || '';
+  /* 计划段落名与编号：正常会话 items 与 program 一一对应（getItems 有长度守卫）。
+   * 但从历史「改一下」的旧记录是按当时实际做过的动作筛过的，可能比 program 短——
+   * 这时按 exerciseId 找回计划条目，分区名和编号跟着计划走，不串位。 */
+  const items = getItems(day);
+  const aligned = items.length === program.length;
+  const planIdx = aligned ? pos.exIdx
+    : Math.max(0, program.findIndex(pr => pr.exerciseId === item.exerciseId));
+  const secName = (program[planIdx] || {}).section || '';
   const sectionLine = secName ? `<div class="fs-section">${esc(secName)}</div>` : '';
   const notes = [
     ex.tips ? `<div class="note"><b>要点</b>${esc(ex.tips)}</div>` : '',
@@ -724,7 +729,6 @@ function fullScreenHTML(day){
   const restActive = restEndsAt !== null;
   // 当日进度
   const allPos = flatPos(day);
-  const items = getItems(day);
   const totalSets = allPos.length;
   const doneSets = items.reduce((s, it) => s + it.sets.filter(st => st.done === true).length, 0);
   const pct = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : 0;
@@ -751,7 +755,7 @@ function fullScreenHTML(day){
       <div class="fs-top">
         <button class="fs-nav" data-act="prev" aria-label="上一组">‹</button>
         <div class="fs-title">
-          <div class="fs-name"><span class="fs-num">${pos.exIdx + 1}.</span> ${esc(ex.name)}${sideTag}${warmTag}</div>
+          <div class="fs-name"><span class="fs-num">${planIdx + 1}.</span> ${esc(ex.name)}${sideTag}${warmTag}</div>
           <div class="fs-muscles">${esc(ex.muscles || '')}</div>
         </div>
         <button class="fs-nav" data-act="next" aria-label="下一组">›</button>
