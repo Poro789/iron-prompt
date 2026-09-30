@@ -2660,6 +2660,42 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('104 测后状态完整还原（备份→恢复回环）',
     JSON.stringify(T.state.program.A) === aBefore104 && JSON.stringify(T.state.program.B) === bBefore104);
 
+  /* ============================================================
+   * 105. 休息归属一致性（审计 #4 缺陷 1、2，v0.9.82）
+   * a) 休息条只画在归属日的卡片上——applyPlan/刷新可以带着视图切到另一日；
+   * b) 历史「改一下」不再无差别 resetRest：另一日正在跑的休息由 switchDay
+   *    按归属日结算成 restAfter，静默清掉会永久丢掉这段休息数据。
+   * ============================================================ */
+  console.log('== 105. 休息条只在归属日显示；改一下不误杀另一日的休息 ==');
+  T.resetRest(); T.clearTimer();
+  T.state.settings.restSec = 60;
+  T.state.exercises.e105 = { name: '休息归属', mode: 'weight', unit: 'kg' };
+  T.state.sessions = {
+    A: { startedAt: 555000, items: [{ exerciseId: 'e105', sets: [{ done: true, weight: 30, reps: 5 }] }] },
+    B: { startedAt: 666000, items: [{ exerciseId: 'e105', sets: [{ done: true, weight: 31, reps: 5 }] }] }
+  };
+  T.state.settings.lastDay = 'A';
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });   // 休息归属 A
+  check('105 归属日卡片有休息条', T.fullScreenHTML('A').includes('fs-rest-bar'));
+  check('105 另一日卡片不画 A 的倒计时', !T.fullScreenHTML('B').includes('fs-rest-bar'));
+  T.resetRest();
+  // b) 历史「改一下」：A 有进行中记录 + 正在休息，改一条 B 的旧记录
+  const old105 = { date: '2026-09-01', day: 'B', startedAt: 777000, endedAt: 777500,
+    exercises: [{ exerciseId: 'e105', sets: [{ done: true, weight: 5, reps: 5 }] }] };
+  T.state.logs.push(old105);
+  T.state.sessions = { A: { startedAt: 888000, items: [{ exerciseId: 'e105', sets: [{ done: true, weight: 30, reps: 5 }] }] }, B: null };
+  T.state.settings.lastDay = 'A';
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });   // 归属 A（A 有进行中记录，合法）
+  advanceClock(45000);
+  clickEl('hist-list', btnOf({ act: 'reeditlog', ts: '777000', i: '0' }));
+  check('105 改一下不丢另一日的休息：结算成 restAfter',
+    T.state.sessions.A.items[0].sets[0].restAfter === 45);
+  check('105 B 日正常进入编辑态', !!T.state.sessions.B && T.state.settings.lastDay === 'B');
+  T.resetRest(); T.clearTimer();
+  T.state.sessions = { A: null, B: null };
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== 777000);
+  delete T.state.exercises.e105;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.81';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.82';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -762,7 +762,9 @@ function fullScreenHTML(day){
   const doneCls = set.done === true ? 'done' : 'undone';
   const doneIcon = set.done === true ? '✓' : '✗';
   const doneLabel = set.done === true ? '已完成' : '未完成';
-  const restActive = restEndsAt !== null;
+  // 休息条同秒表口径：只在归属日的卡片上显示（applyPlan/刷新可以带着视图切到另一日，
+  // 归属另一日的倒计时不该画进当前卡片；切日手势本身会先结算它）。
+  const restActive = restEndsAt !== null && restForDay === day;
   // 当日进度
   const allPos = flatPos(day);
   const totalSets = allPos.length;
@@ -1102,7 +1104,9 @@ $('hist-list').addEventListener('click', async e => {
     const day = entry.day === 'B' ? 'B' : 'A';
     if(state.sessions[day]){ toast('这一日已经有新的记录了'); return; }
     state.logs.splice(i, 1);
-    resetRest(); clearTimer();
+    // 不在这里 resetRest：休息属于另一日（本日的进行中记录已被上面的守卫挡掉），
+    // 紧接着的 switchDay 会按归属日把它结算到对应的组上——无差别清掉会永久丢掉 restAfter。
+    // clearTimer 也不必：switchDay 自己会清秒表引用（读数本来就实时写在输入框里）。
     state.sessions[day] = {
       startedAt: Date.now(),   // 时钟从本次编辑起算；原时间戳存在 keepMeta 里
       items: entry.exercises.map(it => ({ exerciseId: it.exerciseId, note: it.note ?? '', sets: it.sets.map(s => ({ ...s })) })),
