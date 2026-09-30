@@ -24,10 +24,11 @@ const missingIds = [];          // 桩在 HTML 中找不到的 id = 代码引用
 const elsById = new Map();      // 同一 id 复用同一桩，便于断言渲染结果
 const timers = [];              // 捕获 setTimeout 回调，供防抖测试手动触发
 const handlers = new Map();     // (id + '|' + type) -> addEventListener 回调，供点击模拟测试
+const docHandlers = new Map();  // document 级事件（visibilitychange 等），供前后台切换测试
 let patchTarget = null;         // 增量渲染测试注入的 .sets 容器：{ matches, node }
 global.document = {
   visibilityState: 'visible',
-  addEventListener(){},
+  addEventListener(type, fn){ docHandlers.set(type, fn); },
   createElement(){ const e = makeEl('tmp'); e.children = [makeEl('a'), makeEl('b')]; return e; },
   querySelector(sel){ return patchTarget && patchTarget.matches(sel) ? patchTarget.node : null; },
   getElementById(id){
@@ -112,6 +113,8 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   buildBackup, parseBackup, restoreBackupText,
+  buildTrendCharts, trendKind, programOrder,
+  startTimer, stopTimer, clearTimer, timerElapsedSec, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   get openNotes(){ return openNotes; },
   startRestTimer, tickRest, finishRest, skipRest, resetRest, askConfirm, answerConfirm,
@@ -364,6 +367,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     return refs.length > 0 && refs.every(r => shell.includes('./' + r));
   })());
   check('sw.js 有 install/activate/fetch', ['install','activate','fetch'].every(k => sw.includes("'" + k + "'")));
+  check('sw.js 只缓存成功响应（404 不会污染离线回退）', /if\(res\.ok\)/.test(sw) && /res\.status === 200/.test(sw));
   check('deploy.yml 发布 css/js 与 PWA 资源', /cp index.html manifest.webmanifest icon.svg sw.js/.test(
     fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
     && /cp css\/style.css dist\/css\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
@@ -759,6 +763,130 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('旧版本备份恢复后补出草稿/位置默认值',
     !!T.state.drafts && !!T.state.condDraft && typeof T.state.ui.curPos === 'object');
   check('恢复后仍能正常渲染', (T.switchView('today'), T.render(), /fs-done/.test(htmlTouchedHTML('ex-list'))));
+
+  console.log('== 26. v0.9.4 趋势图可读性 ==');
+  const mkLog = (date, id, vals) => ({
+    date, day: 'A', condition: null, durationSec: 3600,
+    exercises: [{ exerciseId: id, note: '', sets: vals.map(v => ({
+      type: '正式', weight: v.weight ?? null, reps: v.reps ?? null, duration: v.duration ?? null, rpe: 8, done: true,
+    })) }],
+  });
+  T.state.logs = [
+    mkLog('2026-01-01', 'goblet_squat', [{ weight: 40 }, { weight: 42 }]),
+    mkLog('2026-01-03', 'goblet_squat', [{ weight: 45 }]),
+    mkLog('2026-01-05', 'goblet_squat', [{ weight: 47 }]),
+    mkLog('2026-01-06', 'clamshell', [{ reps: 12 }]),
+    mkLog('2026-01-08', 'clamshell', [{ reps: 15 }]),
+    mkLog('2026-01-04', 'plank', [{ duration: 30 }]),
+    mkLog('2026-01-09', 'plank', [{ duration: 45 }]),
+    mkLog('2026-01-02', 'db_bench', [{ weight: 14 }]),
+    mkLog('2026-01-07', 'db_bench', [{ weight: 16 }]),
+    mkLog('2026-01-02', 'lateral_raise', [{ weight: 5 }]),
+    mkLog('2026-01-07', 'lateral_raise', [{ weight: 6 }]),
+  ];
+  const trendsAll = T.buildTrends(T.state.logs);
+  check('指标归类正确（重量/次数/时长）',
+    T.trendKind(trendsAll.goblet_squat) === 'weight' && T.trendKind(trendsAll.clamshell) === 'reps' && T.trendKind(trendsAll.plank) === 'duration');
+  const charts = T.buildTrendCharts(trendsAll, 5);
+  const blocks = charts.split('<div class="trend-block">').slice(1);
+  const nameOf = id => (T.state.exercises[id] || {}).name || id;
+  const blockOf = id => blocks.find(b => b.includes(nameOf(id))) || '';
+  const hasUnit = (b, u) => new RegExp('\\d\\s*' + u).test(b.replace(/\s+/g, ' '));
+  check('kg / 次 / 秒 各自一张图，不共用 Y 轴', blocks.length === 3
+    && !hasUnit(blockOf('plank'), 'kg') && !hasUnit(blockOf('clamshell'), 'kg') && hasUnit(blockOf('goblet_squat'), 'kg'));
+  check('图例单位与指标一致', hasUnit(blockOf('plank'), '秒') && hasUnit(blockOf('clamshell'), '次') && hasUnit(blockOf('goblet_squat'), 'kg'));
+  check('每张图有标题（重量（kg）等）', /重量（kg）/.test(charts) && /时长（秒）/.test(charts) && /次数/.test(charts));
+  check('Y 轴有网格线与刻度', (charts.match(/<line /g) || []).length >= 9 && /text-anchor="end"/.test(charts));
+  check('横轴说明两端含义而不是假日期刻度', /最早/.test(charts) && /最近/.test(charts) && !/2026-01/.test(charts));
+  check('数值不再用折线颜色画在图上（改看图例）', !/<text[^>]*fill="#(4f8cff|3fb96f|e0a030|e05252|9b6dff)"/.test(charts));
+  check('图例给出动作名、最新值与方向',
+    blockOf('goblet_squat').includes(nameOf('goblet_squat')) && /47\s*kg/.test(blockOf('goblet_squat'))
+    && /上升/.test(blockOf('goblet_squat')) && /3 次/.test(blockOf('goblet_squat')));
+  check('同一张图内按练习次数排，次数相同按训练顺序排', (() => {
+    const wblock = blocks.find(b => /重量（kg）/.test(b)) || '';
+    const got = [...wblock.matchAll(/class="lg-name">([^<]+)</g)].map(m => m[1]);
+    const ord = T.programOrder();
+    const expected = ['goblet_squat', 'db_bench', 'lateral_raise']
+      .sort((a, b) => (trendsAll[b].sessions.length - trendsAll[a].sessions.length) || (ord[a] - ord[b]))
+      .map(nameOf);
+    return got.length === 3 && JSON.stringify(got) === JSON.stringify(expected);
+  })());
+  check('历史页渲染出分组趋势图', (T.switchView('history'), T.render(), /trend-block/.test(htmlTouchedHTML('hist-list'))));
+  check('没有 ≥2 次记录时给说明而不是空白', /至少记录 2 次/.test(T.buildTrendCharts(T.buildTrends([]), 5)));
+  check('programOrder 按 A→B 首次出现的顺序编号', (() => {
+    const seq = [];
+    ['A', 'B'].forEach(d => (T.state.program[d] || []).forEach(p => { if(!seq.includes(p.exerciseId)) seq.push(p.exerciseId); }));
+    const o = T.programOrder();
+    return seq.length > 10 && seq.every((id, i) => o[id] === i);
+  })());
+
+  console.log('== 27. v0.9.4 回到前台纠正计时 ==');
+  const onVis = docHandlers.get('visibilitychange');
+  check('注册了 document visibilitychange 处理', typeof onVis === 'function');
+  T.switchView('today'); T.render();
+  const restClock = document.getElementById('rest-clock');
+  T.resetRest();
+  T.restStartsAt = Date.now() - 20000;
+  T.restEndsAt = Date.now() + 40000;      // 还剩 40 秒
+  restClock.textContent = '0:03';         // 模拟后台挂起时留下的旧倒计时
+  global.document.visibilityState = 'visible';
+  onVis();
+  check('回到前台立刻按时间戳纠正休息倒计时', restClock.textContent === '0:40');
+  ['A', 'B'].forEach(d => { T.state.sessions[d] = { startedAt: Date.now() - 90000, items: T.getItems(d), condition: null }; });
+  const sessClock = document.getElementById('session-clock');
+  sessClock.textContent = '0:05';
+  onVis();
+  check('回到前台也纠正训练总用时', sessClock.textContent === '1:30');
+  let vibrateArg = null;
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true, value: { vibrate(p){ vibrateArg = p; return true; } }
+  });
+  T.resetRest();
+  T.restStartsAt = Date.now() - 120000;
+  T.restEndsAt = Date.now() - 5000;       // 后台期间已经到点
+  T.tickRest();
+  check('休息到点会震动提醒（静音时也能察觉）', Array.isArray(vibrateArg) && vibrateArg.length >= 2);
+  check('到点后重复 tick 不重复提醒', (vibrateArg = null, T.tickRest(), vibrateArg === null));
+
+  console.log('== 28. v0.9.5 计时动作的秒表 ==');
+  T.switchDay('A');
+  T.state.sessions.A = null; T.clearDraft('A');
+  const itemsA = T.getItems('A');
+  const ti = itemsA.findIndex(it => (T.state.exercises[it.exerciseId] || {}).mode === 'time');
+  check('A 日确实有计时动作（平板/拉伸/呼吸）', ti >= 0);
+  const si = itemsA[ti].sets.length > 1 ? 1 : 0;
+  itemsA[ti].sets[si].duration = null;
+  T.clearTimer();
+  T.startTimer(ti, si);
+  check('开始计时后记住是哪一组', !!T.timerFor && T.timerFor.exIdx === ti && T.timerFor.setIdx === si);
+  advanceClock(65000);
+  check('经过的秒数按时间戳算（不看 setInterval 次数）', T.timerElapsedSec() === 65);
+  T.stopTimer();
+  check('停表把经过的秒数填进这一组', itemsA[ti].sets[si].duration === 65);
+  check('停表后不再挂着计时组', T.timerFor === null);
+  const posT = T.flatPos('A').findIndex(p => p.exIdx === ti && p.setIdx === si);
+  T.switchView('today'); T.curPos = posT; T.render();
+  let tcard = htmlTouchedHTML('ex-list');
+  check('计时动作卡片上有「计时」按钮', /data-act="timer"/.test(tcard) && />计时</.test(tcard));
+  T.startTimer(ti, si);
+  advanceClock(40000);
+  T.render();
+  tcard = htmlTouchedHTML('ex-list');
+  check('计时中按钮变成「停止」并高亮', /fs-timer running/.test(tcard) && />停止</.test(tcard));
+  check('计时中输入框就是读数，显示已经过的秒数', /value="40"[^>]*aria-label="时长（秒）"/.test(tcard));
+  itemsA[ti].sets[si].duration = null;
+  itemsA[ti].sets[si].done = false;
+  clickExList(doneBtnFromDOM(ti, si));
+  check('确认这一组时自动停表并填入时长', itemsA[ti].sets[si].duration === 40 && itemsA[ti].sets[si].done === true);
+  check('确认后秒表清空', T.timerFor === null);
+  T.startTimer(ti, si);
+  T.switchDay('B');
+  check('换日会丢掉上一日的秒表', T.timerFor === null);
+  T.switchDay('A');
+  const wi = itemsA.findIndex(it => (T.state.exercises[it.exerciseId] || {}).mode === 'weight');
+  T.curPos = T.flatPos('A').findIndex(p => p.exIdx === wi);
+  T.render();
+  check('力量动作卡片上不出现秒表', !/data-act="timer"/.test(htmlTouchedHTML('ex-list')));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

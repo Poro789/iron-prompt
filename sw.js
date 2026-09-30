@@ -2,7 +2,7 @@
  * 版本串由构建时 sed 替换（见 .github/workflows/deploy.yml），与 APP_VERSION 联动，
  * 版本一变缓存即失效，避免移动端长期跑旧副本。
  */
-const CACHE = 'ironlog-v0.9.3';
+const CACHE = 'ironlog-v0.9.4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './css/style.css', './js/app.js'];
 
 self.addEventListener('install', e => {
@@ -26,8 +26,11 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(req)
         .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put('./index.html', copy));
+          // 只缓存成功响应：部署间隙返回的 404 会被写进离线回退，之后离线打开就是错误页
+          if(res.ok){
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put('./index.html', copy));
+          }
           return res;
         })
         .catch(() => caches.match('./index.html'))

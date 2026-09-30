@@ -146,6 +146,13 @@ header .ver{color:var(--muted);font-size:12px}
   background:var(--panel2);color:var(--text);font-size:24px;
 }
 .fs-step:active{background:var(--border)}
+/* 计时动作（平板/拉伸/呼吸）的秒表：与输入框同高，跑起来时整块反色，一眼看出在计时 */
+.fs-timer{
+  width:72px;height:64px;border-radius:14px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text);font-size:16px;font-weight:600;
+}
+.fs-timer.running{background:var(--accent);border-color:var(--accent);color:#fff}
+.fs-timer:active{background:var(--border)}
 /* RPE */
 .rpe-row{display:flex;align-items:center;justify-content:center;gap:8px}
 .rpe-label{color:var(--muted);font-size:13px}
@@ -193,8 +200,19 @@ header .ver{color:var(--muted);font-size:12px}
 .warn-inline{background:rgba(224,82,82,.12);border:1px solid rgba(224,82,82,.35);border-radius:8px;padding:8px 10px;font-size:13px;margin:8px 0}
 
 /* ---------------- 历史 ---------------- */
-.trend-chart{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
+.trend-block{margin-bottom:14px}
+.trend-title{font-size:12px;color:#8b93a3;letter-spacing:.04em;text-transform:uppercase;margin:2px 0 6px}
+.trend-chart{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px}
 .trend-chart svg{width:100%;height:auto;display:block}
+.trend-legend{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.lg-row{display:flex;align-items:center;gap:8px;font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
+.lg-swatch{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.lg-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lg-val{font-variant-numeric:tabular-nums}
+.lg-dir{flex:0 0 auto;font-size:12px;color:#8b93a3}
+.lg-dir.up{color:#3fb96f}
+.lg-dir.down{color:#e05252}
+.trend-empty{background:var(--panel);border:1px dashed var(--border);border-radius:12px;padding:14px;color:#8b93a3;font-size:13px;line-height:1.6;margin-bottom:12px}
 .hist-item{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
 .hist-item summary{list-style:none;cursor:pointer;padding:12px;display:flex;align-items:center;gap:8px}
 .hist-item summary::-webkit-details-marker{display:none}

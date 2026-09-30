@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.3';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.4';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -238,7 +238,15 @@ function flushSave(){
   if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; }
   save();
 }
-document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') flushSave(); });
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden'){ flushSave(); return; }
+  // 回到前台：后台标签的 setInterval 会被挂起（iOS 上可能整段停掉），
+  // 先按时间戳纠一次，避免回来时看到几秒前的旧倒计时
+  if(restEndsAt !== null) tickRest();
+  if(timerFor){ const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }
+  const sess = state.sessions[curDay()], clock = $('session-clock');
+  if(sess && sess.startedAt && clock) clock.textContent = fmtDuration((Date.now() - sess.startedAt) / 1000);
+});
 window.addEventListener('pagehide', flushSave);
 
 /* ---------------- 通用工具 ---------------- */
@@ -353,6 +361,7 @@ function curDay(){ return state.settings.lastDay; }
 function switchDay(d){
   state.settings.lastDay = d;
   curPos = state.ui.curPos[d] || 0;   // A/B 各记各的位置，切回来不用重找
+  clearTimer();                       // 秒表属于另一天的某组，切走就丢掉
   save();
   render();
 }
@@ -507,7 +516,10 @@ function setInputsHTML(exIdx, setIdx, st, ex){
   const step = (f, dir, label) => `<button class="fs-step" data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}" data-act="step" data-dir="${dir}" aria-label="${label}">${dir < 0 ? '−' : '＋'}</button>`;
   const mode = ex.mode || 'weight';
   if(mode === 'time'){
-    return `<span class="val-group">${step('duration', -1, '时长减少 5 秒')}<input class="fs-input" ${d('duration')} inputmode="numeric" value="${st.duration ?? ''}" aria-label="时长（秒）"><span class="fs-unit">秒</span>${step('duration', 1, '时长增加 5 秒')}</span>`;
+    const running = timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx;
+    const shown = running ? timerElapsedSec() : (st.duration ?? '');
+    const timerBtn = `<button class="fs-timer${running ? ' running' : ''}" data-ex="${exIdx}" data-set="${setIdx}" data-act="timer" aria-label="${running ? '停止计时并填入时长' : '开始计时'}">${running ? '停止' : '计时'}</button>`;
+    return `${timerBtn}<span class="val-group">${step('duration', -1, '时长减少 5 秒')}<input class="fs-input" ${d('duration')} inputmode="numeric" value="${shown}" aria-label="时长（秒）"><span class="fs-unit">秒</span>${step('duration', 1, '时长增加 5 秒')}</span>`;
   }
   if(mode === 'bodyweight'){
     return `<span class="fs-bw">自重</span><span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
@@ -733,8 +745,18 @@ $('ex-list').addEventListener('click', e => {
     return;
   }
 
+  if(act === 'timer'){
+    // 计时动作（平板/拉伸/呼吸）：按一下开始，再按一下把经过的秒数填进这一组
+    if(timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
+    else { stopTimer(); startTimer(exIdx, setIdx); }
+    renderToday();
+    return;
+  }
+
   if(act === 'confirm'){
     if(restEndsAt !== null) finishRest();
+    // 确认时秒表还在跑：先停表填入时长，再记这一组，省掉「看表→打字」
+    if(timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
     // 不做「幽灵点击抑制」：CSS 已对所有 button 设 touch-action:manipulation
     // （见 css/style.css:13），双击缩放不会发生；再加时间窗只会吞掉用户故意的快速撤销。
     cycleDone(day, exIdx, setIdx);
@@ -801,6 +823,7 @@ function endSession(){
   const day = curDay();
   const sess = state.sessions[day];
   if(!sess) return;
+  clearTimer();   // 结束训练时秒表还在跑：不猜用户想填多少，直接丢弃
   const exercises = sess.items
     .map(it => ({
       exerciseId: it.exerciseId,
@@ -849,6 +872,7 @@ async function discardSession(){
   curPos = 0;
   state.ui.curPos[day] = 0;   // 放弃后回到第一组，别把旧位置留着
   resetRest();
+  clearTimer();
   flushSave();
   render();
   toast('已放弃');
@@ -913,6 +937,8 @@ function tickRest(){
   if(remain <= 0 && !restDone){
     restDone = true;
     beep();
+    // 手机在口袋里或静音时，震动比 880Hz 更容易被注意到
+    if(navigator.vibrate) navigator.vibrate([180, 80, 180]);
   }
   renderRestBar();
 }
@@ -976,38 +1002,124 @@ function beep(){
   }catch(e){}
 }
 
+/* ---------------- 计时动作的秒表 ----------------
+ * A 日有 9 个计时动作（平板、各类拉伸、呼吸），原来要自己看表、再打字填秒数。
+ * 按时间戳计算，切后台回来也不会少算；确认这一组时会自动停表填入。 */
+let timerFor = null;         // {exIdx, setIdx} 正在计时的组
+let timerStartsAt = null;
+let timerTicker = null;
+function timerElapsedSec(){ return timerStartsAt === null ? 0 : Math.round((Date.now() - timerStartsAt) / 1000); }
+function timerInputEl(){
+  if(!timerFor) return null;
+  return document.querySelector('#ex-list .fs-input[data-ex="' + timerFor.exIdx + '"][data-set="' + timerFor.setIdx + '"][data-f="duration"]');
+}
+function stopTimerTicker(){ if(timerTicker){ clearInterval(timerTicker); timerTicker = null; } }
+function startTimer(exIdx, setIdx){
+  timerFor = { exIdx, setIdx };
+  timerStartsAt = Date.now();
+  stopTimerTicker();
+  timerTicker = setInterval(() => { const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }, 250);
+}
+/* 停表并把经过的秒数写进这一组；没有在计时则什么都不做 */
+function stopTimer(){
+  stopTimerTicker();
+  if(!timerFor) return null;
+  const at = timerFor, elapsed = timerElapsedSec();
+  timerFor = null; timerStartsAt = null;
+  const set = getItems(curDay())[at.exIdx]?.sets[at.setIdx];
+  if(set) set.duration = elapsed;
+  saveSoon();
+  return { at, elapsed };
+}
+/* 放弃/结束/换日：丢掉秒表，不写进任何组 */
+function clearTimer(){ stopTimerTicker(); timerFor = null; timerStartsAt = null; }
+
 /* ---------------- 历史 & 导出 ---------------- */
-/* 纯 SVG 趋势折线图：每个动作一条线，X=日期，Y=top 组主指标 */
-function buildTrendChartSVG(trends, maxLines){
-  const entries = Object.entries(trends).filter(([, t]) => t.sessions.length >= 2).slice(0, maxLines || 5);
-  if(!entries.length) return '';
-  const W = 320, H = 120, PAD = { t: 16, r: 12, b: 24, l: 36 };
+/* 趋势折线图：按指标分组（kg / 秒 / 次 不能共用一条 Y 轴），X=该动作被记录的次数，Y=最好一组的主指标 */
+const TREND_COLORS = ['#4f8cff', '#3fb96f', '#e0a030', '#e05252', '#9b6dff'];
+const TREND_KIND_LABEL = { weight: '重量（kg）', duration: '时长（秒）', reps: '次数' };
+const TREND_DIR = { up: '↑ 上升', down: '↓ 下降', plateau: '→ 持平', new: '· 新出现' };
+const trendMetric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
+function trendKind(t){
+  const top = (t.sessions[t.sessions.length - 1] || {}).top || {};
+  if(top.duration != null) return 'duration';
+  if(top.weight != null) return 'weight';
+  return 'reps';
+}
+function trendValText(v, kind){ return kind === 'weight' ? fmtW(v) : String(Math.round(v)); }
+function trendUnit(id, kind){
+  if(kind !== 'weight') return kind === 'duration' ? '秒' : '次';
+  return (state.exercises[id] || {}).unit || '';
+}
+/* 动作在计划里出现的先后顺序：用来稳定选线（练得一样多的时候按训练顺序排） */
+function programOrder(){
+  const order = {};
+  ['A', 'B'].forEach(day => (state.program[day] || []).forEach(p => {
+    if(!(p.exerciseId in order)) order[p.exerciseId] = Object.keys(order).length;
+  }));
+  return order;
+}
+function trendChartSVG(entries, kind){
+  const W = 320, H = 120, PAD = { t: 14, r: 10, b: 20, l: 34 };
   const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
-  // 收集所有数据点
   const allPts = [];
-  entries.forEach(([id, t]) => {
-    const metric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
-    t.sessions.forEach((s, i) => allPts.push(metric(s)));
-  });
-  const yMin = Math.min(...allPts) * 0.9, yMax = Math.max(...allPts) * 1.05;
-  const yRange = yMax - yMin || 1;
-  const totalSessions = Math.max(...entries.map(([, t]) => t.sessions.length));
-  const xStep = totalSessions > 1 ? pw / (totalSessions - 1) : pw;
+  entries.forEach(([, t]) => t.sessions.forEach(s => allPts.push(trendMetric(s))));
+  const lo = Math.min(...allPts), hi = Math.max(...allPts);
+  const yMin = kind === 'reps' ? Math.max(0, lo - 1) : lo * 0.9;
+  const yMax = (hi * 1.06) || 1;
+  const yRange = (yMax - yMin) || 1;
+  const maxLen = Math.max(...entries.map(([, t]) => t.sessions.length));
+  const xStep = maxLen > 1 ? pw / (maxLen - 1) : pw;
   const yScale = v => PAD.t + ph - ((v - yMin) / yRange) * ph;
-  const colors = ['#4f8cff','#3fb96f','#e0a030','#e05252','#9b6dff'];
+  const xAt = i => PAD.l + i * xStep;
+  // 三条水平网格线 + 左侧刻度（读得出“这条线大概是多少”）
+  let grid = '';
+  [yMin, (yMin + yMax) / 2, yMax].forEach(v => {
+    const y = yScale(v).toFixed(1);
+    grid += `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="rgba(139,147,163,.18)" stroke-width="1"/>
+      <text x="${PAD.l - 5}" y="${(+y + 3).toFixed(1)}" font-size="9" fill="#8b93a3" text-anchor="end">${trendValText(v, kind)}</text>`;
+  });
+  // X 轴说明：横轴是每个动作各自被记录的次数，不是同一天的刻度，所以只标两端含义
+  const axis = `<text x="${PAD.l}" y="${H - 6}" font-size="9" fill="#8b93a3">最早</text>
+    <text x="${W - PAD.r}" y="${H - 6}" font-size="9" fill="#8b93a3" text-anchor="end">最近</text>`;
   const lines = entries.map(([id, t], li) => {
-    const metric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
-    const pts = t.sessions.map((s, i) => `${PAD.l + i * xStep},${yScale(metric(s))}`).join(' ');
+    const c = TREND_COLORS[li % TREND_COLORS.length];
+    const pts = t.sessions.map((s, i) => `${xAt(i).toFixed(1)},${yScale(trendMetric(s)).toFixed(1)}`).join(' ');
     const last = t.sessions[t.sessions.length - 1];
-    const label = `${(state.exercises[id] || {}).name || id} ${metric(last).toFixed(1)}`;
-    return `<polyline points="${pts}" fill="none" stroke="${colors[li % colors.length]}" stroke-width="2" stroke-linejoin="round"/>
-      <text x="${PAD.l + (t.sessions.length - 1) * xStep + 4}" y="${yScale(metric(last)) + 4}" font-size="9" fill="${colors[li % colors.length]}">${esc(label)}</text>`;
+    return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${xAt(t.sessions.length - 1).toFixed(1)}" cy="${yScale(trendMetric(last)).toFixed(1)}" r="2.5" fill="${c}"/>`;
   }).join('');
-  // Y 轴刻度
-  const yTicks = [yMin, yMin + yRange / 2, yMax].map(v =>
-    `<text x="${PAD.l - 4}" y="${yScale(v) + 3}" font-size="9" fill="#8b93a3" text-anchor="end">${Math.round(v)}</text>`
-  ).join('');
-  return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="动作趋势图">${yTicks}${lines}</svg></div>`;
+  return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${TREND_KIND_LABEL[kind]}趋势图">${grid}${axis}${lines}</svg></div>`;
+}
+function trendLegend(entries){
+  return '<div class="trend-legend">' + entries.map(([id, t], li) => {
+    const last = t.sessions[t.sessions.length - 1];
+    const name = (state.exercises[id] || {}).name || id;
+    const dir = TREND_DIR[t.direction] || TREND_DIR.new;
+    return `<div class="lg-row"><span class="lg-swatch" style="background:${TREND_COLORS[li % TREND_COLORS.length]}"></span>`
+      + `<span class="lg-name">${esc(name)}</span>`
+      + `<b class="lg-val">${trendValText(trendMetric(last), trendKind(t))} ${esc(trendUnit(id, trendKind(t)))}</b>`
+      + `<span class="lg-dir ${esc(t.direction || 'new')}">${dir} · ${t.sessions.length} 次</span></div>`;
+  }).join('') + '</div>';
+}
+function buildTrendCharts(trends, maxLines){
+  const usable = Object.entries(trends).filter(([, t]) => t.sessions.length >= 2);
+  if(!usable.length){
+    return '<div class="trend-empty">趋势要同一个动作至少记录 2 次。<br>再练两次，这里就会出现折线。</div>';
+  }
+  const order = programOrder();
+  const groups = {};
+  usable.forEach(([id, t]) => {
+    const k = trendKind(t);
+    (groups[k] = groups[k] || []).push([id, t]);
+  });
+  return Object.keys(groups).map(kind => {
+    const list = groups[kind]
+      .sort((a, b) => (b[1].sessions.length - a[1].sessions.length) || ((order[a[0]] ?? 999) - (order[b[0]] ?? 999)))
+      .slice(0, maxLines || 5);
+    return `<div class="trend-block"><div class="trend-title">${TREND_KIND_LABEL[kind]}</div>`
+      + trendChartSVG(list, kind) + trendLegend(list) + '</div>';
+  }).join('');
 }
 function renderHistory(){
   const list = $('hist-list');
@@ -1015,7 +1127,7 @@ function renderHistory(){
     list.innerHTML = '<div class="empty-hint">还没有训练记录。<br>完成一次训练后会自动出现在这里。</div>';
     return;
   }
-  const trendSVG = buildTrendChartSVG(buildTrends(state.logs.slice(-TREND_WINDOW)), 5);
+  const trendSVG = buildTrendCharts(buildTrends(state.logs.slice(-TREND_WINDOW)), 5);
   list.innerHTML = trendSVG + state.logs.slice().reverse().map((entry, ri) => {
     const vol = Math.round(sessionVolume(entry));
     const doneSets = sessionSets(entry);
