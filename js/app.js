@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.54';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.55';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -264,7 +264,8 @@ window.addEventListener('pagehide', flushSave);
 /* ---------------- 通用工具 ---------------- */
 const $ = id => document.getElementById(id);
 const round1 = v => Math.round(v * 10) / 10;
-const fmtW = v => (v === null || v === undefined || v === '') ? '' : String(round1(v));
+const round2 = v => Math.round(v * 100) / 100;   // 重量用 0.01：AI 计划/种子常有 11.35（=25lb）这种半档精度，round1 会把它显示成 11.3/11.4，和存的数据对不上
+const fmtW = v => (v === null || v === undefined || v === '') ? '' : String(round2(v));
 const WEEK = ['日','一','二','三','四','五','六'];
 /* 所有来自 localStorage / AI 导入的文本在拼进 innerHTML 前必须过 esc() */
 const esc = s => String(s).replace(/[&<>"']/g, c =>
@@ -880,7 +881,7 @@ $('ex-list').addEventListener('click', e => {
     const f = btn.dataset.f;
     const dir = +btn.dataset.dir;
     const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
-    const next = Math.max(f === 'reps' ? 1 : 0, round1((Number(set[f]) || 0) + dir * inc));
+    const next = Math.max(f === 'reps' ? 1 : 0, f === 'weight' ? round2((Number(set[f]) || 0) + dir * inc) : Math.round((Number(set[f]) || 0) + dir * inc));
     const wasPR = set.isPR === true;
     set[f] = next;
     refreshPR(day, exIdx, setIdx);
@@ -952,7 +953,7 @@ $('ex-list').addEventListener('change', e => {
   const wasPR = set.isPR === true;
   const v = parseFloat(inp.value);
   if(inp.dataset.f === 'weight'){
-    set.weight = isNaN(v) ? null : Math.max(0, round1(v));
+    set.weight = isNaN(v) ? null : Math.max(0, round2(v));
   }else if(inp.dataset.f === 'duration'){
     set.duration = isNaN(v) ? null : Math.max(0, Math.round(v));
   }else{

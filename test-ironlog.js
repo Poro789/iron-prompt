@@ -1828,7 +1828,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const s47 = () => T.getItems('A')[0].sets[0];
   fire47('abc');
   check('乱字符：数据记 null，输入框不再显示乱字符', s47().weight === null && inp47.value === '');
-  fire47('62.49');
+  fire47('62.499');
   check('超精度：写回纠正后的值', s47().weight === 62.5 && String(inp47.value) === '62.5');
   fire47('-3');
   check('负数：纠正为 0 并写回', s47().weight === 0 && String(inp47.value) === '0');
@@ -1928,6 +1928,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   handlers.get('rest-note|change')({ target: { value: '   ' } });
   check('空白输入等于清除', T.state.settings.restNote === '');
   T.state.settings.restNote = '';
+
+  console.log('== 76. 重量 0.05 半档精度不再被显示/步进打歪（v0.9.55）==');
+  T.state.exercises.test47 = { ...mk('测试深蹲47', 'weight'), unit: 'kg' };
+  T.state.program.A = [{ section: '', exerciseId: 'test47', repsRange: '', sets: [{ type: 'work', weight: 11.35, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.state.settings.weightStep = 2.5;
+  T.render();
+  check('卡片预填显示 11.35 原值', /value="11\.35"/.test(htmlTouchedHTML('ex-list')));
+  const inp76 = makeEl('fs-input-76');
+  inp76.dataset = { ex: '0', set: '0', f: 'weight' };
+  inp76.value = '11.35';
+  handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? inp76 : null } });
+  check('手输 11.35 原样保存', T.getItems('A')[0].sets[0].weight === 11.35);
+  clickExList(btnOf({ act: 'step', ex: 0, set: 0, f: 'weight', dir: 1 }));
+  check('步进 11.35+2.5=13.85 不漂', T.getItems('A')[0].sets[0].weight === 13.85);
+  const l76 = { date: '2023-11-20', day: 'A', startedAt: 1700000760000, endedAt: 1700000860000, durationSec: 100, condition: null,
+    exercises: [{ exerciseId: 'test47', note: '', sets: [{ type: 'work', weight: 11.35, reps: 10, duration: null, rpe: null, side: null, done: true }] }] };
+  T.state.logs.push(l76);
+  T.switchView('history'); T.render();
+  check('历史详情显示 11.35kg×10', htmlTouchedHTML('hist-list').includes('11.35kg×10'));
+  T.state.logs.splice(T.state.logs.findIndex(l => l.startedAt === 1700000760000), 1);
+  delete T.state.exercises.test47; delete T.state.drafts.A; delete T.state.sessions.A;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
