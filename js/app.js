@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.82';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.83';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -256,7 +256,8 @@ function migrate(d){
     if(d.sessions[day] && typeof d.sessions[day] !== 'object') d.sessions[day] = null;
     if(d.sessions[day] && !Array.isArray(d.sessions[day].items)) d.sessions[day].items = [];
     if(d.sessions[day] && d.sessions[day].items){
-      d.sessions[day].items = d.sessions[day].items.filter(it => it && typeof it === 'object');
+      // sets 不是数组的条目和日志侧一样丢弃：renderToday/flatPos 直接 .length/.forEach，留着必崩
+      d.sessions[day].items = d.sessions[day].items.filter(it => it && typeof it === 'object' && Array.isArray(it.sets));
       d.sessions[day].items.forEach(it => (it.sets || []).forEach(s => {
         if(s.done === null || s.done === undefined) s.done = false;
       }));

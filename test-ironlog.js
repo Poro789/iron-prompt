@@ -2696,6 +2696,26 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = T.state.logs.filter(l => l.startedAt !== 777000);
   delete T.state.exercises.e105;
 
+  /* ============================================================
+   * 106. sessions 条目的 sets 形状纠正（审计 #4 缺陷 3，v0.9.83）
+   * migrate 对 logs/drafts 都会剔除 sets 非数组的条目，唯独 sessions 只容忍不纠正；
+   * renderToday 的 it.sets.length / flatPos 的 it.sets.forEach 直接崩。
+   * ============================================================ */
+  console.log('== 106. sessions 条目 sets 非数组：与日志侧同口径丢弃 ==');
+  const bad106 = T.migrate({ version: 1, program: { A: [], B: [] }, exercises: {},
+    sessions: { A: { startedAt: 1, items: [
+      { exerciseId: 'x', sets: 'oops' },
+      { exerciseId: 'y', sets: [{ done: true, weight: '20' }] }
+    ] } } });
+  check('106 坏 sets 的条目被丢弃、好条目保留且数字归一',
+    bad106.sessions.A.items.length === 1 && bad106.sessions.A.items[0].exerciseId === 'y' &&
+    bad106.sessions.A.items[0].sets[0].weight === 20);
+  const bk106 = { version: 1, logs: [], program: { A: [], B: [] }, exercises: {},
+    sessions: { A: { startedAt: 1, items: [{ exerciseId: 'x', sets: null }] }, B: null } };
+  T.restoreBackupText(JSON.stringify(bk106)); T.answerConfirm(true); await null;
+  check('106 恢复这种备份不炸：形状被纠正而不是应用失败',
+    !!T.state.sessions.A && Array.isArray(T.state.sessions.A.items) && T.state.sessions.A.items.length === 0);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
