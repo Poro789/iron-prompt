@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.75';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.76';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -293,14 +293,21 @@ function flushSave(){
   if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; }
   save();
 }
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'hidden'){ flushSave(); return; }
-  // 回到前台：后台标签的 setInterval 会被挂起（iOS 上可能整段停掉），
-  // 先按时间戳纠一次，避免回来时看到几秒前的旧倒计时
-  if(restEndsAt !== null) tickRest();
+/* 回到前台：后台标签的 setInterval 会被挂起（iOS 上可能整段停掉），先按时间戳纠一次，
+ * 避免回来时看到几秒前的旧倒计时。休息若早已在后台到点，不补响提示音——
+ * 隔了几小时回来突然响一声只会吓一跳（与 resumeTimers 刷新时的口径一致）。 */
+function resumeClocks(){
+  if(restEndsAt !== null){
+    if(Date.now() >= restEndsAt) restDone = true;
+    tickRest();
+  }
   if(timerFor){ const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }
   const sess = state.sessions[curDay()], clock = $('session-clock');
   if(sess && sess.startedAt && clock) clock.textContent = fmtDuration((Date.now() - sess.startedAt) / 1000);
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden'){ flushSave(); return; }
+  resumeClocks();
 });
 window.addEventListener('pagehide', flushSave);
 
@@ -693,7 +700,7 @@ function setInputsHTML(exIdx, setIdx, st, ex){
   }
   const ws = state.settings.weightStep;
   const unitLbl = esc(ex.unit || 'kg');   // 读屏文案与实际显示的单位保持一致（lb/band 不再念成 kg）
-  return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' ' + unitLbl)}<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量"><span class="fs-unit">${unitLbl}</span>${step('weight', 1, '重量增加 ' + ws + ' ' + unitLbl)}</span>
+  return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' ' + unitLbl)}<input class="fs-input" ${d('weight')} inputmode="decimal" value="${fmtW(st.weight)}" aria-label="重量（${unitLbl}）"><span class="fs-unit">${unitLbl}</span>${step('weight', 1, '重量增加 ' + ws + ' ' + unitLbl)}</span>
     <span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
 }
 function fullScreenHTML(day){

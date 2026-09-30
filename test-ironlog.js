@@ -136,7 +136,7 @@ const testScript = script + `
   startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   get openNotes(){ return openNotes; },
-  startRestTimer, tickRest, finishRest, skipRest, resetRest, askConfirm, answerConfirm,
+  startRestTimer, tickRest, finishRest, skipRest, resetRest, resumeClocks, askConfirm, answerConfirm,
   toggleDrawer, closeDrawer,
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
@@ -2506,6 +2506,37 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.program.A = [];
   T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
   delete T.state.exercises.e98;
+
+  /* ============================================================
+   * 99. 回到前台不补响已过期的休息提示音（v0.9.76）
+   * 后台标签的 setInterval 可能被整段挂起（iOS），回到前台时 restDone 还是 false，
+   * 旧逻辑会立刻补响一声——隔了几小时回来突然响只会吓一跳。与 resumeTimers 同口径抑制。
+   * ============================================================ */
+  console.log('== 99. 后台挂起后回前台不补响旧休息（v0.9.76）==');
+  T.clearTimer(); T.resetRest();
+  T.state.settings.lastDay = 'A';
+  T.state.settings.restSec = 60;
+  T.state.exercises.e99 = { name: 'E99', mode: 'weight', unit: 'kg' };
+  T.state.program.A = [{ exerciseId: 'e99', sets: [{ type: 'work', weight: 10, reps: 10, duration: null, rpe: null, side: null }] }];
+  T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
+  T.startSessionIfNeeded('A');
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });
+  let vib99 = 0;
+  Object.defineProperty(global, 'navigator', { configurable: true, value: { vibrate(){ vib99++; return true; } } });
+  advanceClock(61000);   // 模拟挂起：时钟走了，interval 没跑，restDone 仍是 false
+  T.resumeClocks();
+  check('99 回到前台不为已过期休息补响', vib99 === 0);
+  check('99 置位后重复 tick 仍不响', (T.tickRest(), vib99 === 0));
+  T.resetRest();
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });
+  T.tickRest();
+  check('99 未到点不响', vib99 === 0);
+  advanceClock(61000);
+  T.tickRest();
+  check('99 正常到点仍会响一次', vib99 === 1);
+  T.resetRest(); T.clearTimer();
+  T.state.program.A = []; T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
+  delete T.state.exercises.e99;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
