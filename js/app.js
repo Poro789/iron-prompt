@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.89';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.90';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -21,12 +21,12 @@ const SEED = {
   profile: { background: '体态问题：X 型腿、肋骨外扩\n目标：增肌 + 改善体态\n（请补充：身高体重、训练水平、器械范围与上限）' },
   program: {
     A: [
-      { section:'1. 动态升温与激活', exerciseId:'wall_angel',        sets:[{type:'work',   weight:null,   reps:10,  duration:null, rpe:6}] },
-      { section:'1. 动态升温与激活', exerciseId:'broom_hinge',       sets:[{type:'work',   weight:null,   reps:5,   duration:null, rpe:6}] },
-      { section:'1. 动态升温与激活', exerciseId:'cat_cow',           sets:[{type:'work',   weight:null,   reps:8,   duration:null, rpe:6}] },
-      { section:'1. 动态升温与激活', exerciseId:'glute_bridge',      sets:[{type:'work',   weight:null,   reps:15,  duration:null, rpe:6}] },
-      { section:'1. 动态升温与激活', exerciseId:'bw_squat',          sets:[{type:'work',   weight:null,   reps:15,  duration:null, rpe:6}] },
-      { section:'1. 动态升温与激活', exerciseId:'band_pull_apart',   sets:[{type:'work',   weight:10,     reps:15,  duration:null, rpe:6}] },
+      { section:'1. 动态升温与激活', exerciseId:'wall_angel',        sets:[{type:'warmup', weight:null,   reps:10,  duration:null, rpe:6}] },
+      { section:'1. 动态升温与激活', exerciseId:'broom_hinge',       sets:[{type:'warmup', weight:null,   reps:5,   duration:null, rpe:6}] },
+      { section:'1. 动态升温与激活', exerciseId:'cat_cow',           sets:[{type:'warmup', weight:null,   reps:8,   duration:null, rpe:6}] },
+      { section:'1. 动态升温与激活', exerciseId:'glute_bridge',      sets:[{type:'warmup', weight:null,   reps:15,  duration:null, rpe:6}] },
+      { section:'1. 动态升温与激活', exerciseId:'bw_squat',          sets:[{type:'warmup', weight:null,   reps:15,  duration:null, rpe:6}] },
+      { section:'1. 动态升温与激活', exerciseId:'band_pull_apart',   sets:[{type:'warmup', weight:10,     reps:15,  duration:null, rpe:6}] },
       { section:'1. 动态升温与激活', exerciseId:'empty_bar_warmup', sets:[{type:'warmup', weight:null,   reps:10,  duration:null, rpe:6}] },
       { section:'2. 主项力量与神经募集', exerciseId:'goblet_squat',  sets:[{type:'warmup', weight:5.35,   reps:10,  duration:null, rpe:6},{type:'work', weight:11.35, reps:10, duration:null, rpe:8},{type:'work', weight:11.35, reps:10, duration:null, rpe:9}] },
       { section:'2. 主项力量与神经募集', exerciseId:'db_bench',      sets:[{type:'warmup', weight:2.85,   reps:10,  duration:null, rpe:6},{type:'work', weight:7.85,  reps:10, duration:null, rpe:8},{type:'work', weight:7.85,  reps:10, duration:null, rpe:7.5},{type:'work', weight:7.85,  reps:10, duration:null, rpe:9.5}] },
@@ -46,11 +46,11 @@ const SEED = {
       { section:'5. 静态拉伸与副交感下调', exerciseId:'parasympathetic_breath', sets:[{type:'work', weight:null, reps:null, duration:60, rpe:3}] }
     ],
     B: [
-      { section:'热身 8 分钟', exerciseId:'wall_angel',    sets:[{type:'work', weight:null, reps:10, duration:null, rpe:6}] },
-      { section:'热身 8 分钟', exerciseId:'broom_hinge',   sets:[{type:'work', weight:null, reps:5,  duration:null, rpe:6}] },
-      { section:'热身 8 分钟', exerciseId:'cat_cow',       sets:[{type:'work', weight:null, reps:8,  duration:null, rpe:6}] },
-      { section:'热身 8 分钟', exerciseId:'clamshell',     sets:[{type:'work', weight:null, reps:15, duration:null, rpe:6, side:'L'},{type:'work', weight:null, reps:15, duration:null, rpe:6, side:'R'}] },
-      { section:'热身 8 分钟', exerciseId:'bw_squat',      sets:[{type:'work', weight:null, reps:15, duration:null, rpe:6}] },
+      { section:'热身 8 分钟', exerciseId:'wall_angel',    sets:[{type:'warmup', weight:null, reps:10, duration:null, rpe:6}] },
+      { section:'热身 8 分钟', exerciseId:'broom_hinge',   sets:[{type:'warmup', weight:null, reps:5,  duration:null, rpe:6}] },
+      { section:'热身 8 分钟', exerciseId:'cat_cow',       sets:[{type:'warmup', weight:null, reps:8,  duration:null, rpe:6}] },
+      { section:'热身 8 分钟', exerciseId:'clamshell',     sets:[{type:'warmup', weight:null, reps:15, duration:null, rpe:6, side:'L'},{type:'warmup', weight:null, reps:15, duration:null, rpe:6, side:'R'}] },
+      { section:'热身 8 分钟', exerciseId:'bw_squat',      sets:[{type:'warmup', weight:null, reps:15, duration:null, rpe:6}] },
       { section:'热身 8 分钟', exerciseId:'empty_bar_warmup', sets:[{type:'warmup', weight:null, reps:10, duration:null, rpe:6}] },
       { section:'主课（组间90秒，动作间2分钟）', exerciseId:'db_glute_bridge', sets:[{type:'work', weight:null, reps:15, duration:null, rpe:8},{type:'work', weight:null, reps:15, duration:null, rpe:8}] },
       { section:'主课（组间90秒，动作间2分钟）', exerciseId:'bulgarian_squat', sets:[{type:'work', weight:null, reps:10, duration:null, rpe:8, side:'L'},{type:'work', weight:null, reps:10, duration:null, rpe:8, side:'R'}] },
@@ -58,7 +58,7 @@ const SEED = {
       { section:'主课（组间90秒，动作间2分钟）', exerciseId:'band_row',        sets:[{type:'work', weight:15, reps:12, duration:null, rpe:8},{type:'work', weight:15, reps:12, duration:null, rpe:8}] },
       { section:'主课（组间90秒，动作间2分钟）', exerciseId:'lateral_raise',   sets:[{type:'work', weight:null, reps:12, duration:null, rpe:8},{type:'work', weight:null, reps:12, duration:null, rpe:8}] },
       { section:'主课（组间90秒，动作间2分钟）', exerciseId:'band_external_rot', sets:[{type:'work', weight:10, reps:15, duration:null, rpe:8, side:'L'},{type:'work', weight:10, reps:15, duration:null, rpe:8, side:'R'}] },
-      { section:'主课（组间90秒，动作间2分钟）', exerciseId:'bird_dog',        sets:[{type:'work', weight:null, reps:8, duration:null, rpe:8, side:'L'},{type:'work', weight:null, reps:8, duration:null, rpe:8, side:'R'}] },
+      { section:'主课（组间90秒，动作间2分钟）', exerciseId:'bird_dog',        sets:[{type:'work', weight:null, reps:8, duration:null, rpe:8},{type:'work', weight:null, reps:8, duration:null, rpe:8}] },
       { section:'主课（组间90秒，动作间2分钟）', exerciseId:'dead_bug',        sets:[{type:'work', weight:null, reps:8, duration:null, rpe:8, side:'L'},{type:'work', weight:null, reps:8, duration:null, rpe:8, side:'R'}] },
       { section:'拉伸 10 分钟', exerciseId:'hip_flexor_stretch', sets:[{type:'work', weight:null, reps:null, duration:30, rpe:5},{type:'work', weight:null, reps:null, duration:30, rpe:5}] },
       { section:'拉伸 10 分钟', exerciseId:'hamstring_stretch',   sets:[{type:'work', weight:null, reps:null, duration:30, rpe:5},{type:'work', weight:null, reps:null, duration:30, rpe:5}] },
@@ -615,8 +615,10 @@ function startSessionIfNeeded(day){
 
 /* 卡片右上角目标标签：如 "热身 1 + 2 × 10" / "4 × 30s" */
 function targetLabel(item){
-  const work = item.sets.filter(s => s.type !== 'warmup');
-  const warm = item.sets.length - work.length;
+  let work = item.sets.filter(s => s.type !== 'warmup');
+  const warmOnly = !work.length;
+  if(warmOnly) work = item.sets;   // 纯热身动作：目标就念热身组，别显示「热身 2 + 0 组」
+  const warm = warmOnly ? 0 : item.sets.length - work.length;
   let core;
   if(work.length && work.every(s => s.duration != null)){
     const ds = work.map(s => s.duration);
@@ -631,7 +633,7 @@ function targetLabel(item){
   }else{
     core = work.length + ' 组';
   }
-  return warm ? '热身 ' + warm + ' + ' + core : core;
+  return warm ? '热身 ' + warm + ' + ' + core : (warmOnly ? '热身 ' + core : core);
 }
 
 /* ---------------- 全屏一次一组（v0.8 交互） ----------------

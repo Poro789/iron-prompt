@@ -164,7 +164,8 @@ function check(name, cond){
 console.log('== 1. 种子迁移（旧格式 -> 逐组数组） ==');
 check('program A 项被归一化为数组', Array.isArray(T.state.program.A[0].sets) && T.state.program.A[0].sets.length === 1);
 check('B 日蚌式 2 组（左右各一）', T.state.program.B[3].exerciseId === 'clamshell' && T.state.program.B[3].sets.length === 2 && T.state.program.B[3].sets[0].side === 'L');
-check('targetLabel 单侧动作', T.targetLabel(T.state.program.B[3]) === '2 × 15');
+check('targetLabel 单侧动作', T.targetLabel(T.state.program.B[7]) === '2 × 10');   // 保加利亚蹲（work 组）
+check('targetLabel 纯热身项念热身组', T.targetLabel(T.state.program.B[3]) === '热身 2 × 15');   // v0.9.90 起热身分区是纯 warmup 项，不是「热身 2 + 0 组」
 
 console.log('== 2. 导入 plan-A.json ==');
 const planText = fs.readFileSync(path.join(__dirname, 'fixtures/plan-A.json'), 'utf8');
@@ -2902,6 +2903,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('112 单位缺失图例念 kg（与标题一致）', /重量（kg）/.test(ch112c) && ch112c.includes('100 kg'));
   check('112 normUnit 归一大小写与空格', (() => { T.state.exercises.e112a.unit = ' Lb '; return T.normUnit('e112a') === 'lb'; })());
   delete T.state.exercises.e112a; delete T.state.exercises.e112b; T.state.logs = [];
+
+  /* ============================================================
+   * 113. SEED 种子计划自洽（v0.9.90）
+   * 热身分区的组全部 type:'warmup'（休息预算走 warmupRestSec、不进趋势/PR/容量）；
+   * 主项区仍保留 work 组；bird_dog 两日都不标 side（左右交替动作，标 L/R 反而误导）。
+   * 用 migrate 缺 program 时的 SEED 深拷贝取原始数据。
+   * ============================================================ */
+  console.log('== 113. SEED 热身分区 type 与 side 一致性（v0.9.90）==');
+  const m113 = T.migrate({ version: 1, logs: [] });
+  const warmSecs = it => it.section === '1. 动态升温与激活' || it.section === '热身 8 分钟';
+  const warmItems113 = [...m113.program.A, ...m113.program.B].filter(warmSecs);
+  check('113 热身分区确实有内容可查', warmItems113.length >= 11);
+  check('113 热身分区全部组 type=warmup', warmItems113.every(it => it.sets.every(s => s.type === 'warmup')));
+  const mainItems113 = [...m113.program.A, ...m113.program.B].filter(it => !warmSecs(it));
+  check('113 主项/辅助区仍有正式组（没有误伤）', mainItems113.every(it => it.sets.some(s => s.type === 'work')));
+  const bd113 = [...m113.program.A, ...m113.program.B].filter(it => it.exerciseId === 'bird_dog');
+  check('113 bird_dog 两日都不标 side', bd113.length === 2 && bd113.every(it => it.sets.every(s => s.side == null)));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
