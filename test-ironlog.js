@@ -1792,6 +1792,30 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = T.state.logs.filter(l => l.startedAt !== ts66);
   delete T.state.sessions.A; delete T.state.drafts.A;
 
+  console.log('== 67. 「改一下」旧记录结束时不清掉当日草稿（v0.9.45）==');
+  const ts67 = 1700000333000;
+  const log67 = { date: '2023-11-14', day: 'A', startedAt: ts67, endedAt: ts67 + 60000, durationSec: 60, condition: null,
+    exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 40, reps: 5, done: true }] }] };
+  T.state.logs.push(log67);
+  T.state.drafts.A = [{ exerciseId: 'test_pr', note: '今天肩膀有点响', sets: [{ weight: null, reps: null, done: false }] }];
+  T.switchView('history'); T.render();
+  clickEl('hist-list', btnOf({ act: 'reeditlog', ts: String(ts67), i: '0' }));
+  check('进入旧记录编辑态', !!T.state.sessions.A && T.state.sessions.A.keepMeta && T.state.sessions.A.keepMeta.startedAt === ts67);
+  T.endSession(); T.closeSummary();
+  const back67 = T.state.logs.find(l => l.startedAt === ts67);
+  check('旧记录按原时间戳写回', !!back67);
+  check('当日草稿原样保留', Array.isArray(T.state.drafts.A) && T.state.drafts.A[0].note === '今天肩膀有点响');
+  // 普通结束仍会清掉升格后的草稿
+  T.state.drafts.A = [{ exerciseId: 'test_pr', note: '普通流程', sets: [{ weight: 20, reps: 5, done: true }] }];
+  const n67 = T.state.logs.length;
+  T.startSessionIfNeeded('A');
+  T.endSession(); T.closeSummary();
+  // 普通结束：那份草稿已升格进记录；render 会按当前计划重新预填一份新草稿（既有设计）
+  check('普通结束不留旧草稿（只剩按计划重新预填的）', !T.state.drafts.A || T.state.drafts.A.every(it => it.note !== '普通流程'));
+  T.state.logs.splice(n67);   // 移除这次普通结束写出的当日日志
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== ts67);
+  delete T.state.sessions.A; delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
