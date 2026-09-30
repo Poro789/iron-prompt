@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.86';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.87';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -197,11 +197,14 @@ function migrate(d){
   if(!d.settings) d.settings = {};
   if(d.settings.restNote === undefined) d.settings.restNote = '';
   if(typeof d.settings.restSec !== 'number' || !(d.settings.restSec >= 0)) d.settings.restSec = 90;
+  else d.settings.restSec = Math.min(1800, d.settings.restSec);   // 与设置页同口径封顶：手改备份写 1e9 也别倒计时到明年
   if(typeof d.settings.warmupRestSec !== 'number' || !(d.settings.warmupRestSec >= 0)) d.settings.warmupRestSec = 30;
+  else d.settings.warmupRestSec = Math.min(1800, d.settings.warmupRestSec);
   /* 手工编辑/旧版备份可能缺这些：缺了就补默认值，别让 curDay() 拿到 undefined、
    * ±步进算出 NaN、或设置页显示 "undefined" */
   if(d.settings.lastDay !== 'A' && d.settings.lastDay !== 'B') d.settings.lastDay = 'A';
   if(typeof d.settings.weightStep !== 'number' || !(d.settings.weightStep > 0)) d.settings.weightStep = 2.5;
+  else d.settings.weightStep = Math.min(100, d.settings.weightStep);   // 封顶：± 按钮按步进直加，1e9 的步进没有意义
   if(!Array.isArray(d.logs)) d.logs = [];
   /* 手工编辑/截断的备份里混进坏条目（null、缺 exercises）会让历史/趋势/导出整页崩。
    * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。
@@ -2179,7 +2182,7 @@ $('personal-note').addEventListener('change', e => {
 });
 $('weight-step').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
-  state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : round1(v);
+  state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : Math.min(100, round1(v));
   e.target.value = state.settings.weightStep;   // 非法输入被纠正后要把纠正结果写回输入框，否则显示 0.2 实际用 2.5
   save();
   toast('重量步进：' + state.settings.weightStep);   // 步进是数字，按各动作自己的单位生效，不写死 kg

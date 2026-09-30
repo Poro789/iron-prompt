@@ -2828,6 +2828,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   if(nav109prev) Object.defineProperty(global, 'navigator', nav109prev); else delete global.navigator;
   T.state.logs = [];
 
+  /* ============================================================
+   * 110. 手改备份里的荒谬设置值要封顶（v0.9.87）
+   * restSec/warmupRestSec ≤1800、weightStep ≤100 —— 与设置页同口径；
+   * 正常范围内的值原样保留。
+   * ============================================================ */
+  console.log('== 110. 设置值封顶（v0.9.87）==');
+  const m110 = T.migrate({ version: 1, logs: [], settings: { restSec: 1e9, warmupRestSec: 99999, weightStep: 1e9 } });
+  check('110 restSec 封顶 1800', m110.settings.restSec === 1800);
+  check('110 warmupRestSec 封顶 1800', m110.settings.warmupRestSec === 1800);
+  check('110 weightStep 封顶 100', m110.settings.weightStep === 100);
+  const m110b = T.migrate({ version: 1, logs: [], settings: { restSec: 120, warmupRestSec: 0, weightStep: 5 } });
+  check('110 正常值原样保留（0 仍是合法的关闭值）', m110b.settings.restSec === 120 && m110b.settings.warmupRestSec === 0 && m110b.settings.weightStep === 5);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
