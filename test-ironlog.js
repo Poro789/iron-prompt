@@ -1951,6 +1951,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs.splice(T.state.logs.findIndex(l => l.startedAt === 1700000760000), 1);
   delete T.state.exercises.test47; delete T.state.drafts.A; delete T.state.sessions.A;
 
+  console.log('== 77. 「沿用上次」改了已确认组的数字，🔥 跟着重算（v0.9.56）==');
+  T.state.exercises.test_pr = mk('测试推举', 'weight');
+  T.state.logs.push({ date: '2026-04-01', day: 'A', startedAt: 2222, endedAt: 2223, durationSec: 1, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [tset({ weight: 60, reps: 5 })] }
+  ] });
+  T.state.program.A = [{ section: '', exerciseId: 'test_pr', repsRange: '', sets: [{ type: 'work', weight: 90, reps: 5, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; T.state.sessions.A = null; T.state.ui.curPos.A = 0;
+  T.state.settings.lastDay = 'A'; T.curPos = 0;
+  clickExList(doneBtn(0, 0));   // 确认 90：破历史 60 → 🔥 点亮
+  check('确认 90：徽章点亮', prSet().isPR === true && String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  clickExList(btnOf({ act: 'uselast', ex: '0', set: '0' }));   // 沿用上次 → 60，等于历史最好，应熄灭
+  check('沿用上次降到历史最好：徽章熄灭', prSet().isPR === false && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  clickExList(btnOf({ act: 'uselast', ex: '0', set: '0' }));   // 再点一次仍是 60，保持熄灭
+  check('重复沿用不产生假 PR', prSet().isPR === false && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
+  T.state.logs.pop(); delete T.state.exercises.test_pr; delete T.state.drafts.A; delete T.state.sessions.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

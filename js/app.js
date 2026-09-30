@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.55';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.56';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -908,7 +908,11 @@ $('ex-list').addEventListener('click', e => {
     if(lv.weight != null){ set.weight = lv.weight; used = true; }
     if(lv.reps != null){ set.reps = lv.reps; used = true; }
     if(lv.duration != null){ set.duration = lv.duration; used = true; }
-    if(used) saveSoon();
+    if(used){
+      // 沿用上次改了已确认组的数字：🔥 必须跟着重算（与 step/change 同一规矩）
+      refreshPR(day, exIdx, setIdx);
+      saveSoon();
+    }
     renderToday();
     return;
   }

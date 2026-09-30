@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.56]
+
+### 修复
+- 「沿用上次」把已确认组的数字改低后，🔥 PR 徽章会残留不熄灭（与 ±步进、直接输入不同，这个按钮漏了重算）
+
 ## [0.9.55]
 
 ### 修复
