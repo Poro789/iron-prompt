@@ -3265,6 +3265,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('125 自己定义的 "toString" 作动作 id 正常可用', r125b.ok && T.state.exercises.toString.name === '特殊id125');
   T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
 
+  /* ============================================================
+   * 126. 多余的日当场拒绝（v0.9.103）
+   * 应用只有 A/B 两日；program 里混进 C 日会被 ['A','B'] 循环静默丢掉，
+   * 「导入成功」却什么都没变——必须拒绝并点名。
+   * ============================================================ */
+  console.log('== 126. 多余日被拒绝（v0.9.103）==');
+  const r126a = T.importPlan('{"exercises":{"e126":{"name":"动作126","mode":"weight"}},"program":{"A":[{"exerciseId":"e126","sets":[{"reps":8}]}],"C":[{"exerciseId":"e126","sets":[{"reps":8}]}]}}');
+  check('126 A+C 被拒且文案点名 C', !r126a.ok && r126a.error.includes('只能包含 A/B') && r126a.error.includes('"C"'));
+  const r126b = T.importPlan('{"exercises":{"e126":{"name":"动作126","mode":"weight"}},"program":{"A":[{"exerciseId":"e126","sets":[{"reps":8}]}]}}');
+  check('126 只写 A 的正常导入不受影响', r126b.ok);
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
