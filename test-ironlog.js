@@ -137,7 +137,7 @@ const testScript = script + `
   reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
-  buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA,
+  buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA, copyText,
   buildTrendCharts, trendKind, sessionKind, normUnit, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
@@ -2425,9 +2425,9 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('95 先落盘一次', !!global.localStorage._d['ironlog.v1']);
   global.location = { reload(){ T.flushSave(); } };   // 模拟 reload 时卸载回调再落盘
   T.clearAll();
+  T.answerConfirm(true); await null; await null; await null;   // 同 95：留底在两次确认之间
   T.answerConfirm(true); await null;
-  T.answerConfirm(true); await null;
-  await null; await null; await null;   // v0.9.86 起清除前还有一步 await copyText，多放行几拍
+  await null; await null;
   check('95 清除后存储为空，卸载落盘没把它写回', global.localStorage._d['ironlog.v1'] === undefined);
   delete global.location;
   T.state.logs = [];
@@ -2532,6 +2532,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.startSessionIfNeeded('A');
   T.startRestTimer({ exIdx: 0, setIdx: 0 });
   let vib99 = 0;
+  const nav99prev = Object.getOwnPropertyDescriptor(global, 'navigator');
   Object.defineProperty(global, 'navigator', { configurable: true, value: { vibrate(){ vib99++; return true; } } });
   advanceClock(61000);   // 模拟挂起：时钟走了，interval 没跑，restDone 仍是 false
   T.resumeClocks();
@@ -2545,6 +2546,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.tickRest();
   check('99 正常到点仍会响一次', vib99 === 1);
   T.resetRest(); T.clearTimer();
+  if(nav99prev) Object.defineProperty(global, 'navigator', nav99prev); else delete global.navigator;
   T.state.program.A = []; T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
   delete T.state.exercises.e99;
 
@@ -2798,11 +2800,11 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   delete T.state.exercises.e108; delete T.state.drafts.A;
 
   /* ============================================================
-   * 109. 清除全部数据前把备份尽力复制到剪贴板（v0.9.86）
-   * 双确认后、removeItem 前：copyText(JSON.stringify(buildBackup()))。
+   * 109. 清除全部数据前把备份尽力复制到剪贴板（v0.9.86，v0.9.95 挪到两次确认之间）
+   * ok1 后先 copyText，最后一次确认如实说明有没有留成底。
    * 剪贴板不可用（无 writeText、execCommand 缺失）也不阻断清除。
    * ============================================================ */
-  console.log('== 109. 清除前尝试留备份到剪贴板（v0.9.86）==');
+  console.log('== 109. 清除前尝试留备份到剪贴板（v0.9.86/v0.9.95）==');
   T.state.logs = [{ date: '2026-01-02', day: 'A', startedAt: 991001, exercises: [] }];
   // §95 之后模块 clearingAll 已为 true（只有重新加载会复位），flushSave 是空转——直接种存储
   global.localStorage._d['ironlog.v1'] = 'seed109';
@@ -2813,18 +2815,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   } });
   global.location = { reload(){} };
   T.clearAll();
+  T.answerConfirm(true); await null; await null; await null;   // 留底走异步剪贴板：三拍后才到第二次确认
+  check('109 最后确认如实说已留底', String(document.getElementById('confirm-desc').textContent).includes('已复制到剪贴板'));
   T.answerConfirm(true); await null;
-  T.answerConfirm(true); await null;   // 走到 copyText → 微任务，再放行一步
   await null; await null;
   check('109 剪贴板收到完整备份', /"type":"ironlog-backup"/.test(copied109) && /991001/.test(copied109));
   check('109 清除照常执行', global.localStorage._d['ironlog.v1'] === undefined);
-  // 无剪贴板时不阻断清除
+  // 无剪贴板时不阻断清除，且确认文案改口
   Object.defineProperty(global, 'navigator', { configurable: true, value: {} });
   global.localStorage._d['ironlog.v1'] = 'seed109b';
   T.clearAll();
+  T.answerConfirm(true); await null; await null;   // 无剪贴板时回退是同步的，但仍隔一层 await copyText
+  check('109 无剪贴板时确认改口留不了底', String(document.getElementById('confirm-desc').textContent).includes('留不了底'));
   T.answerConfirm(true); await null;
-  T.answerConfirm(true); await null;
-  await null; await null;
+  await null;
   check('109 剪贴板不可用也能清除', global.localStorage._d['ironlog.v1'] === undefined);
   delete global.location;
   if(nav109prev) Object.defineProperty(global, 'navigator', nav109prev); else delete global.navigator;
@@ -3057,6 +3061,41 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const css117 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
   check('117 抽屉关闭态 visibility:hidden（不进 Tab 序列）', /\.drawer\{[^}]*visibility:hidden/.test(css117) && /\.drawer\.open\{[^}]*visibility:visible/.test(css117));
   check('117 汉堡带 aria-expanded/aria-controls', html.includes('aria-expanded="false"') && html.includes('aria-controls="drawer"'));
+
+  /* ============================================================
+   * 118. copyText 回退复制入参本身；仅数据导出紧凑+文案分路；切视图回顶（v0.9.95）
+   * 回退路径复制的是 #export-text 的内容——不先写入 t 就会复制出旧文本（clearAll 场景）。
+   * 「仅复制数据」与 prompt 内嵌 JSON 同一紧凑序列化，字符数不翻倍；
+   * 完成提示按分支分开：裸 JSON 没有输出模板，不能承诺「返回的 JSON 可直接导入」。
+   * ============================================================ */
+  console.log('== 118. 复制回退/导出文案分路/切视图回顶（v0.9.95）==');
+  const nav118prev = Object.getOwnPropertyDescriptor(global, 'navigator');
+  Object.defineProperty(global, 'navigator', { configurable: true, value: {} });   // 无异步剪贴板 → 走回退
+  let exec118 = 0;
+  document.getElementById('export-text').value = '上一次的旧导出';
+  global.document.execCommand = () => { exec118++; return true; };
+  const ok118 = await T.copyText('hello118');
+  check('118 回退复制前先写入入参文本', ok118 === true && exec118 === 1 && document.getElementById('export-text').value === 'hello118');
+  delete global.document.execCommand;
+  Object.defineProperty(global, 'navigator', nav118prev);
+  // 仅数据导出：紧凑 JSON + 文案不承诺可导入
+  T.state.logs = [{ date: '2026-01-03', day: 'A', startedAt: 995001, exercises: [{ exerciseId: 'goblet_squat', sets: [{ done: true, weight: 10, reps: 5 }] }] }];
+  await T.doExportData();
+  const exp118 = document.getElementById('export-text').value;
+  check('118 数据分支紧凑序列化（不缩进翻倍）', JSON.parse(exp118) && !/\n\s+"/.test(exp118));
+  check('118 数据分支文案不承诺直接导入', String(textOf('export-msg')).includes('纯数据快照') && !String(textOf('export-msg')).includes('返回的 JSON 可直接'));
+  await T.doExport();
+  check('118 含 prompt 分支文案不变', String(textOf('export-msg')).includes('返回的 JSON 可直接用「导入 AI 方案」导入'));
+  // 切视图回顶
+  let scrolled118 = false;
+  const prevScroll118 = global.window.scrollTo;
+  global.window.scrollTo = () => { scrolled118 = true; };
+  T.switchView('history');
+  check('118 切视图回到页首', scrolled118 === true);
+  global.window.scrollTo = prevScroll118;
+  T.switchView('today');
+  check('118 导出框 placeholder 不再只说 JSON 快照', !html.includes('JSON 快照显示在这里'));
+  T.state.logs = [];
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

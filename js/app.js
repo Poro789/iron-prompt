@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.94';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.95';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -464,6 +464,8 @@ function switchView(v){
       tab.setAttribute('aria-selected', x === v ? 'true' : 'false');
     }
   });
+  // 切视图后回到页首：新视图更短时浏览器只会夹掉多余滚动，仍停在旧位置
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   render();
 }
 /* 抽屉开关（关闭态 visibility:hidden 由 CSS 保证，控件不进 Tab 序列；
@@ -2049,6 +2051,8 @@ async function copyText(t){
   }catch(e){}
   try{
     const ta = $('export-text');
+    // 回退复制的是 textarea 的内容：先保证它就是我们要复制的 t（clearAll 调用点不经过导出页）
+    if(ta.value !== t) ta.value = t;
     ta.focus();
     ta.select();
     ta.setSelectionRange(0, t.length);
@@ -2122,7 +2126,7 @@ ${PLAN_SCHEMA}`;
 function runExport(withPrompt){
   const n = parseInt($('export-n').value, 10) || 4;
   const data = buildExport(n);
-  const text = withPrompt ? buildPrompt(data) : JSON.stringify(data, null, 2);
+  const text = withPrompt ? buildPrompt(data) : JSON.stringify(data);
   $('export-text').value = text;
   const msg = $('export-msg');
   return copyText(text).then(ok => {
@@ -2131,7 +2135,9 @@ function runExport(withPrompt){
       : '暂无训练日志，仅含当前计划与动作库';
     msg.className = 'import-msg ' + (ok ? 'ok' : 'err');
     msg.textContent = ok
-      ? `已复制（${note}${withPrompt ? '，含分析 prompt' : ''}）。粘贴给 AI，返回的 JSON 可直接用「导入 AI 方案」导入。`
+      ? (withPrompt
+          ? `已复制（${note}，含分析 prompt）。粘贴给 AI，返回的 JSON 可直接用「导入 AI 方案」导入。`
+          : `已复制（${note}）。这是纯数据快照，不含分析要求与输出模板；要拿到可直接导入的 JSON，请用「生成并复制（含 prompt）」。`)
       : `复制失败（${note}）：请手动全选下方文本后复制。`;
   });
 }
@@ -2283,10 +2289,13 @@ $('profile-bg').addEventListener('change', e => {
 async function clearAll(){
   const ok1 = await askConfirm({ title: '清除全部数据？', desc: '日志、计划、动作库、进行中的记录都会删除。', okLabel: '继续' });
   if(!ok1) return;
-  const ok2 = await askConfirm({ title: '再次确认', desc: '此操作不可恢复。清除前会尝试把备份复制到剪贴板，方便粘贴到别处留底。', okLabel: '全部清除' });
+  // 先把底留了，再做最后确认：确认文案就能如实说清有没有留成（复制失败后 toast 会被 reload 吞掉）
+  let copied = false;
+  try { copied = await copyText(JSON.stringify(buildBackup())); } catch(e){}
+  const ok2 = await askConfirm({ title: '再次确认', desc: copied
+    ? '此操作不可恢复。备份已复制到剪贴板，可先粘贴到别处留底。'
+    : '此操作不可恢复。剪贴板不可用，这次留不了底。', okLabel: '全部清除' });
   if(!ok2) return;
-  // 尽力留个底：剪贴板不可用也不拦着清除（文案说的是「尝试」）
-  try { await copyText(JSON.stringify(buildBackup())); } catch(e){}
   clearingAll = true;
   localStorage.removeItem(LS_KEY);
   location.reload();
