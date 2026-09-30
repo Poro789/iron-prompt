@@ -273,6 +273,7 @@ check('prompt 含固定背景', prompt.includes('体态问题：X 型腿、肋�
 check('prompt 内嵌数据', prompt.includes('```json') && prompt.includes('ironlog-export'));
 check('prompt 含时间跨度', /A 日 \d+ 次/.test(prompt));
 check('prompt 含输出模板', prompt.includes('"type": "ai-plan"') && prompt.includes('不要注释、不要多余逗号'));
+check('prompt 数据说明含热身组语义', prompt.includes('type="warmup" 的组是热身组'));
 const rt = T.importPlan(JSON.stringify(exp));
 check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
 

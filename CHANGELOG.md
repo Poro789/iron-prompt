@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.19]
+
+### 改进
+- 导出给 AI 的「数据说明」现在解释 `type="warmup"` 热身组语义（趋势/最好成绩/PR 不统计热身），避免 AI 把热身组算进渐进超负荷判断
+
 ## [0.9.18]
 
 ### 修复
