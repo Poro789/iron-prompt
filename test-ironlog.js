@@ -2208,6 +2208,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const m87b = T.migrate({ version: 1, logs: [], sessions: { A: { startedAt: 1, items: [{ exerciseId: 'goblet_squat', sets: [{ done: true, weight: '20', reps: '5' }] }] }, B: null } });
   check('进行时会话里的字符串数值同样处理', m87b.sessions.A.items[0].sets[0].weight === 20 && m87b.sessions.A.items[0].sets[0].reps === 5);
 
+  /* ============================================================
+   * 88. 导入把视图切去另一日时，组位置跟着当前日走（v0.9.65）
+   * ============================================================ */
+  console.log('== 88. 导入切视图时组位置跟着当前日走（v0.9.65）==');
+  T.state.exercises.l88 = { name: '位置动作', mode: 'weight', unit: 'kg' };
+  const sets88 = () => [{ weight: 10, reps: 8 }, { weight: 10, reps: 8 }, { weight: 10, reps: 8 }, { weight: 10, reps: 8 }];
+  const plan88 = day => JSON.stringify({ day, exercises: { l88: { name: '位置动作', mode: 'weight', unit: 'kg' } },
+    program: { A: [{ exerciseId: 'l88', sets: sets88() }], B: [{ exerciseId: 'l88', sets: sets88() }] } });
+  T.importPlan(plan88('B'));
+  T.switchDay('B');
+  T.curPos = 3; T.render();
+  check('B 日先停在第 4 组', T.curPos === 3 && T.state.ui.curPos.B === 3);
+  T.importPlan(plan88('A'));
+  check('导入切去 A 后位置归零，而不是悬着旧日的 3', T.curPos === 0 && T.state.settings.lastDay === 'A');
+  check('B 的保存位置也被导入归零', T.state.ui.curPos.B === 0);
+  delete T.state.exercises.l88; T.state.program.A = []; T.state.program.B = [];
+  delete T.state.drafts.A; delete T.state.drafts.B; T.state.sessions = { A: null, B: null };
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

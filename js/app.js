@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.64';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.65';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1673,6 +1673,9 @@ function applyPlan(d){
     daySummary.push(`${day} 日 ${state.program[day].length} 动作${draftDirty ? '（已丢弃未确认草稿）' : ''}`);
   }
   if(typeof d.day === 'string' && (d.day === 'A' || d.day === 'B')) state.settings.lastDay = d.day;
+  /* 导入可能把视图切去另一日：模块里的组位置必须跟着当前日走，
+   * 不能留着旧日的位置去新日里悬空（该日位置上面已归 0，这里只是把视图对齐）。 */
+  curPos = state.ui.curPos[curDay()] || 0;
   save();
   render();
   return { ok:true, summary:`导入完成：${daySummary.join('，')}；动作库 ${exCount} 项` };
