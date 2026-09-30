@@ -111,6 +111,7 @@ const testScript = script + `
   set restEndsAt(v){ restEndsAt = v; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
+  reeditSession, closeSummary, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   buildBackup, parseBackup, restoreBackupText,
   buildTrendCharts, trendKind, programOrder,
@@ -995,6 +996,46 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   bEx30.sets[0].reps = 4;
   clickExList(btnOf({ act: 'uselast', ex: String(cB30.exIdx), set: '0' }));
   check('自重组沿用后次数变成 15', bEx30.sets[0].reps === 15);
+
+  console.log('== 31. 结束训练后的「改一下」（把记录放回编辑，而不是重来一遍）==');
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.state.logs = [];
+  T.switchView('today');
+  T.switchDay('A');
+  const itA31 = T.getItems('A');
+  const firstWork31 = itA31.findIndex(it => it.sets.some(st => st.type !== 'warmup'));
+  const wSet31 = itA31[firstWork31].sets.findIndex(st => st.type !== 'warmup');
+  itA31[firstWork31].sets[wSet31] = { done: true, weight: 20, reps: 5, duration: null, rpe: 8, type: 'work' };
+  itA31[firstWork31].sets[wSet31 + 1] && (itA31[firstWork31].sets[wSet31 + 1] = { done: true, weight: 20, reps: 2, duration: null, rpe: 9, type: 'work' });
+  T.state.sessions.A = { startedAt: Date.now() - 90000, items: itA31, condition: '佳' };
+  T.endSession();
+  check('结束训练写入一条日志', T.state.logs.length === 1);
+  check('小结里给出「改一下」按钮', document.getElementById('summary-reedit').style.display === '');
+  T.reeditSession();
+  check('点「改一下」撤掉刚写入的那条日志', T.state.logs.length === 0);
+  check('记录回到进行中，组和数值原样还在', (() => {
+    const s = T.state.sessions.A;
+    return !!s && s.items[firstWork31].sets[wSet31].weight === 20 && s.items[firstWork31].sets[wSet31].done === true;
+  })());
+  check('撤销后不留悬挂引用', T.lastEnded === null);
+  // 改完再结束：只有一条，不重复
+  T.state.sessions.A.items[firstWork31].sets[wSet31].reps = 7;
+  T.endSession();
+  check('改完再结束，日志仍然只有一条', T.state.logs.length === 1);
+  check('改过的次数被记进日志', T.state.logs[0].exercises.some(e => e.sets.some(s => s.reps === 7)));
+  // 关掉小结就不能再撤销（不会把已经确认过的记录偷偷撤掉）
+  T.closeSummary();
+  T.reeditSession();
+  check('关掉小结后「改一下」失效，日志不受影响', T.state.logs.length === 1);
+  // 已经另开一次记录时，撤销不会覆盖新记录
+  T.state.sessions.A = { startedAt: Date.now() - 1000, items: itA31, condition: null };
+  T.endSession();
+  check('再结束一次，日志两条', T.state.logs.length === 2);
+  const marker31 = { startedAt: Date.now(), items: T.getItems('A'), condition: null };
+  T.state.sessions.A = marker31;
+  T.reeditSession();
+  check('这一日已有新记录时不覆盖它', T.state.sessions.A === marker31 && T.state.logs.length === 2);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

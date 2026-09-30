@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.6';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.7';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -855,6 +855,10 @@ $('ex-list').addEventListener('touchend', e => {
 }, { passive: true });
 
 /* 结束训练：写入 logs（P0 闭环的落盘点） */
+/* 刚结束的那次记录：summary 里的「改一下」用它把记录放回编辑态，
+ * 关掉小结或另开一次记录后就失效（不留悬挂引用）。 */
+let lastEnded = null;
+
 function endSession(){
   const day = curDay();
   const sess = state.sessions[day];
@@ -889,6 +893,7 @@ function endSession(){
     exercises
   };
   state.logs.push(entry);
+  lastEnded = { day, entry, items: sess.items, startedAt: sess.startedAt, condition: sess.condition ?? null };
   state.sessions[day] = null;
   delete draft[day];
   resetRest();
@@ -923,9 +928,34 @@ function showSummary(entry){
     <div class="stat">总容量 <b>${vol.toLocaleString()} kg</b></div>
     <div class="stat">用时 <b>${fmtDuration(entry.durationSec)}</b></div>
     ${entry.condition ? `<div class="stat">状态 <b>${esc(entry.condition)}</b></div>` : ''}`;
+  // 记错了不必重来：只要这条记录还在最末尾，就把它放回编辑态
+  const re = $('summary-reedit');
+  if(re) re.style.display = lastEnded ? '' : 'none';
   $('summary-overlay').classList.add('show');
 }
-function closeSummary(){ $('summary-overlay').classList.remove('show'); }
+function closeSummary(){
+  lastEnded = null;
+  const re = $('summary-reedit');
+  if(re) re.style.display = 'none';
+  $('summary-overlay').classList.remove('show');
+}
+
+/* 把刚结束的那次记录放回「进行中」，改完再点结束 */
+function reeditSession(){
+  if(!lastEnded){ closeSummary(); return; }
+  const { day, entry, items, startedAt, condition } = lastEnded;
+  if(state.sessions[day]){ toast('这一日已经有新的记录了'); closeSummary(); return; }
+  const at = state.logs.indexOf(entry);
+  if(at >= 0) state.logs.splice(at, 1);
+  state.sessions[day] = { startedAt, items, condition };
+  condDraft[day] = condition;
+  lastEnded = null;
+  closeSummary();
+  switchView('today');
+  switchDay(day);
+  flushSave();
+  toast('已放回编辑，改完再点结束');
+}
 
 /* 进行中计时（只更新时钟，不重渲染） */
 let clockTimer = null;
