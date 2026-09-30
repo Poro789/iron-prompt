@@ -15,7 +15,9 @@ function makeEl(id){
     id, innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
     classList:{ toggle(){}, add(){}, remove(){} },
     attrs: {}, setAttribute(k, v){ this.attrs[k] = v; },
-    addEventListener(){}, querySelectorAll(){ return []; },
+    // 记录所有元素的事件回调（委托容器另有覆盖），供设置页 change 处理测试直接派发
+    addEventListener(type, fn){ handlers.set(id + '|' + type, fn); },
+    querySelectorAll(){ return []; },
     replaceWith(){}, focus(){}, select(){}, setSelectionRange(){}
   };
 }
@@ -1369,6 +1371,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('重量用动作单位 lb', hh40.includes('20lb×10'));
   check('PR 组仍有火焰标记', hh40.includes('🔥'));
   T.state.logs.pop(); delete T.state.exercises.test_band;
+
+  console.log('== 41. 设置页：非法步进纠正后写回输入框（v0.9.17）==');
+  const wsEl = document.getElementById('weight-step');
+  const wsH = handlers.get('weight-step|change');
+  check('步进 change 处理已注册', typeof wsH === 'function');
+  wsEl.value = '0.2'; wsH({ target: wsEl });
+  check('非法步进纠正为 2.5 并写回输入框', T.state.settings.weightStep === 2.5 && String(wsEl.value) === '2.5');
+  wsEl.value = 'abc'; wsH({ target: wsEl });
+  check('非数字输入纠正为 2.5', T.state.settings.weightStep === 2.5 && String(wsEl.value) === '2.5');
+  wsEl.value = '1.5'; wsH({ target: wsEl });
+  check('合法步进 1.5 生效', T.state.settings.weightStep === 1.5 && String(wsEl.value) === '1.5');
+  T.state.settings.weightStep = 2.5;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
