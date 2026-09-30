@@ -3439,6 +3439,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   docHandlers.get('keydown')({ key: 'Escape' });
   check('135 第二次 ESC 才关抽屉', !dr135.classList.contains('open'));
 
+  /* ============================================================
+   * 136. 结果消息区是无障碍活动区域（v0.9.111）
+   * 导出/导入/恢复的结果与错误只写进 .import-msg——没有 role=status，
+   * 读屏器不会播报（同页 toast 早就是 role=status，这三处是漏网）。
+   * ============================================================ */
+  console.log('== 136. 导出/导入/恢复消息区 role=status（v0.9.111）==');
+  for (const mid of ['export-msg', 'import-msg', 'restore-msg']) {
+    const re = new RegExp(`id="${mid}"[^>]*role="status"`);
+    check(`136 ${mid} 带 role="status"`, re.test(html));
+  }
+  check('136 提示条仍是 role=status（回归）', /id="toast"[^>]*role="status"/.test(html));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

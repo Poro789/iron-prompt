@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.111]
+
+### 修复
+- 导出/导入/恢复的结果与错误消息读屏器不播报：三个消息区补 role=status（与页内提示条同一无障碍口径）
+
 ## [0.9.110]
 
 ### 修复

@@ -68,7 +68,7 @@
       <textarea id="export-text" class="import-box" readonly placeholder="点击生成后，导出的文本显示在这里（可手动全选复制）"></textarea>
       <button class="import-btn" onclick="doExport()">生成并复制（含 prompt）</button>
       <button class="discard-btn" style="margin-top:6px" onclick="doExportData()">仅复制数据（不含 prompt）</button>
-      <div id="export-msg" class="import-msg"></div>
+      <div id="export-msg" class="import-msg" role="status"></div>
     </div>
     <div class="set-card">
       <h3>导入 AI 方案</h3>
@@ -76,7 +76,7 @@
       <textarea id="import-text" class="import-box" placeholder='{"type":"ai-plan","exercises":{...},"program":{"A":[...]}}'></textarea>
       <button class="import-btn" onclick="doImport()">导入</button>
       <button class="discard-btn" id="undo-import" style="display:none;margin-top:6px" onclick="undoImport()">撤销上次导入</button>
-      <div id="import-msg" class="import-msg"></div>
+      <div id="import-msg" class="import-msg" role="status"></div>
     </div>
     <div class="set-card">
       <h3>备份与恢复</h3>
@@ -84,7 +84,7 @@
       <button class="import-btn" onclick="doBackup()">下载备份文件</button>
       <button class="discard-btn" style="margin-top:6px" onclick="pickBackup()">从备份文件恢复</button>
       <input type="file" id="restore-file" accept=".json,application/json" hidden>
-      <div id="restore-msg" class="import-msg"></div>
+      <div id="restore-msg" class="import-msg" role="status"></div>
     </div>
   </section>
 
