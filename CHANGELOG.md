@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.46]
+
+### 修复
+- 趋势图里 kg 和 lb 动作不再混在同一条 Y 轴上硬比：单位混用的重量组统一换算成 kg 再画（与容量汇总同一口径），标题与图例同步标注 kg；单位一致的组保持原单位不变
+
 ## [0.9.45]
 
 ### 修复

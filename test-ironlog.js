@@ -1491,12 +1491,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     lbLog('2026-01-02', 'test_lb2', 50), lbLog('2026-01-06', 'test_lb2', 55)
   ]), 5);
   check('全 lb 动作组标题写 lb 不写 kg', lbCharts.includes('重量（lb）') && !lbCharts.includes('重量（kg）'));
+  check('全 lb 组不换算：图例仍是 110 lb', lbCharts.includes('110 lb'));
   T.state.exercises.test_kg1 = { ...mk('测试推举丙', 'weight'), unit: 'kg' };
   const mixCharts = T.buildTrendCharts(T.buildTrends([
     lbLog('2026-01-01', 'test_lb1', 100), lbLog('2026-01-05', 'test_lb1', 110),
     lbLog('2026-01-02', 'test_kg1', 80), lbLog('2026-01-06', 'test_kg1', 85)
   ]), 5);
-  check('单位混用时标题不带任何单位（图例各自标注）', /class="trend-title">重量</.test(mixCharts) && !/重量（(kg|lb)）/.test(mixCharts));
+  check('单位混用时全部换算成 kg 上同一条轴（v0.9.46）',
+    mixCharts.includes('重量（kg）') && mixCharts.includes('49.9 kg') && !mixCharts.includes('110 lb'));
   delete T.state.exercises.test_lb1; delete T.state.exercises.test_lb2; delete T.state.exercises.test_kg1;
 
   console.log('== 48. 训练小结显示破 PR 组数（v0.9.25）==');

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.45';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.46';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1354,6 +1354,11 @@ function trendUnit(id, kind){
   if(kind !== 'weight') return kind === 'duration' ? '秒' : '次';
   return (state.exercises[id] || {}).unit || '';
 }
+/* 单位混用的重量组：lb 先换算成 kg 再上同一条 Y 轴（与容量汇总同一口径）。
+ * 单位一致的组保持原单位绘制，不换算。conv 只在混用组里为 true。 */
+function trendConvFactor(id, conv){
+  return conv && ((state.exercises[id] || {}).unit === 'lb') ? LB_TO_KG : 1;
+}
 /* 动作在计划里出现的先后顺序：用来稳定选线（练得一样多的时候按训练顺序排） */
 function programOrder(){
   const order = {};
@@ -1362,11 +1367,12 @@ function programOrder(){
   }));
   return order;
 }
-function trendChartSVG(entries, kind, label){
+function trendChartSVG(entries, kind, label, conv){
   const W = 320, H = 120, PAD = { t: 14, r: 10, b: 20, l: 34 };
   const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
   const allPts = [];
-  entries.forEach(([, t]) => t.sessions.forEach(s => allPts.push(trendMetric(s))));
+  const val = (id, s) => trendMetric(s) * trendConvFactor(id, conv);
+  entries.forEach(([id, t]) => t.sessions.forEach(s => allPts.push(val(id, s))));
   const lo = Math.min(...allPts), hi = Math.max(...allPts);
   const yMin = kind === 'reps' ? Math.max(0, lo - 1) : lo * 0.9;
   const yMax = (hi * 1.06) || 1;
@@ -1387,21 +1393,24 @@ function trendChartSVG(entries, kind, label){
     <text x="${W - PAD.r}" y="${H - 6}" font-size="9" fill="#8b93a3" text-anchor="end">最近</text>`;
   const lines = entries.map(([id, t], li) => {
     const c = TREND_COLORS[li % TREND_COLORS.length];
-    const pts = t.sessions.map((s, i) => `${xAt(i).toFixed(1)},${yScale(trendMetric(s)).toFixed(1)}`).join(' ');
+    const pts = t.sessions.map((s, i) => `${xAt(i).toFixed(1)},${yScale(val(id, s)).toFixed(1)}`).join(' ');
     const last = t.sessions[t.sessions.length - 1];
     return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>
-      <circle cx="${xAt(t.sessions.length - 1).toFixed(1)}" cy="${yScale(trendMetric(last)).toFixed(1)}" r="2.5" fill="${c}"/>`;
+      <circle cx="${xAt(t.sessions.length - 1).toFixed(1)}" cy="${yScale(val(id, last)).toFixed(1)}" r="2.5" fill="${c}"/>`;
   }).join('');
   return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${label || TREND_KIND_LABEL[kind]}趋势图">${grid}${axis}${lines}</svg></div>`;
 }
-function trendLegend(entries){
+function trendLegend(entries, conv){
   return '<div class="trend-legend">' + entries.map(([id, t], li) => {
     const last = t.sessions[t.sessions.length - 1];
     const name = (state.exercises[id] || {}).name || id;
     const dir = TREND_DIR[t.direction] || TREND_DIR.new;
+    const kind = trendKind(t);
+    const v = trendMetric(last) * trendConvFactor(id, conv);
+    const u = conv ? 'kg' : trendUnit(id, kind);
     return `<div class="lg-row"><span class="lg-swatch" style="background:${TREND_COLORS[li % TREND_COLORS.length]}"></span>`
       + `<span class="lg-name">${esc(name)}</span>`
-      + `<b class="lg-val">${trendValText(trendMetric(last), trendKind(t))} ${esc(trendUnit(id, trendKind(t)))}</b>`
+      + `<b class="lg-val">${trendValText(v, kind)} ${esc(u)}</b>`
       + `<span class="lg-dir ${esc(t.direction || 'new')}">${dir} · ${t.sessions.length} 次</span></div>`;
   }).join('') + '</div>';
 }
@@ -1421,15 +1430,16 @@ function buildTrendCharts(trends, maxLines){
       .sort((a, b) => (b[1].sessions.length - a[1].sessions.length) || ((order[a[0]] ?? 999) - (order[b[0]] ?? 999)))
       .slice(0, maxLines || 5);
     /* 组标题的单位：同组动作单位一致才写（lb 组不再念成 kg）；
-     * 混用单位时只写「重量」——各图例行本来就带自己的单位，标题不该替别人代言。 */
-    let title = TREND_KIND_LABEL[kind];
+     * 单位混用时全部换算成 kg 再画（30lb≈13.6kg 与 80kg 放同一条轴才可比），标题写 kg。 */
+    let title = TREND_KIND_LABEL[kind], conv = false;
     if(kind === 'weight'){
-      const us = new Set(list.map(([id]) => ((state.exercises[id] || {}).unit || '').trim()));
+      const us = new Set(list.map(([id]) => (((state.exercises[id] || {}).unit || 'kg')).trim()));
       const u = [...us];
-      title = (u.length === 1 && u[0]) ? `重量（${esc(u[0])}）` : '重量';
+      if(u.length > 1){ conv = true; title = '重量（kg）'; }
+      else title = u[0] ? `重量（${esc(u[0])}）` : '重量';
     }
     return `<div class="trend-block"><div class="trend-title">${title}</div>`
-      + trendChartSVG(list, kind, title) + trendLegend(list) + '</div>';
+      + trendChartSVG(list, kind, title, conv) + trendLegend(list, conv) + '</div>';
   }).join('');
 }
 function renderHistory(){
