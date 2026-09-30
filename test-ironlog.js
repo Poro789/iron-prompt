@@ -1599,6 +1599,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const prompt56 = T.buildPrompt(T.buildExport(5));
   check('说明含 restAfter 含义', prompt56.includes('restAfter 是该组之后实际休息的秒数'));
 
+  console.log('== 57. 导入计划会说明丢弃了未确认草稿（v0.9.34）==');
+  const plan57 = { exercises: { test57: { name: '测试动作57', mode: 'weight' } },
+    program: { A: [{ exerciseId: 'test57', sets: [{ weight: 20, reps: 8 }] }] } };
+  T.state.drafts.A = { items: [{ exerciseId: 'test57', note: '', sets: [{ weight: 99, reps: 5, done: false }] }] };
+  const r57a = T.importPlan(JSON.stringify(plan57));
+  check('只有预填数值的草稿不提丢弃', r57a.ok === true && !/已丢弃/.test(r57a.summary));
+  T.state.drafts.A = { items: [{ exerciseId: 'test57', note: '左肩不适', sets: [{ weight: 20, reps: 8, done: false }] }] };
+  const r57b = T.importPlan(JSON.stringify(plan57));
+  check('有备注的草稿会说明已丢弃', r57b.ok === true && /已丢弃未确认草稿/.test(r57b.summary));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
