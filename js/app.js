@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.95';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.96';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1875,7 +1875,15 @@ function undoImport(){
   // 按表的归属日判断（不是当前查看的日）：归属日有进行中记录时表还有可写的地方，不该误清。
   if(timerFor && !state.sessions[timerForDay]) clearTimer();
   state.program = snap.program;
-  state.exercises = snap.exercises;
+  /* 动作库按快照恢复字段，但个人备注保留当前值——与 applyPlan 同一政策（AI 不许覆盖用户备注，
+   * 撤销也不该）：撤销按钮一直存在，用户完全可能导入后写了备注再来撤销，整体回滚会无声吞掉它。
+   * 导入新增的动作不随撤销移出库（applyPlan 从不删库条目，计划恢复后它们自然不可见）。 */
+  const mergedEx = JSON.parse(JSON.stringify(snap.exercises));
+  for(const [id, ex] of Object.entries(state.exercises)){
+    if(!mergedEx[id]){ mergedEx[id] = ex; continue; }
+    if(ex.personal) mergedEx[id].personal = ex.personal;
+  }
+  state.exercises = mergedEx;
   state.lastImport = null;
   for(const day of ['A','B']){
     if(restForDay === day && !state.sessions[day]) resetRest();   // 同 applyPlan：两日草稿都要查

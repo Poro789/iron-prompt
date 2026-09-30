@@ -1144,7 +1144,8 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('设置页出现「撤销上次导入」', document.getElementById('undo-import').style.display === '');
   T.undoImport();
   check('撤销后计划换回原样', T.state.program.A.map(i => i.exerciseId).join() === idsA33.join());
-  check('动作库也换回来了', !T.state.exercises.new_ex33);
+  // v0.9.96 政策：动作库条目从不随撤销删除（applyPlan 也从不删库），只是计划里不再引用它
+  check('导入新增的动作留在库中但已不在计划里', !!T.state.exercises.new_ex33 && !T.state.program.A.some(i => i.exerciseId === 'new_ex33'));
   check('快照只留一层，撤销后按钮消失',
     T.state.lastImport === null && document.getElementById('undo-import').style.display === 'none');
   check('没有快照时撤销只提示，不改数据',
@@ -3096,6 +3097,33 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.switchView('today');
   check('118 导出框 placeholder 不再只说 JSON 快照', !html.includes('JSON 快照显示在这里'));
   T.state.logs = [];
+
+  /* ============================================================
+   * 119. 撤销导入不吞「导入之后」写的个人备注（审计 #8 发现1，v0.9.96）
+   * 撤销按钮常驻：导入→写备注→撤销，整体回滚会无声吞掉用户刚写的备注。
+   * 与 applyPlan 同政策：personal 以当前值为准；导入新增的动作不随撤销移出库。
+   * ============================================================ */
+  console.log('== 119. 撤销导入保留导入后写的个人备注（v0.9.96）==');
+  T.resetRest(); T.clearTimer();
+  T.state.sessions = { A: null, B: null };
+  T.state.lastImport = null;
+  // 快照：导入前的库与计划
+  const snapEx119 = { e119: { name: '撤销前', mode: 'weight', unit: 'kg', personal: '旧备注' } };
+  const snapProg119 = { A: [{ exerciseId: 'e119', sets: [{ weight: 5, reps: 5 }] }], B: [] };
+  // 当前：导入后的库（e119 字段被 AI 改过 + 新增 eNew119），且用户导入后又改了备注
+  T.state.exercises = { e119: { name: '导入改名', mode: 'weight', unit: 'kg', personal: '导入后新写的备注' },
+                        eNew119: { name: '新增动作', mode: 'bodyweight', unit: null, personal: '新动作备注' } };
+  T.state.program = { A: [{ exerciseId: 'eNew119', sets: [{ reps: 10 }] }], B: [] };
+  T.state.drafts = T.state.drafts || {}; delete T.state.drafts.A; delete T.state.drafts.B;
+  T.state.lastImport = { at: Date.now(), program: JSON.parse(JSON.stringify(snapProg119)), exercises: JSON.parse(JSON.stringify(snapEx119)) };
+  T.undoImport();
+  check('119 计划恢复为导入前', JSON.stringify(T.state.program.A) === JSON.stringify(snapProg119.A) && T.state.lastImport === null);
+  check('119 动作字段按快照恢复但 personal 保留当前值',
+    T.state.exercises.e119.name === '撤销前' && T.state.exercises.e119.personal === '导入后新写的备注');
+  check('119 导入新增的动作不随撤销移出库（其备注也在）',
+    !!T.state.exercises.eNew119 && T.state.exercises.eNew119.personal === '新动作备注');
+  check('119 撤销后当前查看位置清零', T.state.ui.curPos.A === 0 && T.state.ui.curPos.B === 0);
+  T.state.exercises = {}; T.state.program = { A: [], B: [] };
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
