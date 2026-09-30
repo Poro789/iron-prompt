@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.90';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.91';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1052,16 +1052,24 @@ $('ex-list').addEventListener('change', e => {
   if(!set) return;
   const wasPR = set.isPR === true;
   /* 中文输入法的全角字符（１２、全角句点。）先转半角再解析：
-   * 否则「12。5」会被 parseFloat 读成 12，小数位无声丢掉。 */
+   * 否则「12。5」会被 parseFloat 读成 12，小数位无声丢掉。
+   * 欧系小数逗号同理：「12,5」→12.5（只认结尾 1–2 位小数的逗号，
+   * 「1,500」这种千分位不动，避免把 1500 读成 1.5）。 */
   const v = parseFloat(String(inp.value)
     .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48))
-    .replace(/[．。]/g, '.'));
+    .replace(/[．。]/g, '.')
+    .replace(/(\d)[,，](\d{1,2})$/, '$1.$2'));
+  /* 粘贴超长数字（300 位）或 1e308：round2 里 v*100 溢出成 Infinity，
+   * 存进 state 后输入框显示「Infinity」、容量「∞」、假 PR，
+   * 而且 JSON.stringify(Infinity)=null——导出/备份里静默变没填。
+   * 有限但荒谬的巨数（1e302）同样只会制造假 PR：超过 1e6 一律按非法值处理。 */
+  const fin = x => Number.isFinite(x) && x <= 1e6 ? x : null;
   if(inp.dataset.f === 'weight'){
-    set.weight = isNaN(v) ? null : Math.max(0, round2(v));
+    set.weight = fin(Math.max(0, round2(v)));
   }else if(inp.dataset.f === 'duration'){
-    set.duration = isNaN(v) ? null : Math.max(0, Math.round(v));
+    set.duration = fin(Math.max(0, Math.round(v)));
   }else{
-    set.reps = isNaN(v) ? null : Math.max(0, Math.round(v));
+    set.reps = fin(Math.max(0, Math.round(v)));
   }
   /* 内部纠正了就要写回输入框（与设置页步进同一规矩）：
    * 否则框里还显示「abc」或「62.49」，存的却是 null / 62.5，显示和数据对不上。 */

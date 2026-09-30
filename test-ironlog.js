@@ -2921,6 +2921,37 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const bd113 = [...m113.program.A, ...m113.program.B].filter(it => it.exerciseId === 'bird_dog');
   check('113 bird_dog 两日都不标 side', bd113.length === 2 && bd113.every(it => it.sets.every(s => s.side == null)));
 
+  /* ============================================================
+   * 114. 溢出与小数逗号（v0.9.91）
+   * 粘贴超长数字/1e308 → round2 v*100 溢出 Infinity → 按非法值置 null
+   * （否则输入框显示 Infinity、容量 ∞、假 PR、JSON.stringify 静默变 null）。
+   * 欧系小数逗号「12,5」→12.5；千分位「1,500」不动（避免 1500 读成 1.5）。
+   * ============================================================ */
+  console.log('== 114. 数值溢出置 null + 小数逗号归一（v0.9.91）==');
+  T.state.program.A = [{ section: '', exerciseId: 'test47', repsRange: '', sets: [{ type: 'work', weight: 10, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.render();
+  const inp114 = makeEl('fs-input-114');
+  inp114.dataset = { ex: '0', set: '0', f: 'weight' };
+  const fire114 = v => { inp114.value = v; handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? inp114 : null } }); };
+  const w114 = () => T.getItems('A')[0].sets[0].weight;
+  fire114('1e308');
+  check('114 1e308 溢出置 null', w114() === null);
+  check('114 溢出后输入框清空', inp114.value === '');
+  fire114('9'.repeat(300));
+  check('114 300 位数字（有限但荒谬）置 null', w114() === null);
+  fire114('99999');
+  check('114 封顶内的大数保留', w114() === 99999);
+  fire114('12,5');
+  check('114 「12,5」解析为 12.5', w114() === 12.5);
+  fire114('12，5');
+  check('114 全角逗号「12，5」解析为 12.5', w114() === 12.5);
+  fire114('1,500');
+  check('114 千分位「1,500」不按小数处理', w114() === 1);
+  fire114('12.5');
+  check('114 正常小数不受影响', w114() === 12.5);
+  delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
