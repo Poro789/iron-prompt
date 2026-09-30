@@ -111,13 +111,13 @@
       </div>
       <div class="set-row2" style="margin-top:10px">
         <label for="rest-note">休息说明（可选，随导出给 AI）</label>
-        <input id="rest-note" type="text" placeholder="例：健身房时段限制，组间休息最多 60 秒">
+        <input id="rest-note" type="text" maxlength="200" placeholder="例：健身房时段限制，组间休息最多 60 秒">
       </div>
     </div>
     <div class="set-card">
       <h3>训练备注 / 背景</h3>
       <p>自由填写：身体数据、体态问题、目标、器械范围、伤病、当前状态…导出时自动附带给 AI。</p>
-      <textarea id="profile-bg" class="wide-area" placeholder="身高体重、体态问题、目标、训练水平、器械范围、伤病备注…"></textarea>
+      <textarea id="profile-bg" class="wide-area" maxlength="2000" placeholder="身高体重、体态问题、目标、训练水平、器械范围、伤病备注…"></textarea>
     </div>
     <div class="set-card">
       <h3>动作个人备注</h3>
@@ -126,7 +126,7 @@
         <label for="personal-ex">选择动作</label>
         <select id="personal-ex"></select>
       </div>
-      <textarea id="personal-note" class="wide-area" placeholder="例：超过 12kg 换正握；第 3 组前先做一组热身"></textarea>
+      <textarea id="personal-note" class="wide-area" maxlength="500" placeholder="例：超过 12kg 换正握；第 3 组前先做一组热身"></textarea>
     </div>
     <div class="set-card">
       <h3>危险区</h3>

@@ -2952,6 +2952,39 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('114 正常小数不受影响', w114() === 12.5);
   delete T.state.drafts.A;
 
+  /* ============================================================
+   * 115. 步进精度 1.25 档 + 自由文本封顶（v0.9.92）
+   * weightStep round1→round2：1.25 是现实微片档，不能被改成 1.3。
+   * 备注/个人/休息说明/背景封顶：超长文本写爆 localStorage 配额会连累全部持久化。
+   * ============================================================ */
+  console.log('== 115. weightStep 保留 1.25 档 + 自由文本长度封顶（v0.9.92）==');
+  const ws115 = makeEl('weight-step');
+  ws115.value = '1.25'; handlers.get('weight-step|change')({ target: ws115 });
+  check('115 weightStep 1.25 保留', T.state.settings.weightStep === 1.25);
+  check('115 写回输入框一致', String(ws115.value) === '1.25');
+  ws115.value = '1.234'; handlers.get('weight-step|change')({ target: ws115 });
+  check('115 weightStep 归一到 0.01 精度', T.state.settings.weightStep === 1.23);
+  ws115.value = '0.2'; handlers.get('weight-step|change')({ target: ws115 });
+  check('115 低于 0.5 仍回默认 2.5', T.state.settings.weightStep === 2.5);
+  T.state.settings.weightStep = 2.5;
+  // 动作备注封顶 500
+  T.state.program.A = [{ section: '', exerciseId: 'test47', repsRange: '', sets: [{ type: 'work', weight: 10, reps: 10 }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.render();
+  const note115 = makeEl('fs-exnote-115');
+  note115.classList.add('fs-exnote');
+  note115.dataset = { ex: '0' };
+  note115.value = '备'.repeat(600);
+  handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? note115 : null } });
+  check('115 动作备注封顶 500 字', T.getItems('A')[0].note === '备'.repeat(500));
+  // 背景/休息说明封顶
+  handlers.get('profile-bg|change')({ target: { value: '背'.repeat(3000) } });
+  check('115 背景封顶 2000 字', T.state.profile.background === '背'.repeat(2000));
+  handlers.get('rest-note|change')({ target: { value: '休'.repeat(300) } });
+  check('115 休息说明封顶 200 字', T.state.settings.restNote === '休'.repeat(200));
+  T.state.profile.background = ''; T.state.settings.restNote = '';
+  delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

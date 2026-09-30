@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.91';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.92';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -824,7 +824,7 @@ function fullScreenHTML(day){
       <div class="fs-foot">
         <button class="add-set" data-ex="${pos.exIdx}" data-act="addset">＋ 加一组</button>
         ${item.sets.length > 1 && item.sets[item.sets.length - 1].done !== true ? `<button class="add-set" data-ex="${pos.exIdx}" data-act="delset">− 删掉最后一组</button>` : ''}
-        <input class="fs-exnote" data-ex="${pos.exIdx}" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
+        <input class="fs-exnote" maxlength="500" data-ex="${pos.exIdx}" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
       </div>
       ${allUndone ? `<button class="skip-ex" data-act="skipex" aria-label="跳过此动作">跳过此动作 →</button>` : ''}
     </div>`;
@@ -1044,7 +1044,9 @@ $('ex-list').addEventListener('change', e => {
   const item = getItems(day)[exIdx];
   if(!item) return;
   if(inp.classList.contains('fs-exnote')){
-    item.note = inp.value.trim();
+    /* 封顶 500 字（输入框也有 maxlength）：超长备注会把 localStorage 写爆，
+     * 配额失败连累的是整个应用的所有持久化，不只是这条备注。 */
+    item.note = inp.value.trim().slice(0, 500);
     saveSoon();
     return;
   }
@@ -2193,14 +2195,16 @@ function renderPersonalPicker(){
 $('personal-ex').addEventListener('change', e => { personalExId = e.target.value; renderPersonalPicker(); });
 $('personal-note').addEventListener('change', e => {
   if(!personalExId || !state.exercises[personalExId]) return;
-  state.exercises[personalExId].personal = e.target.value.trim();
+  state.exercises[personalExId].personal = e.target.value.trim().slice(0, 500);   // 封顶与动作备注一致：超长文本写爆配额会连累全部持久化
   e.target.value = state.exercises[personalExId].personal;
   save();
   toast(state.exercises[personalExId].personal ? '个人备注已保存' : '个人备注已清除');
 });
 $('weight-step').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
-  state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : Math.min(100, round1(v));
+  /* 精度用 round2 与重量输入一致：1.25 是现实里最常见的微片档，
+   * round1 会把它改成 1.3，步进从此永远加不出 1.25。 */
+  state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : Math.min(100, round2(v));
   e.target.value = state.settings.weightStep;   // 非法输入被纠正后要把纠正结果写回输入框，否则显示 0.2 实际用 2.5
   save();
   toast('重量步进：' + state.settings.weightStep);   // 步进是数字，按各动作自己的单位生效，不写死 kg
@@ -2221,13 +2225,13 @@ $('warmup-rest-sec').addEventListener('change', e => {
 });
 $('rest-note').addEventListener('change', e => {
   // 自由文本：给 AI 的休息约束说明（时段限制之类），随导出的 settings 一起走
-  state.settings.restNote = e.target.value.trim();
+  state.settings.restNote = e.target.value.trim().slice(0, 200);
   e.target.value = state.settings.restNote;
   save();
   toast(state.settings.restNote ? '休息说明已保存' : '休息说明已清除');
 });
 $('profile-bg').addEventListener('change', e => {
-  state.profile.background = e.target.value;
+  state.profile.background = e.target.value.slice(0, 2000);   // 背景是最长的自由文本，封顶防配额写爆
   save();
   toast('训练备注已保存');
 });
