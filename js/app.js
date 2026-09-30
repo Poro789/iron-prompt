@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.98';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.99';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1833,18 +1833,22 @@ function applyPlan(d){
   const conflict = planSessionConflict(d);
   if(conflict) return { ok:false, error:conflict };
   let exCount = 0;
+  /* 文本字段按 UI 同口径封顶：输入框的 maxlength 拦不住导入这条路——
+   * AI 写 5000 字的 personal 会直接盖过用户 500 字的备注（下面按「AI 非空优先」合并），
+   * 长 tips 还会撑爆布局并吃光 localStorage 配额。导入侧必须自己收口。 */
+  const clip = (v, n) => { const s = v == null ? '' : String(v); return s.length > n ? s.slice(0, n) : s; };
   for(const [id, ex] of Object.entries(d.exercises)){
     const old = state.exercises[id] || {};
     state.exercises[id] = {
-      name: ex.name || old.name || id,
-      muscles: ex.muscles ?? old.muscles ?? '',
+      name: clip(ex.name || old.name || id, 80),
+      muscles: clip(ex.muscles ?? old.muscles ?? '', 200),
       mode: ex.mode || old.mode || 'weight',
       unit: ex.unit ?? old.unit ?? null,
-      tips: ex.tips ?? old.tips ?? '',
-      pitfalls: ex.pitfalls ?? old.pitfalls ?? '',
-      tempo: ex.tempo ?? old.tempo ?? '',
-      alternatives: ex.alternatives ?? old.alternatives ?? '',
-      personal: (ex.personal && String(ex.personal).trim()) ? ex.personal : (old.personal || '')
+      tips: clip(ex.tips ?? old.tips ?? '', 1000),
+      pitfalls: clip(ex.pitfalls ?? old.pitfalls ?? '', 1000),
+      tempo: clip(ex.tempo ?? old.tempo ?? '', 500),
+      alternatives: clip(ex.alternatives ?? old.alternatives ?? '', 500),
+      personal: clip((ex.personal && String(ex.personal).trim()) ? ex.personal : (old.personal || ''), 500)
     };
     exCount++;
   }

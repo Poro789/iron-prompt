@@ -3213,6 +3213,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.drafts.A = null; T.state.drafts.B = null;
   T.state.lastImport = null; T.state.logs = []; T.state.program = { A: [], B: [] }; T.state.exercises = {};
 
+  /* ============================================================
+   * 122. 导入的动作定义文本按 UI 同口径封顶（审计 #10，v0.9.99）
+   * maxlength 拦不住导入路径：AI 的超长 personal 会按「非空优先」盖过用户备注，
+   * 超长 name/tips 撑爆布局并吃配额——applyPlan 必须自己收口。
+   * ============================================================ */
+  console.log('== 122. 导入动作定义文本封顶（v0.9.99）==');
+  T.state.exercises = { e122: { name: '短名122', mode: 'weight', unit: 'kg', personal: '用户备注' } };
+  const longPlan122 = JSON.stringify({ exercises: {
+      e122: { name: '长'.repeat(200), mode: 'weight', unit: 'kg', tips: 'T'.repeat(5000), personal: 'P'.repeat(5000) },
+      e122b: { name: '新动作122', mode: 'bodyweight', alternatives: 'A'.repeat(3000), tempo: 't'.repeat(2000) } },
+    program: { A: [{ exerciseId: 'e122', sets: [{ reps: 8 }] }] } });
+  const r122 = T.importPlan(longPlan122);
+  check('122 超长文本的导入本身正常完成', r122.ok);
+  check('122 超长名称截到 80 字', T.state.exercises.e122.name.length === 80);
+  check('122 超长 tips 截到 1000 字', T.state.exercises.e122.tips.length === 1000);
+  check('122 AI 超长个人备注按 UI 同口径 500 封顶（不再越过 maxlength 盖过用户备注）', T.state.exercises.e122.personal.length === 500);
+  check('122 新动作的 alternatives/tempo 同样封顶', T.state.exercises.e122b.alternatives.length === 500 && T.state.exercises.e122b.tempo.length === 500);
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
