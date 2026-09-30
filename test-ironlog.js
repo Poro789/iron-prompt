@@ -1868,6 +1868,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const m70b = T.migrate({ version: 1, program: bare70.program, exercises: bare70.exercises, logs: null });
   check('logs 不是数组时补空数组', Array.isArray(m70b.logs) && m70b.logs.length === 0);
 
+  console.log('== 71. 趋势图只画与当前类型同指标的会话（v0.9.50）==');
+  const sess71 = (id, top, ts) => ({ date: '2023-11-0' + (ts % 9), day: 'A', startedAt: 1700000000000 + ts,
+    exercises: [{ exerciseId: id, sets: [{ weight: top.weight ?? null, reps: top.reps ?? null, duration: top.duration ?? null, done: true }] }] });
+  const mixed71 = [
+    sess71('test48', { duration: 30 }, 710001), sess71('test48', { duration: 45 }, 710002),
+    sess71('test48', { weight: 20, reps: 8 }, 710003),                    // 最近一次是重量 → 当前类型 weight
+    sess71('test49', { weight: 50, reps: 8 }, 710004), sess71('test49', { weight: 60, reps: 8 }, 710005)
+  ];
+  const tr71 = T.buildTrends(mixed71);
+  check('导出趋势仍含全部历史（不受图表过滤影响）', tr71.test48.sessions.length === 3);
+  const ch71 = T.buildTrendCharts(tr71, 5);
+  check('改过类型的动作不再进重量图（30/45 秒不会被画成 kg）', ch71.includes('test49') && !ch71.includes('test48'));
+  check('没有同类型的旧记录时也不凭空生成时长图', !ch71.includes('时长（秒）'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

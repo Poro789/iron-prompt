@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.49';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.50';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1359,6 +1359,10 @@ function trendKind(t){
   if(top.weight != null) return 'weight';
   return 'reps';
 }
+/* 单次会话自己的指标类型（与 trendMetric 的优先级一致）。
+ * 动作改过类型（导入方案改了 time→weight 之类）时，历史里会混着秒和 kg；
+ * 折线图只画与当前类型同指标的记录，秒不会被画进重量轴。导出/方向判定不受影响。 */
+const sessionKind = s => s.top.duration != null ? 'duration' : (s.top.weight != null ? 'weight' : 'reps');
 function trendValText(v, kind){ return kind === 'weight' ? fmtW(v) : String(Math.round(v)); }
 function trendUnit(id, kind){
   if(kind !== 'weight') return kind === 'duration' ? '秒' : '次';
@@ -1425,7 +1429,12 @@ function trendLegend(entries, conv){
   }).join('') + '</div>';
 }
 function buildTrendCharts(trends, maxLines){
-  const usable = Object.entries(trends).filter(([, t]) => t.sessions.length >= 2);
+  /* 先按「当前类型」过滤掉改类型之前的旧指标记录（秒画进重量轴会画出假飙升），
+   * 过滤后不足 2 点的线不画（单点没有趋势可言）。 */
+  const usable = Object.entries(trends).map(([id, t]) => {
+    const sessions = t.sessions.filter(s => sessionKind(s) === trendKind(t));
+    return sessions.length >= 2 ? [id, { ...t, sessions }] : null;
+  }).filter(Boolean);
   if(!usable.length){
     return '<div class="trend-empty">趋势要同一个动作至少记录 2 次。<br>再练两次，这里就会出现折线。</div>';
   }
