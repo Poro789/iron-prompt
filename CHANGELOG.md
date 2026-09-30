@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.40]
+
+### 新增
+- 历史里的旧记录可以「改一下」：填错数值不必删除重来，改完点「结束训练」会按原日期写回，时间顺序不变
+
 ## [0.9.39]
 
 ### 新增

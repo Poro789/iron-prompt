@@ -1688,6 +1688,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   clickExList(doneBtn(0, 1));
   check('已确认的最后一组不出现删除按钮', !/data-act="delset"/.test(htmlTouchedHTML('ex-list')));
 
+  console.log('== 62. 历史里的旧记录可以「改一下」，按原日期写回（v0.9.40）==');
+  // section 61 确认过组：这一日还挂着进行中记录，先清掉（改一下的守卫会拒绝它）
+  delete T.state.sessions.A; delete T.state.drafts.A;
+  const oldStarted = 1700000000000;
+  const oldLog = { date: '2023-11-15', day: 'A', startedAt: oldStarted, endedAt: oldStarted + 600000, durationSec: 600, condition: null,
+    exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 50, reps: 5, done: true }] }] };
+  const newerLog = { date: '2023-11-20', day: 'A', startedAt: oldStarted + 999999, endedAt: oldStarted + 999999, durationSec: 1, condition: null,
+    exercises: [{ exerciseId: 'test_pr', note: null, sets: [{ weight: 51, reps: 5, done: true }] }] };
+  T.state.logs.push(oldLog, newerLog);
+  T.switchView('history'); T.render();
+  check('历史详情有「改一下」按钮', /data-act="reeditlog"/.test(htmlTouchedHTML('hist-list')));
+  const eb62 = btnOf({ act: 'reeditlog', ts: String(oldStarted), i: '1' });
+  clickEl('hist-list', eb62);
+  check('旧记录进入编辑态（时间戳存进 keepMeta）',
+    T.state.logs.indexOf(oldLog) === -1 && !!T.state.sessions.A && T.state.sessions.A.keepMeta.date === '2023-11-15');
+  check('编辑态带着原数值', T.state.sessions.A.items[0].sets[0].weight === 50);
+  T.state.sessions.A.items[0].sets[0].weight = 55;
+  T.endSession();
+  T.closeSummary();
+  const back62 = T.state.logs.find(l => l.startedAt === oldStarted);
+  check('按原日期写回（日期/时长不变，数值已改）',
+    !!back62 && back62.date === '2023-11-15' && back62.durationSec === 600 && back62.exercises[0].sets[0].weight === 55);
+  check('按时间顺序插回原位（在新记录之前）', T.state.logs.indexOf(back62) < T.state.logs.indexOf(newerLog));
+  T.state.logs = T.state.logs.filter(l => l !== back62 && l !== newerLog);
+  delete T.state.sessions.A; delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

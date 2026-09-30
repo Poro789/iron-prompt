@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.39';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.40';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -971,9 +971,10 @@ $('ex-list').addEventListener('touchend', e => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }, { passive: true });
 
-/* 历史里的「删除这次记录」：清掉试训或填错的整次记录，6 秒内在提示条里可撤销 */
+/* 历史里的「删除这次记录」：清掉试训或填错的整次记录，6 秒内在提示条里可撤销。
+ * 「改一下」：把旧记录放回编辑态（改数值不改变它发生在哪一天）。 */
 $('hist-list').addEventListener('click', async e => {
-  const btn = e.target.closest('button[data-act="dellog"]');
+  const btn = e.target.closest('button[data-act="dellog"], button[data-act="reeditlog"]');
   if(!btn) return;
   const ts = Number(btn.dataset.ts);
   let i = Number.isFinite(ts) ? state.logs.findIndex(l => l.startedAt === ts) : -1;
@@ -983,6 +984,25 @@ $('hist-list').addEventListener('click', async e => {
   }
   if(i < 0){ toast('这条记录已经不在了'); return; }
   const entry = state.logs[i];
+
+  if(btn.dataset.act === 'reeditlog'){
+    const day = entry.day === 'B' ? 'B' : 'A';
+    if(state.sessions[day]){ toast('这一日已经有新的记录了'); return; }
+    state.logs.splice(i, 1);
+    resetRest(); clearTimer();
+    state.sessions[day] = {
+      startedAt: Date.now(),   // 时钟从本次编辑起算；原时间戳存在 keepMeta 里
+      items: entry.exercises.map(it => ({ exerciseId: it.exerciseId, note: it.note ?? '', sets: it.sets.map(s => ({ ...s })) })),
+      condition: entry.condition ?? null,
+      keepMeta: { date: entry.date, startedAt: entry.startedAt ?? null, endedAt: entry.endedAt ?? null, durationSec: entry.durationSec ?? null }
+    };
+    condDraft[day] = entry.condition ?? null;
+    switchView('today'); switchDay(day);
+    flushSave();
+    toast('已放回编辑，改完点「结束训练」会按原日期写回');
+    return;
+  }
+
   const ok = await askConfirm({
     title: '删除 ' + fmtDate(entry.date) + ' 的记录？',
     desc: '趋势、导出和 AI 分析都不再包含它。删除后 6 秒内可以撤销。',
@@ -1041,7 +1061,16 @@ function endSession(){
   if(!exercises.length){ toast('还没有确认任何一组'); return; }
 
   const endedAt = Date.now();
-  const entry = {
+  // 从历史「改一下」的记录：日期与时间戳保持原样——改数值不改变它发生在哪一天
+  const km = sess.keepMeta;
+  const entry = km ? {
+    date: km.date, day,
+    startedAt: km.startedAt ?? sess.startedAt,
+    endedAt: km.endedAt ?? endedAt,
+    durationSec: km.durationSec ?? Math.round((endedAt - sess.startedAt) / 1000),
+    condition: sess.condition ?? null,
+    exercises
+  } : {
     date: localDateStr(endedAt),   // 本地日期：跨零点训练记在结束那天，不会跑到昨天
     day,
     startedAt: sess.startedAt,
@@ -1050,7 +1079,9 @@ function endSession(){
     condition: sess.condition ?? null,
     exercises
   };
-  state.logs.push(entry);
+  // 按 startedAt 插入：正常结束插在末尾（行为不变）；改一下旧记录按原时间戳回到原位置
+  const ins = state.logs.findIndex(l => (l.startedAt ?? 0) > (entry.startedAt ?? 0));
+  if(ins >= 0) state.logs.splice(ins, 0, entry); else state.logs.push(entry);
   lastEnded = { day, entry, items: sess.items, startedAt: sess.startedAt, condition: sess.condition ?? null };
   state.sessions[day] = null;
   delete draft[day];
@@ -1417,7 +1448,7 @@ function renderHistory(){
           <span class="day-badge">${esc(entry.day)}</span>
           <span class="hist-meta">${entry.exercises.length} 动作 · ${doneSets === totalSets ? doneSets : doneSets + '/' + totalSets} 组${cond} · ${vol.toLocaleString()} kg · ${fmtDuration(entry.durationSec)}</span>
         </summary>
-        <div class="hist-detail">${detail}<button class="h-del" data-act="dellog" data-ts="${entry.startedAt ?? ''}" data-i="${state.logs.length - 1 - ri}">删除这次记录</button></div>
+        <div class="hist-detail">${detail}<button class="h-edit" data-act="reeditlog" data-ts="${entry.startedAt ?? ''}" data-i="${state.logs.length - 1 - ri}">改一下</button><button class="h-del" data-act="dellog" data-ts="${entry.startedAt ?? ''}" data-i="${state.logs.length - 1 - ri}">删除这次记录</button></div>
       </details>`;
   }).join('');
 }
