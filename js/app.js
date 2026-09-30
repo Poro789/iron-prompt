@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.11';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.12';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1382,6 +1382,8 @@ function applyPlan(d){
   const daySummary = [];
   for(const day of ['A','B']){
     if(d.program[day] === undefined) continue;
+    // 秒表还挂在旧草稿上跑：草稿即将被删掉重建，这块表没有可写的归属了，直接丢掉
+    if(timerFor && curDay() === day && !state.sessions[day]) clearTimer();
     state.program[day] = d.program[day].map(normalizeItem);
     delete draft[day];
     state.ui.curPos[day] = 0;   // 计划换了，停在第几组可能已经不存在
@@ -1419,6 +1421,8 @@ function snapshotPlan(){
 function undoImport(){
   const snap = state.lastImport;
   if(!snap){ toast('没有可撤销的导入'); return; }
+  // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组
+  if(timerFor && !state.sessions[curDay()]) clearTimer();
   state.program = snap.program;
   state.exercises = snap.exercises;
   state.lastImport = null;
@@ -1712,6 +1716,7 @@ function applyRestoredState(st){
   bindDrafts();                        // draft/condDraft 是指向旧 state 的别名，换 state 必须重新绑定
   curPos = state.ui.curPos[curDay()] || 0;
   resetRest();
+  clearTimer();   // 备份恢复是全量替换：挂着的秒表属于旧数据，丢掉，不让它的读数写进恢复后的组
   flushSave();
   render();
 }

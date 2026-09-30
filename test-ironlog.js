@@ -1258,6 +1258,49 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.sessions = {};
   Object.keys(T.draft).forEach(k => delete T.draft[k]);
 
+  console.log('== 36. 导入/撤销/恢复会丢掉挂在下层草稿上的秒表（v0.9.12）==');
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.state.logs = [];
+  T.state.lastImport = null;
+  T.switchView('today');
+  T.switchDay('A');
+  const it36 = T.getItems('A');
+  const ti36 = it36.findIndex(it => (T.state.exercises[it.exerciseId] || {}).mode === 'time');
+  check('夹具里有计时动作', ti36 >= 0);
+  T.startTimer(ti36, 0);
+  advanceClock(37000);
+  T.importPlan(planText);   // 无进行中记录，允许导入
+  check('导入后秒表被清空（旧草稿已不存在）', T.timerFor === null);
+  const it36b = T.getItems('A');
+  check('旧秒表不会把 37 秒写进重建后的草稿', it36b[ti36].sets[0].duration !== 37);
+
+  T.startTimer(ti36, 0);
+  advanceClock(21000);
+  T.importPlan(planText);
+  T.undoImport();           // 没有快照时只提示；先制造一次带快照的导入
+  check('没有快照时撤销不动数据', T.state.lastImport === null);
+  const snapPlan = JSON.parse(planText);
+  snapPlan.exercises.marker36 = { name: '标记动作', mode: 'weight' };
+  T.importPlan(JSON.stringify(snapPlan));   // 这次会留快照
+  check('导入前秒表又被清空', T.timerFor === null);
+  T.undoImport();
+  check('撤销后计划换回原样且无秒表残留',
+    !T.state.program.A.some(i => i.exerciseId === 'marker36') && T.timerFor === null);
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+
+  const snap36 = T.buildBackup();
+  const it36c = T.getItems('A');
+  T.startTimer(ti36, 0);
+  advanceClock(25000);
+  T.restoreBackupText(JSON.stringify(snap36));
+  T.answerConfirm(true);
+  await null;
+  check('恢复备份后秒表被清空', T.timerFor === null);
+  const it36d = T.getItems('A');
+  check('恢复后的草稿不带旧秒表读数', it36d[ti36].sets[0].duration !== 25);
+  T.state.lastImport = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
