@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.78';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.79';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1649,14 +1649,17 @@ function renderHistory(){
  * ------------------------------------------------------------------ */
 function stripFences(t){
   t = t.trim();
-  const m = t.match(/^```(?:json|javascript)?\s*([\s\S]*?)\s*```$/i);
-  if(m) return m[1].trim();
-  /* 分析 prompt 要求 AI 输出「中文总结 + JSON 代码块」两段式：用户整段粘贴时，
-   * 取文本里最后一个代码块（最终方案在最后）；没有代码块就取首个 { 到末个 } 的跨度。 */
-  const blocks = t.match(/```(?:json|javascript)?\s*[\s\S]*?\s*```/gi);
-  if(blocks && blocks.length){
-    return blocks[blocks.length - 1]
-      .replace(/^```(?:json|javascript)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  if(t.includes('```')){
+    /* 按 ``` 切段：奇数下标就是代码块内容，任意语言标签（json/js/text…）剥掉。
+     * 多段时取最后一个——分析 prompt 是「中文总结 + JSON 代码块」两段式，
+     * 用户整段粘贴（甚至粘了两版方案）时最终方案在最后。
+     * 没有代码块就取首个 { 到末个 } 的跨度。 */
+    const parts = t.split('```');
+    let last = null;
+    for(let i = 1; i < parts.length; i += 2){
+      last = parts[i].replace(/^[ \t]*[a-zA-Z]*[ \t]*\r?\n?/, '').trim();
+    }
+    if(last !== null) return last;
   }
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
   if(a !== -1 && b > a) return t.slice(a, b + 1);
@@ -1998,7 +2001,7 @@ ${bg}
 ${fence}json
 ${JSON.stringify(data)}
 ${fence}
-数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；type="warmup" 的组是热身组（趋势、最好成绩、PR 都不统计热身）；condition 为当日整体状态（佳/一般/差）；restAfter 是该组之后实际休息的秒数（null 表示未记录，可用于分析恢复节奏）；settings.restNote 是用户对组间休息约束的自我说明（如场地时段限制），分析休息是否合理时要优先考虑；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
+数据说明：done=false 的组是计划内未完成（数值可能是上次预填、也可能是用户填了但没点完成的意图，都不当作已验证的实际表现）；type="warmup" 的组是热身组（趋势、最好成绩、PR 都不统计热身）；condition 为当日整体状态（佳/一般/差）；restAfter 是该组之后实际休息的秒数（null 表示未记录，可用于分析恢复节奏）；settings.restNote 是用户对组间休息约束的自我说明（如场地时段限制），分析休息是否合理时要优先考虑；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
 
 请只基于这份数据分析（不要泛泛而谈通用健身知识）：
 1. 各动作重量/次数/时长趋势，是否需要渐进超负荷

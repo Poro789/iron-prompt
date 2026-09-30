@@ -2586,6 +2586,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('101 新动作替换旧动作（最后一个操作优先）', undo101c === 1 && undo101b === 0);
   T.toast('清场');
 
+  /* ============================================================
+   * 102. 代码块围栏容错扩展（v0.9.79）
+   * 旧 stripFences 只认 ```json/```javascript：```js 的标签会被当成内容（误导性的「JSON 解析失败」）；
+   * 两段代码块时首个 ``` 到末个 ``` 的懒惰匹配被头一段劫持，「取最后一块」的兜底不可达。
+   * ============================================================ */
+  console.log('== 102. 围栏容错：任意语言标签与多块取最后（v0.9.79）==');
+  const j102 = '{"exercises":{"p102":{"name":"P102"}},"program":{"A":[{"exerciseId":"p102","sets":[{}]}]}}';
+  check('102 ```js 围栏也能识别', T.parsePlanInput('```js\n' + j102 + '\n```').ok === true);
+  check('102 ```text 围栏也能识别', T.parsePlanInput('```text\n' + j102 + '\n```').ok === true);
+  check('102 普通 ```json 围栏回归', T.parsePlanInput('```json\n' + j102 + '\n```').ok === true);
+  check('102 裸围栏回归', T.parsePlanInput('```\n' + j102 + '\n```').ok === true);
+  const two102 = '先给一版旧方案：\n```json\n{"exercises":{"pold":{"name":"旧"}},"program":{"A":[{"exerciseId":"pold","sets":[{}]}]}}\n```\n然后是最终方案：\n```json\n' + j102 + '\n```';
+  const r102 = T.parsePlanInput(two102);
+  check('102 两段代码块取最后一版', r102.ok === true && !!r102.data.exercises.p102 && !r102.data.exercises.pold);
+  check('102 无围栏的花括号跨度仍可用', T.parsePlanInput('最终方案 ' + j102 + ' （完）').ok === true);
+  check('102 围栏未闭合也能取到内容', T.parsePlanInput('```json\n' + j102).ok === true);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
