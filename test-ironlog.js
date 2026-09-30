@@ -2538,6 +2538,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.program.A = []; T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
   delete T.state.exercises.e99;
 
+  /* ============================================================
+   * 100. 天文数字组数封顶 / 负数归 null / 坏动作条目（v0.9.77）
+   * normalizeItem 的 Array.from({length:n}) 对手编备份的 sets:1e9 会耗尽堆内存、2^32 直接 RangeError；
+   * 经 load() 走会被 catch 吞掉——整个数据被静默重置成种子。
+   * ============================================================ */
+  console.log('== 100. sets 组数封顶与负数/坏条目加固（v0.9.77）==');
+  check('100 sets:1e9 封顶 100 组（不 OOM）', T.normalizeItem({ exerciseId: 'e100', sets: 1000000000 }).sets.length === 100);
+  check('100 sets:2^32 不再 RangeError', T.normalizeItem({ exerciseId: 'e100', sets: 4294967296 }).sets.length === 100);
+  check('100 sets:Infinity 也封顶', T.normalizeItem({ exerciseId: 'e100', sets: Infinity }).sets.length === 100);
+  check('100 sets:3 仍展开 3 组', T.normalizeItem({ exerciseId: 'e100', sets: 3 }).sets.length === 3);
+  const m100 = T.migrate({ version: 1, logs: [],
+    program: { A: [{ exerciseId: 'e100', sets: [{ weight: -5, reps: -2, duration: -1, rpe: -3, type: 'work' }] }], B: [] },
+    exercises: { e100: null } });
+  const s100 = m100.program.A[0].sets[0];
+  check('100 负数归 null（不会以负贡献混进容量/趋势）', s100.weight === null && s100.reps === null && s100.duration === null && s100.rpe === null);
+  check('100 null 动作条目补最小形状', m100.exercises.e100 && m100.exercises.e100.name === 'e100' && m100.exercises.e100.mode === 'weight');
+  check('100 零值仍保留（0 不是负数）', (() => { const z = T.normalizeItem({ exerciseId: 'x', sets: [{ weight: 0, reps: 0 }] }).sets[0]; return z.weight === 0 && z.reps === 0; })());
+  // 正常备份恢复不受影响
+  const bk100 = T.buildBackup();
+  check('100 正常备份仍可恢复', T.parseBackup(JSON.stringify(bk100)).ok === true && bk100.version === 1);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

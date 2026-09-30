@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.76';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.77';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -150,7 +150,8 @@ const SEED = {
 function numOrNull(v){
   if(v === null || v === undefined || v === '') return null;
   const n = Number(v);
-  return isNaN(n) ? null : n;
+  // 重量/次数/时长/RPE 都没有负数语义：负值等同未填，否则会以负贡献混进容量与趋势
+  return isNaN(n) || n < 0 ? null : n;
 }
 function normalizeSet(s){
   s = s || {};
@@ -172,7 +173,9 @@ function normalizeItem(raw){
   if(Array.isArray(raw.sets)){
     sets = raw.sets.map(normalizeSet);
   }else{
-    const n = Math.max(0, Math.round(Number(raw.sets) || 0));
+    // 手编备份的 sets 可能是天文数字：1e9 会当场耗尽堆内存、2^32 直接 RangeError（整个数据被静默重置）。
+    // 封顶 100 组——再多也没有训练意义，导入路径本来也要求 sets 是数组。
+    const n = Math.min(100, Math.max(0, Math.round(Number(raw.sets) || 0)));
     sets = Array.from({ length: n }, () => normalizeSet({}));
   }
   return { section, exerciseId: raw.exerciseId, repsRange, sets };
@@ -237,6 +240,10 @@ function migrate(d){
    * 缺了就用内置种子补；是对象但某日缺则不动——清空计划是合法状态。 */
   if(!d.program || typeof d.program !== 'object') d.program = JSON.parse(JSON.stringify(SEED.program));
   if(!d.exercises || typeof d.exercises !== 'object') d.exercises = JSON.parse(JSON.stringify(SEED.exercises));
+  // 动作条目本身可能被手编成 null/字符串：后续渲染到处直接取 .name，会在设置页每次渲染时抛 TypeError
+  for(const k of Object.keys(d.exercises)){
+    if(!d.exercises[k] || typeof d.exercises[k] !== 'object') d.exercises[k] = { name: k, mode: 'weight', unit: null };
+  }
   for(const day of ['A','B']){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);
@@ -2069,7 +2076,8 @@ async function restoreBackupText(text){
     okLabel: '覆盖'
   });
   if(!ok){ msg.className = 'import-msg'; msg.textContent = '已取消，没有改动任何数据。'; return false; }
-  applyRestoredState(r.state);
+  try{ applyRestoredState(r.state); }
+  catch(err){ msg.className = 'import-msg err'; msg.textContent = '恢复失败：备份数据无法应用（' + err + '）'; return false; }
   msg.className = 'import-msg ok';
   msg.textContent = '已恢复：' + n + ' 条日志。';
   return true;
