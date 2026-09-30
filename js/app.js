@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.100';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.101';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1766,6 +1766,9 @@ function validatePlan(d){
    * 历史里出现「607×8」这种没有单位的数字，不如当场拒绝说清楚。
    * unit 只要是字符串就放行（历史数据里有 'LB'，严格枚举会挡住自导出回环）。 */
   for(const [id, ex] of Object.entries(d.exercises)){
+    /* __proto__ 作 id 是陷阱：state.exercises[id] = {...} 写的是原型链而不是自有属性——
+     * 导入「成功」但动作静默消失，保存刷新后就没了。当场拒收说清楚。 */
+    if(id === '__proto__') return 'exercises 里不能用 "__proto__" 作 id——它是 JavaScript 的保留名，请换个动作 id';
     if(!ex || typeof ex !== 'object' || Array.isArray(ex)) return `exercises.${id} 必须是对象`;
     if(ex.mode != null && !['weight','band','bodyweight','time'].includes(ex.mode))
       return `exercises.${id}.mode 必须是 weight / band / bodyweight / time 之一`;
@@ -1782,6 +1785,7 @@ function validatePlan(d){
       const it = arr[i];
       if(!it || typeof it !== 'object') return `program.${day}[${i}] 必须是对象`;
       if(typeof it.exerciseId !== 'string' || !it.exerciseId) return `program.${day}[${i}].exerciseId 缺失`;
+      if(it.exerciseId === '__proto__') return `program.${day}[${i}].exerciseId 不能用 "__proto__"（JavaScript 保留名）`;
       if(!d.exercises[it.exerciseId]) return `program.${day}[${i}].exerciseId "${it.exerciseId}" 不在 exercises 中`;
       if(!Array.isArray(it.sets) || !it.sets.length) return `program.${day}[${i}].sets 必须是非空数组`;
       for(let j = 0; j < it.sets.length; j++){

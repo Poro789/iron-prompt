@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.101]
+
+### 修复
+- 导入方案里用 `__proto__` 作动作 id 会被当场拒绝：这个 id 在 JavaScript 里是保留名，赋值写的是原型链而不是普通属性——之前导入会「成功」但动作静默消失，保存刷新后就没了，现在改为直接说明原因
+
 ## [0.9.100]
 
 ### 改进

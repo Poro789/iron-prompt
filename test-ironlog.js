@@ -3240,6 +3240,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const prompt123 = T.buildPrompt({ recentLogs: [], trends: [], trendsSpan: 0, program: { A: [], B: [] }, exercises: {}, settings: { weightStep: 2.5, restSec: 90, warmupRestSec: 30, restNote: '' }, profile: {} });
   check('123 字段规则里写明文本上限与截断后果', prompt123.includes('被截断') && prompt123.includes('名称 80 字') && prompt123.includes('个人注意 500 字'));
 
+  /* ============================================================
+   * 124. __proto__ 作动作 id 被拒收（审计 #11，v0.9.101）
+   * state.exercises['__proto__'] = {...} 写的是原型链：导入「成功」但动作
+   * 静默消失、保存后也没了。fixture 必须手写字符串——对象字面量的 __proto__ 键同样走原型 setter。
+   * ============================================================ */
+  console.log('== 124. __proto__ 作 id 拒收（v0.9.101）==');
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+  const rp124a = T.importPlan('{"exercises":{"__proto__":{"name":"幽灵动作","mode":"weight"}},"program":{"A":[{"exerciseId":"__proto__","sets":[{"reps":8}]}]}}');
+  check('124 exercises 里的 __proto__ 被拒且文案说明保留名', !rp124a.ok && rp124a.error.includes('保留名'));
+  check('124 程序未被污染（计划与动作库都没进这个 id）', T.state.program.A.length === 0 && T.state.exercises.__proto__ === Object.prototype);
+  const rp124b = T.importPlan('{"exercises":{"e124":{"name":"正常124","mode":"weight"}},"program":{"A":[{"exerciseId":"__proto__","sets":[{"reps":8}]}]}}');
+  check('124 program 侧引用 __proto__ 同样被拒', !rp124b.ok && rp124b.error.includes('保留名'));
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
