@@ -2345,6 +2345,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.sessions = { A: null, B: null };
   delete T.state.exercises.e92;
 
+  /* ============================================================
+   * 93. 秒表归属另一日时，当前卡片不显示它的运行态（v0.9.70）
+   * ============================================================ */
+  console.log('== 93. 秒表跨日不误显运行态（v0.9.70）==');
+  T.clearTimer(); T.resetRest();
+  T.state.exercises.t93 = { name: '计时93', mode: 'time', unit: null };
+  const plan93 = [{ exerciseId: 't93', sets: [{ duration: 30 }] }];
+  T.state.program.A = JSON.parse(JSON.stringify(plan93));
+  T.state.program.B = JSON.parse(JSON.stringify(plan93));
+  delete T.state.drafts.A; delete T.state.drafts.B;
+  T.state.settings.lastDay = 'A';
+  T.startSessionIfNeeded('A');
+  T.startTimer(0, 0);                          // 秒表归属 A
+  advanceClock(45000);
+  check('93 秒表已归属 A', !!T.timerFor && !!T.state.timer && T.state.timer.day === 'A');
+  T.state.settings.lastDay = 'B';              // 视图切到 B（不经 switchDay：模拟恢复后的错位视图）
+  T.curPos = 0;
+  T.switchView('today'); T.render();
+  const tc93 = htmlTouchedHTML('ex-list');
+  check('B 卡片有计时按钮但不是运行态', /data-act="timer"/.test(tc93) && !/fs-timer running/.test(tc93) && !/>停止</.test(tc93));
+  check('B 卡片时长输入框显示计划值而不是 A 的读数', /value="30"[^>]*aria-label="时长（秒）"/.test(tc93) && !/value="45"/.test(tc93));
+  T.clearTimer();
+  T.state.sessions = { A: null, B: null };
+  T.state.program.A = []; T.state.program.B = [];
+  delete T.state.exercises.t93;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

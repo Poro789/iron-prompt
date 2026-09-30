@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.69';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.70';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -668,7 +668,8 @@ function setInputsHTML(exIdx, setIdx, st, ex){
   const step = (f, dir, label) => `<button class="fs-step" data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}" data-act="step" data-dir="${dir}" aria-label="${label}">${dir < 0 ? '−' : '＋'}</button>`;
   const mode = ex.mode || 'weight';
   if(mode === 'time'){
-    const running = timerFor && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx;
+    /* 表归属另一日时（罕见：恢复后视图与归属不同日）别把它的读数画进当前卡片 */
+    const running = timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx;
     const shown = running ? timerElapsedSec() : (st.duration ?? '');
     const timerBtn = `<button class="fs-timer${running ? ' running' : ''}" data-ex="${exIdx}" data-set="${setIdx}" data-act="timer" aria-label="${running ? '停止计时并填入时长' : '开始计时'}">${running ? '停止' : '计时'}</button>`;
     return `${timerBtn}<span class="val-group">${step('duration', -1, '时长减少 5 秒')}<input class="fs-input" ${d('duration')} inputmode="numeric" value="${shown}" aria-label="时长（秒）"><span class="fs-unit">秒</span>${step('duration', 1, '时长增加 5 秒')}</span>`;
