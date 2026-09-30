@@ -2254,6 +2254,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('数量相符时保留草稿并使用归一化后的数字', g89b === T.state.drafts.A && g89b[0].sets[0].weight === 20);
   delete T.state.exercises.l89; delete T.state.drafts.A; T.state.program.A = [];
 
+  /* ============================================================
+   * 90. 手编备份的进行中会话形状纠正（v0.9.67）
+   * ============================================================ */
+  console.log('== 90. 手编备份 sessions 形状纠正（v0.9.67）==');
+  const m90 = T.migrate({ version: 1, logs: [], sessions: { A: '手滑写成了字符串', B: null } });
+  check('sessions 被写成非对象时归 null', m90.sessions.A === null);
+  const m90b = T.migrate({ version: 1, logs: [], sessions: { A: { startedAt: 5, items: '坏了' }, B: { startedAt: 6 } } });
+  check('items 缺/坏时纠正为空数组而不是让页面崩', Array.isArray(m90b.sessions.A.items) && m90b.sessions.A.items.length === 0 && Array.isArray(m90b.sessions.B.items));
+  const m90c = T.migrate({ version: 1, logs: [], sessions: { A: { startedAt: 7, items: [null, 'x', { exerciseId: 'goblet_squat', sets: [{ done: true, weight: '30', reps: '5' }] }] } } });
+  check('items 里的非对象条目被筛掉', m90c.sessions.A.items.length === 1);
+  check('会话里的字符串数值归一化', m90c.sessions.A.items[0].sets[0].weight === 30 && m90c.sessions.A.items[0].sets[0].reps === 5);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
