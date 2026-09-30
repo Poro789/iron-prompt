@@ -10,10 +10,14 @@ if(script.length < 1000) { console.error('FAIL js/app.js 过短（' + script.len
 if(/<script>/.test(html) || /<style>/.test(html)) { console.error('FAIL index.html 残留内联 <script>/<style>'); process.exit(1); }
 
 // ---- DOM / 浏览器 API 桩 ----
+function makeClassList(){
+  const s = new Set();
+  return { toggle(c){ s.has(c) ? s.delete(c) : s.add(c); }, add(c){ s.add(c); }, remove(c){ s.delete(c); }, contains(c){ return s.has(c); } };
+}
 function makeEl(id){
   return {
     id, innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
-    classList:{ toggle(){}, add(){}, remove(){} },
+    classList: makeClassList(),
     attrs: {}, setAttribute(k, v){ this.attrs[k] = v; },
     // 记录所有元素的事件回调（委托容器另有覆盖），供设置页 change 处理测试直接派发
     addEventListener(type, fn){ handlers.set(id + '|' + type, fn); },
@@ -1397,6 +1401,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('计时动作取最长时长（不是第一组）', T.lastValues('test_plank').duration === 60);
   check('自重动作取最多次数', T.lastValues('test_bw').reps === 15);
   T.state.logs.pop(); delete T.state.exercises.test_plank; delete T.state.exercises.test_bw;
+
+  console.log('== 43. 已确认组改数字后 PR 徽章重算（v0.9.20）==');
+  T.state.exercises.test_pr = mk('测试推举', 'weight');
+  T.state.logs.push({ date: '2026-04-01', day: 'A', startedAt: 2222, endedAt: 2223, durationSec: 1, condition: null, exercises: [
+    { exerciseId: 'test_pr', note: null, sets: [tset({ weight: 100, reps: 5 })] }
+  ] });
+  T.state.program.A = [{ section: '', exerciseId: 'test_pr', repsRange: '', sets: [{ type: 'work', weight: 90, reps: 5, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; T.state.sessions.A = null; T.state.ui.curPos.A = 0;
+  T.state.settings.lastDay = 'A'; T.curPos = 0;
+  clickExList(doneBtn(0, 0));   // 确认 90：低于历史 100，不算 PR
+  const prSet = () => T.state.sessions.A.items[0].sets[0];
+  check('确认 90 不算 PR', prSet().isPR !== true);
+  const chH = handlers.get('ex-list|change');
+  const inp43 = makeEl('fs-input-43');
+  inp43.dataset = { ex: '0', set: '0', f: 'weight' };
+  const fire43 = v => { inp43.value = v; chH({ target: { closest: sel => sel === 'input' ? inp43 : null } }); };
+  fire43('105');
+  check('确认后改成 105 → PR 点亮', prSet().isPR === true);
+  fire43('95');
+  check('再改成 95 → PR 熄灭', prSet().isPR === false);
+  fire43('100');
+  check('等于历史最好 100 → 不算 PR', prSet().isPR !== true);
+  fire43('102.5');
+  clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'weight', dir: '1' }));   // +2.5（section 41 已把步进复位为 2.5）→ 105
+  check('±步进把已确认组加到 105 → PR 点亮', prSet().isPR === true && prSet().weight === 105);
+  T.state.logs.pop(); delete T.state.exercises.test_pr;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.19';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.20';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -583,6 +583,15 @@ function setDoneState(day, exIdx, setIdx, val){
   if(!set) return;
   set.done = val;
 }
+/* 已确认的组改了数字：PR 徽章必须跟着重算。
+ * 确认 105 拿到 🔥 后改成 90，🔥 还挂着；确认 90 后 ± 加到 105 却没有 🔥——
+ * 两个方向都会让徽章和真实表现脱钩。未确认的组不重算（确认时才判定）。 */
+function refreshPR(day, exIdx, setIdx){
+  const item = getItems(day)[exIdx];
+  const set = item && item.sets[setIdx];
+  if(!set || set.done !== true) return;
+  set.isPR = set.type !== 'warmup' && detectPR(day, exIdx, setIdx, item.exerciseId);
+}
 /* 按模式生成输入框 + ± 步进按钮。
  * 训练中改数值最常见的动作是「比上次加 2.5kg」「少做 1 个」，键盘输入是这套流程里最烦的一步：
  * weight 用设置里的重量步进，reps ±1，时长 ±5 秒；精确值仍然可以直接打字。 */
@@ -819,6 +828,7 @@ $('ex-list').addEventListener('click', e => {
     const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
     const next = Math.max(f === 'reps' ? 1 : 0, round1((Number(set[f]) || 0) + dir * inc));
     set[f] = next;
+    refreshPR(day, exIdx, setIdx);
     saveSoon();
     if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : next)) renderToday();
     return;
@@ -890,6 +900,7 @@ $('ex-list').addEventListener('change', e => {
   }else{
     set.reps = isNaN(v) ? null : Math.max(0, Math.round(v));
   }
+  refreshPR(day, exIdx, +inp.dataset.set);
   saveSoon();
 });
 
@@ -1196,7 +1207,7 @@ function stopTimer(){
   const at = timerFor, elapsed = timerElapsedSec();
   timerFor = null; timerStartsAt = null;
   const set = getItems(curDay())[at.exIdx]?.sets[at.setIdx];
-  if(set) set.duration = elapsed;
+  if(set){ set.duration = elapsed; refreshPR(curDay(), at.exIdx, at.setIdx); }
   saveSoon();
   return { at, elapsed };
 }
