@@ -3417,6 +3417,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   handlers.get('weight-step|change')({ target: t134b });
   check('134 低于 0.25 仍纠正为默认 2.5', T.state.settings.weightStep === 2.5 && String(t134b.value) === '2.5');
 
+  /* ============================================================
+   * 135. ESC 关闭抽屉（v0.9.110）
+   * 抽屉打开时焦点被主动送进抽屉，键盘用户理应用 ESC 退出；
+   * 优先级：确认弹层 > 小结 > 抽屉。
+   * ============================================================ */
+  console.log('== 135. ESC 关闭抽屉，焦点回汉堡按钮（v0.9.110）==');
+  T.toggleDrawer();
+  const dr135 = document.getElementById('drawer');
+  check('135 抽屉已打开', dr135.classList.contains('open'));
+  check('135 打开时 aria-expanded=true', document.getElementById('hamburger-btn').getAttribute('aria-expanded') === 'true');
+  docHandlers.get('keydown')({ key: 'Escape' });
+  check('135 ESC 关闭抽屉', !dr135.classList.contains('open'));
+  check('135 关闭后 aria-expanded=false', document.getElementById('hamburger-btn').getAttribute('aria-expanded') === 'false');
+  check('135 遮罩同步移除', !document.getElementById('drawer-overlay').classList.contains('show'));
+  // 优先级：小结弹层在上的时候，第一次 ESC 关小结，抽屉不动；第二次才关抽屉
+  T.toggleDrawer();
+  document.getElementById('summary-overlay').classList.add('show');
+  docHandlers.get('keydown')({ key: 'Escape' });
+  check('135 ESC 优先关小结，抽屉不动', !document.getElementById('summary-overlay').classList.contains('show') && dr135.classList.contains('open'));
+  docHandlers.get('keydown')({ key: 'Escape' });
+  check('135 第二次 ESC 才关抽屉', !dr135.classList.contains('open'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

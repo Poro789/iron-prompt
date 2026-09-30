@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.109';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.110';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -464,6 +464,9 @@ document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
   if($('confirm-overlay').classList.contains('show')) answerConfirm(false);
   else if($('summary-overlay').classList.contains('show')) closeSummary();
+  // 抽屉打开时焦点在抽屉里（toggleDrawer 主动送进去的）：键盘用户理应用 ESC 退出，
+  // 关闭路径复用 closeDrawer（清 overlay、复位 aria-expanded、焦点还给汉堡按钮）。
+  else if($('drawer').classList.contains('open')) closeDrawer();
 });
 
 /* ---------------- 视图切换（v0.9：抽屉导航） ---------------- */
