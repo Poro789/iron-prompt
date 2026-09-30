@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.106';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.107';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1901,12 +1901,22 @@ function applyPlan(d){
 }
 function parsePlanInput(text){
   const t = stripFences(String(text || ''));
-  let data;
   // 先原样解析：尾逗号修复会连字符串里的「, }」一起删逗号，只作失败后的兜底重试
-  try{ data = JSON.parse(t); }
-  catch(e1){
-    try{ data = JSON.parse(t.replace(/,\s*([}\]])/g, '$1')); }
-    catch(e){ return { ok:false, error:'JSON 解析失败——请检查是否完整粘贴、引号与逗号是否配对（' + e.message + '）' }; }
+  const attempts = [t, t.replace(/,\s*([}\]])/g, '$1')];
+  /* 从聊天窗口整段复制时常带着前后的客套话（「这是你的计划：…」）：
+   * 整段与去尾逗号都失败后，再试最外层 {…} 片段——只截取，不改内容语义。 */
+  const s = t.indexOf('{'), e = t.lastIndexOf('}');
+  if(s >= 0 && e > s){
+    const seg = t.slice(s, e + 1);
+    attempts.push(seg, seg.replace(/,\s*([}\]])/g, '$1'));
+  }
+  let data, lastErr;
+  for(const a of attempts){
+    try{ data = JSON.parse(a); break; }
+    catch(err){ lastErr = err; }
+  }
+  if(data === undefined){
+    return { ok:false, error:'JSON 解析失败——请检查是否完整粘贴、引号与逗号是否配对（' + lastErr.message + '）' };
   }
   const verr = validatePlan(data);
   if(verr) return { ok:false, error:'校验失败：' + verr };

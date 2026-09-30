@@ -3330,6 +3330,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     /white-space:nowrap/.test(fsNameRule) && /text-overflow:ellipsis/.test(fsNameRule) &&
     /white-space:nowrap/.test(lgNameRule) && /text-overflow:ellipsis/.test(lgNameRule));
 
+  /* ============================================================
+   * 130. 带客套话的粘贴也能导入（v0.9.107）
+   * 从聊天窗口整段复制方案时常带着前后的说明文字（「这是你的计划：…」），
+   * 之前整段 JSON.parse 直接失败。所有严格解析都失败后，再试最外层 {…} 片段。
+   * 顺序不变：原样 → 去尾逗号 → {…} 片段 → 片段的去尾逗号；合法 JSON 里的
+   * 字符串含「, }」仍必须原样保留（v0.9.98 的口径）。
+   * ============================================================ */
+  console.log('== 130. 客套话包裹的 JSON 导入（v0.9.107）==');
+  const plan130 = '{"exercises":{"e130":{"name":"动作130","mode":"weight"}},"program":{"A":[{"exerciseId":"e130","sets":[{"reps":8}]}]}}';
+  const r130a = T.importPlan('这是为你调整的计划：\n' + plan130 + '\n祝训练顺利，注意热身。');
+  check('130 前后带说明文字能导入', r130a.ok);
+  const r130b = T.importPlan('好的，方案如下：\n{"exercises":{"e130b":{"name":"动作130B","mode":"weight"}},"program":{"A":[{"exerciseId":"e130b","sets":[{"reps":8,}],}]}}\n加油！');
+  check('130 客套话 + 尾逗号也能导入', r130b.ok);
+  const r130c = T.importPlan('完全没有大括号的回答');
+  check('130 无 JSON 时仍是中文报错', !r130c.ok && r130c.error.includes('JSON 解析失败'));
+  const r130d = T.parsePlanInput('{"exercises":{"e130d":{"name":"名字, }含逗号","mode":"weight"}},"program":{"A":[{"exerciseId":"e130d","sets":[{"reps":8}]}]}}');
+  check('130 合法 JSON 字符串里的「, }」原样保留', r130d.ok && r130d.data.exercises.e130d.name === '名字, }含逗号');
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
