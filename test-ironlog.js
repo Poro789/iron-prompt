@@ -1918,6 +1918,17 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = T.state.logs.filter(l => l.startedAt !== ts74);
   delete T.state.drafts.A; delete T.state.sessions.A;
 
+  console.log('== 75. 休息说明：设置写入 → 导出 → prompt 解释（v0.9.54）==');
+  const tgt75 = { value: '  健身房时段限制，休息最多 60 秒  ' };
+  handlers.get('rest-note|change')({ target: tgt75 });
+  check('restNote 去空白后保存', T.state.settings.restNote === '健身房时段限制，休息最多 60 秒');
+  check('输入框写回纠正结果', tgt75.value === '健身房时段限制，休息最多 60 秒');
+  check('导出 settings 含 restNote', T.buildExport(4).settings.restNote === '健身房时段限制，休息最多 60 秒');
+  check('prompt 解释 restNote', /restNote/.test(T.buildPrompt(T.buildExport(4))));
+  handlers.get('rest-note|change')({ target: { value: '   ' } });
+  check('空白输入等于清除', T.state.settings.restNote === '');
+  T.state.settings.restNote = '';
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
