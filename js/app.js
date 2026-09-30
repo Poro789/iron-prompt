@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.96';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.97';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -362,8 +362,7 @@ const LB_TO_KG = 0.45359237;
 /* items 形状（session/draft 的 items）与日志 entry.exercises 相同，容量统一走这里 */
 function itemsVolume(items){
   return items.reduce((sum, it) => {
-    const unit = String(((state.exercises[it.exerciseId] || {}).unit || 'kg')).trim().toLowerCase();
-    const k = unit === 'lb' ? LB_TO_KG : 1;
+    const k = normUnit(it.exerciseId) === 'lb' ? LB_TO_KG : 1;
     return sum + it.sets.filter(isDone).reduce((s, st) => s + (st.weight || 0) * k * (st.reps || 0), 0);
   }, 0);
 }
@@ -1584,9 +1583,13 @@ function trendUnit(id, kind){
   // 与分组标题、历史详情同口径：weight 类动作单位缺失按 kg 念，别出现「标题 kg、图例没单位」
   return normUnit(id) || 'kg';
 }
-/* 单位归一：大小写/空格不敏感（AI 方案可能写 "LB"）——与 itemsVolume 同口径 */
+/* 单位归一：大小写/空格不敏感（AI 方案可能写 "LB"），同义词 lbs/pound(s) 归到 lb
+ * ——与 itemsVolume 同口径；换算判定与分组标题必须用同一个归一，否则 'lbs' 会
+ * 被判成「另一种单位」触发混用换算，却又不属于换算白名单，原值被标成 kg。 */
 function normUnit(id){
-  return String((state.exercises[id] || {}).unit || '').trim().toLowerCase();
+  let u = String((state.exercises[id] || {}).unit || '').trim().toLowerCase();
+  if(u === 'lbs' || u === 'pound' || u === 'pounds') u = 'lb';
+  return u;
 }
 /* 单位混用的重量组：lb 先换算成 kg 再上同一条 Y 轴（与容量汇总同一口径）。
  * 单位一致的组保持原单位绘制，不换算。conv 只在混用组里为 true。 */
@@ -1997,8 +2000,7 @@ function buildTrends(logs){
       const doneSets = ex.sets.filter(s => isDone(s) && s.type !== 'warmup');
       if(!doneSets.length) continue;
       // 容量与界面聚合同一口径：lb 动作先换算成 kg，不然 35lb 的绳看着比 11kg 的壶铃负荷大
-      const volUnit = String((state.exercises[ex.exerciseId] || {}).unit || '').trim().toLowerCase();
-      const volFactor = volUnit === 'lb' ? LB_TO_KG : 1;
+      const volFactor = normUnit(ex.exerciseId) === 'lb' ? LB_TO_KG : 1;
       (byEx[ex.exerciseId] = byEx[ex.exerciseId] || []).push({
         date: entry.date,
         day: entry.day,
@@ -2013,14 +2015,20 @@ function buildTrends(logs){
   const trends = {};
   for(const [id, list] of Object.entries(byEx)){
     let direction = 'new';
-    if(list.length > 1){
+    /* 只在与当前指标同类型的记录上判定方向——与折线图过滤（buildTrendCharts）同一口径。
+     * 动作改过类型（导入方案 time→weight 之类）时，秒和 kg 的原始数值互比会得出假 up/down
+     * （60 秒对 10kg 判「下降」），图例与导出给 AI 的趋势就错了。
+     * 单位在历史中途改过（lb→kg）无法从记录里还原当时的单位，维持「按当前单位念」的既有口径。 */
+    const kind = trendKind({ sessions: list });
+    const same = list.filter(s => sessionKind(s) === kind);
+    if(same.length > 1){
       // 首尾对比 + 后半段均值对比：两者同向才判定 up/down；
       // 会话数 >= 6 时再加「近3次 vs 前3次」校验，避免「涨上去后停滞」被误判为 up
-      const first = metric(list[0].top), last = metric(list[list.length-1].top);
-      const half = Math.ceil(list.length / 2);
+      const first = metric(same[0].top), last = metric(same[same.length-1].top);
+      const half = Math.ceil(same.length / 2);
       const mean = a => a.reduce((s, t) => s + (metric(t.top) || 0), 0) / a.length;
-      const late = mean(list.slice(list.length - half)) - mean(list.slice(0, half));
-      const recent3 = list.length >= 6 ? mean(list.slice(-3)) - mean(list.slice(0, 3)) : null;
+      const late = mean(same.slice(same.length - half)) - mean(same.slice(0, half));
+      const recent3 = same.length >= 6 ? mean(same.slice(-3)) - mean(same.slice(0, 3)) : null;
       const d = last - first;
       direction = (d > 0 && late > 0) ? 'up' : ((d < 0 && late < 0) ? 'down' : 'plateau');
       if(direction === 'up' && recent3 !== null && recent3 <= 0) direction = 'plateau';

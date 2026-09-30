@@ -3125,6 +3125,37 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('119 撤销后当前查看位置清零', T.state.ui.curPos.A === 0 && T.state.ui.curPos.B === 0);
   T.state.exercises = {}; T.state.program = { A: [], B: [] };
 
+  /* ============================================================
+   * 120. 趋势方向只在与当前类型同口径的记录上判定；单位同义词归一（审计 #8 发现2+3，v0.9.97）
+   * a) time→weight 变更后的动作：秒与 kg 原始互比会得出假 down，只比当前类型的记录；
+   * b) lbs/pounds 与 lb 同一归一：容量换算、混用组判定、图上换算三处口径一致。
+   * ============================================================ */
+  console.log('== 120. 趋势方向同类型判定 + 单位同义词归一（v0.9.97）==');
+  T.state.exercises.e120 = { name: '改过类型的动作120', mode: 'weight', unit: 'kg' };
+  const log120 = (n, dur, w) => ({ date: `2026-03-0${n}`, day: 'A', startedAt: n, exercises: [
+    { exerciseId: 'e120', sets: [dur != null ? tset({ duration: dur }) : tset({ weight: w, reps: 8 })] }] });
+  const logs120 = [log120(1, 30), log120(2, 60), log120(3, 90), log120(4, null, 20), log120(5, null, 25)];
+  const tr120 = T.buildTrends(logs120);
+  check('120 方向只按当前类型的记录判定（30→90 秒不再把 20→25kg 判成下降）', tr120.e120.direction === 'up');
+  check('120 sessions 仍保留完整历史（导出不受过滤影响）', tr120.e120.sessions.length === 5);
+  T.state.exercises.e120b = { name: 'lbs动作120', mode: 'weight', unit: 'lbs' };
+  T.state.exercises.e120c = { name: 'kg动作120', mode: 'weight', unit: 'kg' };
+  const logs120b = [{ date: '2026-03-10', day: 'A', startedAt: 9, exercises: [
+    { exerciseId: 'e120b', sets: [{ weight: 35, reps: 10, done: true }] },
+    { exerciseId: 'e120c', sets: [{ weight: 50, reps: 10, done: true }] }] },
+    { date: '2026-03-12', day: 'A', startedAt: 10, exercises: [
+    { exerciseId: 'e120b', sets: [{ weight: 35, reps: 10, done: true }] },
+    { exerciseId: 'e120c', sets: [{ weight: 50, reps: 10, done: true }] }] }];
+  const tr120b = T.buildTrends(logs120b);
+  check('120 lbs 容量与 lb 一样换算成 kg·次', tr120b.e120b.sessions[0].volume === Math.round(35 * 0.45359237 * 10));
+  check('120 normUnit 把 lbs/pounds 归一到 lb', T.normUnit('e120b') === 'lb');
+  check('120 itemsVolume 对 lbs 与 lb 同口径换算', Math.abs(T.itemsVolume([{ exerciseId: 'e120b', sets: [{ done: true, weight: 35, reps: 10 }] }]) - 35 * 0.45359237 * 10) < 1e-6);
+  const ch120 = T.buildTrendCharts(T.buildTrends(logs120b), 5);
+  check('120 lbs+kg 混用组标题 kg 且 lbs 值换算后画轴（图例 15.88 而非 35）',
+    ch120.includes('重量（kg）') && ch120.includes('15.88 kg') && !/>35 kg</.test(ch120));
+  delete T.state.exercises.e120; delete T.state.exercises.e120b; delete T.state.exercises.e120c;
+  T.state.logs = [];
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
