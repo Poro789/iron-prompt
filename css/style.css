@@ -182,7 +182,7 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-foot .add-set{flex:none;width:auto;padding:0 14px;height:40px;border-radius:10px;border:1px dashed var(--border);background:none;color:var(--muted);font-size:14px}
 .fs-foot .add-set:active{background:var(--panel2)}
 .fs-exnote{
-  flex:1;height:40px;padding:0 12px;font-size:13px;background:none;
+  flex:1;height:40px;padding:0 12px;font-size:16px;background:none;   /* 16px：iOS 上小于 16px 的输入框聚焦会把整页放大 */
   border:1px solid var(--border);border-radius:10px;color:var(--text);
 }
 .fs-exnote::placeholder{color:var(--muted)}
@@ -243,7 +243,7 @@ header .ver{color:var(--muted);font-size:12px}
 .set-row2{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
 .set-row2 label{font-size:14px}
 .set-row2 input{
-  width:90px;height:38px;text-align:center;font-size:15px;background:var(--panel2);
+  width:90px;height:38px;text-align:center;font-size:16px;background:var(--panel2);   /* ≥16px：iOS 聚焦不放大 */
   border:1px solid var(--border);border-radius:9px;color:var(--text);
 }
 .set-row2 select{
@@ -255,7 +255,7 @@ header .ver{color:var(--muted);font-size:12px}
   color:var(--muted);font-size:12px;border-radius:8px;padding:4px 10px;
 }
 .wide-area{
-  width:100%;min-height:96px;margin-top:6px;font-size:13px;background:var(--panel2);
+  width:100%;min-height:96px;margin-top:6px;font-size:16px;background:var(--panel2);   /* ≥16px：iOS 聚焦不放大 */
   border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;resize:vertical;
 }
 .danger-btn{
@@ -267,6 +267,8 @@ header .ver{color:var(--muted);font-size:12px}
   border:1px solid var(--border);border-radius:9px;color:var(--text);
   font-size:12px;font-family:Consolas,monospace;padding:8px;resize:vertical;
 }
+/* 导入框要手动粘贴/修改：≥16px，iOS 聚焦才不把整页放大（导出框只读不受影响） */
+#import-text{font-size:16px}
 .import-btn{
   width:100%;height:44px;margin-top:8px;border:none;border-radius:10px;
   background:var(--accent);color:#fff;font-size:15px;font-weight:700;

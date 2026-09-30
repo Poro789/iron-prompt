@@ -1537,6 +1537,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('卡片里有正常的组点结构', card50.includes('fs-dots'));
   check('写在模板字符串里的 // 注释不再原样显示在卡片上', !card50.includes('二态模型') && !/\/\/\s/.test(card50));
 
+  console.log('== 51. 可输入控件 ≥16px（iOS 聚焦不放大页面，v0.9.28）==');
+  const css51 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+  const rule16 = sel => new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\{[^}]*font-size:1[6-9]px').test(css51);
+  check('卡片备注输入框 16px', rule16('.fs-exnote'));
+  check('设置页数字输入 16px', rule16('.set-row2 input'));
+  check('个人背景文本域 16px', rule16('.wide-area'));
+  check('导入文本框 16px', rule16('#import-text'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

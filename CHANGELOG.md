@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.28]
+
+### 修复
+- 移动端输入不再触发 iOS 自动放大：卡片备注、设置页数字、个人背景、导入框的字号都提到 ≥16px（iOS Safari 聚焦小于 16px 的输入框会把整页推大，改完也回不去）
+
 ## [0.9.27]
 
 ### 修复
