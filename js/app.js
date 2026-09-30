@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.62';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.63';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1349,18 +1349,20 @@ function beep(){
  * A 日有 9 个计时动作（平板、各类拉伸、呼吸），原来要自己看表、再打字填秒数。
  * 按时间戳计算，切后台回来也不会少算；确认这一组时会自动停表填入。 */
 let timerFor = null;         // {exIdx, setIdx} 正在计时的组
+let timerForDay = null;      // 正在计时的日：导入方案换日后停表也要写回原来那一日的组
 let timerStartsAt = null;
 let timerTicker = null;
 function timerElapsedSec(){ return timerStartsAt === null ? 0 : Math.round((Date.now() - timerStartsAt) / 1000); }
 function timerInputEl(){
-  if(!timerFor) return null;
+  if(!timerFor || curDay() !== timerForDay) return null;   // 显示中的卡片不是计时归属日：别把秒数打进别人家
   return document.querySelector('#ex-list .fs-input[data-ex="' + timerFor.exIdx + '"][data-set="' + timerFor.setIdx + '"][data-f="duration"]');
 }
 function stopTimerTicker(){ if(timerTicker){ clearInterval(timerTicker); timerTicker = null; } }
 function startTimer(exIdx, setIdx){
   timerFor = { exIdx, setIdx };
+  timerForDay = curDay();
   timerStartsAt = Date.now();
-  state.timer = { day: curDay(), exIdx, setIdx, startsAt: timerStartsAt };
+  state.timer = { day: timerForDay, exIdx, setIdx, startsAt: timerStartsAt };
   saveSoon();
   stopTimerTicker();
   timerTicker = setInterval(() => { const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }, 250);
@@ -1370,18 +1372,21 @@ function stopTimer(){
   stopTimerTicker();
   state.timer = null;
   if(!timerFor) return null;
-  const at = timerFor, elapsed = timerElapsedSec();
-  timerFor = null; timerStartsAt = null;
-  const set = getItems(curDay())[at.exIdx]?.sets[at.setIdx];
-  if(set){ set.duration = elapsed; refreshPR(curDay(), at.exIdx, at.setIdx); }
+  // 归属日优先：正在看别的日时停表，秒数要回到它真正发生的那一日
+  const at = timerFor, home = timerForDay || curDay(), elapsed = timerElapsedSec();
+  timerFor = null; timerForDay = null; timerStartsAt = null;
+  const items = state.sessions[home] ? state.sessions[home].items
+    : (draft[home] && draft[home].length ? draft[home] : null);
+  const set = items && items[at.exIdx] && items[at.exIdx].sets[at.setIdx];
+  if(set){ set.duration = elapsed; refreshPR(home, at.exIdx, at.setIdx); }
   saveSoon();
   return { at, elapsed };
 }
 /* 放弃/结束/换日：丢掉秒表，不写进任何组 */
-function clearTimer(){ stopTimerTicker(); timerFor = null; timerStartsAt = null; state.timer = null; }
+function clearTimer(){ stopTimerTicker(); timerFor = null; timerForDay = null; timerStartsAt = null; state.timer = null; }
 
 /* 刷新/浏览器杀进程后接上：休息与秒表都是时间戳，经过的秒数不会少算。
- * 归属日必须仍有进行中记录，否则持久化的副本属于已结束的会话——丢弃。 */
+ * 归属日必须还有进行中记录或草稿，否则持久化的副本属于已结束的会话——丢弃。 */
 function resumeTimers(){
   const r = state.rest, t = state.timer;
   resetRest(); clearTimer();
@@ -1389,11 +1394,15 @@ function resumeTimers(){
     restStartsAt = r.startsAt; restEndsAt = r.endsAt; restForDay = r.day;
     restForPos = (Number.isFinite(r.exIdx) && Number.isFinite(r.setIdx)) ? { exIdx: r.exIdx, setIdx: r.setIdx } : null;
     restDone = Date.now() >= restEndsAt;   // 离开期间已经到点：回来不补响铃，直接显示超时
+    state.rest = r;                        // 接上了就要重新可持久化：否则第二次刷新会把它丢掉
     startRestTick();
   } else if(r) state.rest = null;
-  if(t && state.sessions[t.day]){
+  if(t && (t.day === 'A' || t.day === 'B') && (state.sessions[t.day] || (draft[t.day] && draft[t.day].length))){
+    // 秒表和休息同一口径：还没确认任何一组的草稿日也接得上（计时动作先按表后确认是常态）
     timerFor = { exIdx: t.exIdx, setIdx: t.setIdx };
+    timerForDay = t.day;
     timerStartsAt = t.startsAt;
+    state.timer = t;                      // 同上：接上后保持可持久化
     timerTicker = setInterval(() => { const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }, 250);
   } else if(t) state.timer = null;
 }
@@ -1631,7 +1640,8 @@ function applyPlan(d){
   for(const day of ['A','B']){
     if(d.program[day] === undefined) continue;
     // 秒表还挂在旧草稿上跑：草稿即将被删掉重建，这块表没有可写的归属了，直接丢掉
-    if(timerFor && curDay() === day && !state.sessions[day]) clearTimer();
+    // （按表的归属日判断，不是当前查看的日——导入把视图切去另一日时也要清对表）
+    if(timerFor && timerForDay === day && !state.sessions[day]) clearTimer();
     // 草稿会被整体删掉重建。若里面有用户真实产生过的内容（确认过的组、手写备注），
     // 必须在导入结果里说一声，否则换了计划数量后用户回头才发现「刚才填的东西没了」。
     // 只看 done/notes：新建草稿本身带着上次数值的预填，那不是用户输入，丢了不算损失。

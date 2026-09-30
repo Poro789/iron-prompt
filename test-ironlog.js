@@ -2150,6 +2150,42 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('做完的动作被跳过，落到再下一个的第一组', T.curPos === 4);
   delete T.state.drafts.A; delete T.state.exercises.l85a; delete T.state.exercises.l85b; delete T.state.exercises.l85c;
 
+  console.log('== 86. 秒表按归属日结算：草稿日也能接上，换日不写错家 ==');
+  T.state.logs = []; T.state.sessions = {}; delete T.state.drafts.A; delete T.state.drafts.B;
+  T.state.exercises.l86a = { name: '平板', mode: 'time', unit: null };
+  T.state.exercises.l86b = { name: '拉伸', mode: 'time', unit: null };
+  const mk86 = id => ({ section: '', exerciseId: id, repsRange: '', sets: [{ type: 'work', weight: null, reps: null, duration: null, rpe: null, rpeLabel: '', side: null }] });
+  T.state.program.A = [mk86('l86a')]; T.state.program.B = [mk86('l86b')];
+  T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.switchView('today');
+  const itA86 = T.getItems('A');   // 只建了草稿，没有确认任何一组
+  itA86[0].sets[0].duration = null;
+  T.state.timer = { day: 'A', exIdx: 0, setIdx: 0, startsAt: Date.now() - 40000 };
+  T.resumeTimers();
+  check('没确认任何一组的草稿日，秒表也能接上', !!T.timerFor && !!T.state.timer);
+  T.resumeTimers();
+  check('第二次刷新仍接得上（接上的副本必须继续可持久化）', !!T.timerFor && !!T.state.timer);
+  // 休息也一样：接上后必须继续可持久化，否则第三次刷新就丢了
+  T.state.rest = { startsAt: Date.now() - 20000, endsAt: Date.now() + 40000, day: 'A', exIdx: 0, setIdx: 0 };
+  T.resumeTimers();
+  check('接上的休息倒计时仍留在存储里', !!T.state.rest && T.state.rest.endsAt > Date.now());
+  T.state.settings.lastDay = 'B';   // 正在看 B 日时停表：秒数要回到它发生的那一日
+  const st86 = T.stopTimer();
+  check('停表写回归属日 A，而不是正在看的 B', st86 && itA86[0].sets[0].duration >= 40 && T.getItems('B')[0].sets[0].duration === null);
+  check('归属日不合法的陈旧副本被丢弃', (() => {
+    T.state.timer = { day: 'C', exIdx: 0, setIdx: 0, startsAt: Date.now() };
+    T.resumeTimers();
+    return T.state.timer === null && !T.timerFor;
+  })());
+  // 表挂在 A 的草稿上、人正在看 B：导入会删掉 A 的草稿，表也要按归属日清掉
+  T.state.settings.lastDay = 'B'; T.switchDay('B'); T.getItems('B');
+  T.state.settings.lastDay = 'A'; T.startTimer(0, 0); T.state.settings.lastDay = 'B';
+  T.importPlan(JSON.stringify({ day: 'A', exercises: { l86a: { name: '平板', mode: 'time' }, l86b: { name: '拉伸', mode: 'time' } },
+    program: { A: [mk86('l86a')], B: [mk86('l86b')] } }));
+  check('导入删掉表所属的草稿时按归属日清表（哪怕正在看别的日）', !T.timerFor && T.state.timer === null);
+  T.clearTimer(); T.resetRest();
+  delete T.state.drafts.A; delete T.state.drafts.B; delete T.state.exercises.l86a; delete T.state.exercises.l86b;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
