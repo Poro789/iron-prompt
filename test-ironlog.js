@@ -1134,6 +1134,72 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('没有快照时撤销只提示，不改数据',
     (T.undoImport(), T.state.program.A.map(i => i.exerciseId).join() === idsA33.join()));
 
+  console.log('== 34. 结束/换日时休息计时的归属（v0.9.10）==');
+  T.resetRest();
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.state.logs = [];
+  T.state.settings.restSec = 90;
+  T.switchView('today');
+  T.switchDay('A');
+  const it34 = T.getItems('A');
+  const gi34 = it34.findIndex(i => i.exerciseId === 'goblet_squat');
+  const ws34 = it34[gi34].sets.findIndex(s => s.type !== 'warmup');
+  it34[gi34].sets[ws34].done = false;
+  T.state.sessions.A = { startedAt: Date.now() - 60000, items: it34, condition: null };
+  T.curPos = T.flatPos('A').findIndex(p => p.exIdx === gi34 && p.setIdx === ws34);
+  T.render();
+  advanceClock(1000);
+  clickExList(doneBtnFromDOM(gi34, ws34));   // 确认这组 → 休息开始
+  check('确认组后休息计时启动', T.restEndsAt !== null);
+  advanceClock(45000);                        // 真实休息了 45 秒
+  T.endSession();                             // 直接结束训练
+  const log34 = T.state.logs[T.state.logs.length - 1];
+  const glog34 = log34.exercises.find(e => e.exerciseId === 'goblet_squat');
+  check('结束训练前把休息结算到被确认的组上（不凭空消失）',
+    glog34.sets[ws34].restAfter === 45);
+  check('结束后休息计时清空', T.restEndsAt === null && T.restForPos === null);
+
+  // 换日：休息属于上一日，结算到上一日的组，不会写进新的一天
+  T.resetRest();
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.switchDay('A');
+  const it34b = T.getItems('A');
+  it34b[gi34].sets[ws34].done = false;
+  T.state.sessions.A = { startedAt: Date.now() - 10000, items: it34b, condition: null };
+  T.curPos = T.flatPos('A').findIndex(p => p.exIdx === gi34 && p.setIdx === ws34);
+  T.render();
+  clickExList(doneBtnFromDOM(gi34, ws34));
+  advanceClock(20000);
+  T.switchDay('B');
+  check('换日前把休息结算到 A 日的组上', it34b[gi34].sets[ws34].restAfter === 20);
+  check('换日后休息计时清空', T.restEndsAt === null && T.restForPos === null);
+  const bItems = T.getItems('B');
+  check('休息没有写进 B 日的任何组',
+    bItems.every(it => it.sets.every(s => s.restAfter == null)));
+  T.resetRest();
+  T.switchDay('A');
+
+  // 结束训练时秒表还在跑：经过的秒数先填进这一组，再做日志快照
+  T.resetRest();
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  const it34c = T.getItems('A');
+  const ti34 = it34c.findIndex(it => (T.state.exercises[it.exerciseId] || {}).mode === 'time');
+  it34c[ti34].sets[0].duration = null;
+  it34c[ti34].sets[0].done = true;
+  T.state.sessions.A = { startedAt: Date.now() - 10000, items: it34c, condition: null };
+  T.startTimer(ti34, 0);
+  advanceClock(40000);
+  T.endSession();
+  const log34c = T.state.logs[T.state.logs.length - 1];
+  check('结束训练时秒表先结算：平板的 40 秒进了日志',
+    log34c.exercises.find(e => e.exerciseId === it34c[ti34].exerciseId).sets[0].duration === 40);
+  check('结算后秒表清空', T.timerFor === null);
+  T.resetRest();
+  T.switchDay('A');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

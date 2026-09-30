@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.9';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.10';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -378,7 +378,10 @@ function curDay(){ return state.settings.lastDay; }
 function switchDay(d){
   state.settings.lastDay = d;
   curPos = state.ui.curPos[d] || 0;   // A/B 各记各的位置，切回来不用重找
-  clearTimer();                       // 秒表属于另一天的某组，切走就丢掉
+  // 休息属于上一日的某组：切走前结算到它自己的组上（换日后 curDay 已变，晚一步就写错地方）。
+  // 秒表不同：它的读数实时写进输入框，换日只清掉挂起的引用。
+  if(restEndsAt !== null) finishRest();
+  clearTimer();
   save();
   render();
 }
@@ -917,7 +920,10 @@ function endSession(){
   const day = curDay();
   const sess = state.sessions[day];
   if(!sess) return;
-  clearTimer();   // 结束训练时秒表还在跑：不猜用户想填多少，直接丢弃
+  // 结束训练时秒表/休息还在跑：先结算（秒表把经过的秒填进这一组；休息记到被确认的组上），
+  // 再做快照。顺序反过来会把用户真实做过的 40 秒平板、真实休息过的 45 秒丢掉。
+  if(timerFor) stopTimer();
+  if(restEndsAt !== null) finishRest();
   const exercises = sess.items
     .map(it => ({
       exerciseId: it.exerciseId,
@@ -1001,6 +1007,7 @@ function reeditSession(){
   if(state.sessions[day]){ toast('这一日已经有新的记录了'); closeSummary(); return; }
   const at = state.logs.indexOf(entry);
   if(at >= 0) state.logs.splice(at, 1);
+  resetRest();    // 小结开着的时候休息到点了会响铃：放回编辑态不该还挂着那条铃
   state.sessions[day] = { startedAt, items, condition };
   condDraft[day] = condition;
   lastEnded = null;
@@ -1032,6 +1039,7 @@ let restStartsAt = null;
 let restTimer = null;
 let restDone = false;
 let restForPos = null;  // {exIdx, setIdx} 触发休息的组
+let restForDay = null;  // 触发休息的日：换日后结算也要写回原来那一日的 items
 
 function startRestTimer(atPos){
   // 热身组用更短的休息时长（拉伸等动作本身有时长，计时器照常走完即可）
@@ -1044,6 +1052,7 @@ function startRestTimer(atPos){
   restDone = false;
   // 触发休息的组：优先用调用方传入的位置，避免渲染后 curPos 已移动导致归属错位
   restForPos = atPos || flatPos(curDay())[curPos] || null;
+  restForDay = curDay();
   renderRestBar();
   startRestTick();
 }
@@ -1078,15 +1087,18 @@ function renderRestBar(){
     clock.classList.add('overtime');
   }
 }
-/* 记录休息时长并清除计时器 */
+/* 记录休息时长并清除计时器。归属日在 startRestTimer 时记下：
+ * 结算发生在换日/结束之后时 curDay() 已经指向别的日，写错地方不如不写。 */
 function finishRest(){
   if(restStartsAt !== null && restForPos){
     const elapsed = Math.round((Date.now() - restStartsAt) / 1000);
-    const day = curDay();
-    const item = getItems(day)[restForPos.exIdx];
+    const day = restForDay || curDay();
+    const items = state.sessions[day] ? state.sessions[day].items
+      : (draft[day] && draft[day].length ? draft[day] : null);
+    const item = items && items[restForPos.exIdx];
     if(item && item.sets[restForPos.setIdx]) item.sets[restForPos.setIdx].restAfter = elapsed;
   }
-  restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null;
+  restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null; restForDay = null;
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
 function skipRest(){
@@ -1099,7 +1111,7 @@ function skipRest(){
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function resetRest(){
-  restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null;
+  restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null; restForDay = null;
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
 function restTotalSec(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); }
