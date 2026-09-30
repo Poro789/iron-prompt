@@ -3277,6 +3277,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('126 只写 A 的正常导入不受影响', r126b.ok);
   T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
 
+  /* ============================================================
+   * 127. section/rpeLabel/repsRange 截断封顶（v0.9.104）
+   * PLAN_SCHEMA 向 AI 承诺「其余文本 1000 字会被截断」，但 item 级 section、
+   * set 级 rpeLabel、item 级 repsRange 之前原样收下——超长撑爆布局、吃配额。
+   * ============================================================ */
+  console.log('== 127. 文本字段截断封顶（v0.9.104）==');
+  const long127 = '长'.repeat(5000);
+  const plan127 = JSON.stringify({ exercises: { e127: { name: '动作127', mode: 'weight' } }, program: { A: [{ section: long127, exerciseId: 'e127', reps: '8-'.repeat(60), sets: [{ type: 'work', reps: 8, rpe: 8, rpeLabel: long127 }] }] } });
+  const r127 = T.importPlan(plan127);
+  check('127 超长文本导入成功完成', r127.ok);
+  const it127 = T.state.program.A[0];
+  check('127 section 截到 1000 字', it127.section.length === 1000);
+  check('127 rpeLabel 截到 1000 字', it127.sets[0].rpeLabel.length === 1000);
+  check('127 repsRange 截到 40 字', (it127.repsRange || '').length === 40);
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

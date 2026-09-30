@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.103';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.104';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -163,16 +163,18 @@ function normalizeSet(s){
     reps: numOrNull(s.reps),
     duration: numOrNull(s.duration),
     rpe: numOrNull(s.rpe),
-    rpeLabel: typeof s.rpeLabel === 'string' ? s.rpeLabel : '',
+    // 上限与 PLAN_SCHEMA 对 AI 的承诺一致（其余文本 1000 字）：超长 rpeLabel 会撑爆卡片布局、吃配额。
+    rpeLabel: typeof s.rpeLabel === 'string' ? s.rpeLabel.slice(0, 1000) : '',
     side: s.side === 'L' || s.side === 'R' ? s.side : null
   };
 }
 function normalizeItem(raw){
   raw = raw || {};
-  const section = typeof raw.section === 'string' ? raw.section : '';
-  // repsRange 是导出里的规范拼写（自己的导出粘回来不能丢）；手写的 item 级 "reps":"8-12" 也继续接受
-  const repsRange = typeof raw.repsRange === 'string' ? raw.repsRange
-    : (typeof raw.reps === 'string' ? raw.reps : '');
+  // section/rpeLabel 的截断上限兑现 PLAN_SCHEMA 的承诺（其余文本 1000 字）；
+  // repsRange 是「8-12」这类短模式，40 字绰绰有余——超长只会把目标标签撑成横幅。
+  const section = typeof raw.section === 'string' ? raw.section.slice(0, 1000) : '';
+  const repsRange = typeof raw.repsRange === 'string' ? raw.repsRange.slice(0, 40)
+    : (typeof raw.reps === 'string' ? raw.reps.slice(0, 40) : '');
   let sets;
   if(Array.isArray(raw.sets)){
     // 与数字分支同口径封顶 100 组：超长数组（手编/失控 AI 输出）会让每次渲染的

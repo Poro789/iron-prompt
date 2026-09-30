@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.104]
+
+### 修复
+- 导入方案里的分区名（section）、RPE 文字说明（rpeLabel）、次数区间（repsRange）此前不设长度上限：AI 输出失控时会撑爆卡片布局、吃掉存储配额，而且给 AI 的模板明明承诺了「超长会被截断」却兑现不了。现在按承诺截断（文本 1000 字、次数区间 40 字）
+
 ## [0.9.103]
 
 ### 修复
