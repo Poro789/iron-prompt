@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.101';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.102';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1786,7 +1786,9 @@ function validatePlan(d){
       if(!it || typeof it !== 'object') return `program.${day}[${i}] 必须是对象`;
       if(typeof it.exerciseId !== 'string' || !it.exerciseId) return `program.${day}[${i}].exerciseId 缺失`;
       if(it.exerciseId === '__proto__') return `program.${day}[${i}].exerciseId 不能用 "__proto__"（JavaScript 保留名）`;
-      if(!d.exercises[it.exerciseId]) return `program.${day}[${i}].exerciseId "${it.exerciseId}" 不在 exercises 中`;
+      // 必须是自有属性：'toString'/'constructor' 这类 id 走原型链也能取到东西，
+      // 「不在 exercises 中」的检查会被继承属性蒙混过关，导入后是个没有定义的幽灵动作。
+      if(!Object.prototype.hasOwnProperty.call(d.exercises, it.exerciseId)) return `program.${day}[${i}].exerciseId "${it.exerciseId}" 不在 exercises 中`;
       if(!Array.isArray(it.sets) || !it.sets.length) return `program.${day}[${i}].sets 必须是非空数组`;
       for(let j = 0; j < it.sets.length; j++){
         const s = it.sets[j];
@@ -1842,7 +1844,8 @@ function applyPlan(d){
    * 长 tips 还会撑爆布局并吃光 localStorage 配额。导入侧必须自己收口。 */
   const clip = (v, n) => { const s = v == null ? '' : String(v); return s.length > n ? s.slice(0, n) : s; };
   for(const [id, ex] of Object.entries(d.exercises)){
-    const old = state.exercises[id] || {};
+    // 同样只认自有属性：'constructor' 之类作 id 时，原型链上的继承值会冒充「旧定义」混进合并。
+    const old = Object.prototype.hasOwnProperty.call(state.exercises, id) ? state.exercises[id] : {};
     state.exercises[id] = {
       name: clip(ex.name || old.name || id, 80),
       muscles: clip(ex.muscles ?? old.muscles ?? '', 200),

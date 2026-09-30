@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.102]
+
+### 修复
+- 导入时的动作 id 成员检查改为只认自有属性：`toString`、`constructor` 这类名字走原型链也能取到值，之前会让「没定义的动作」混过校验、导入后变成一个没有定义的幽灵动作；自己明确定义的动作用这些 id 仍完全可用
+
 ## [0.9.101]
 
 ### 修复

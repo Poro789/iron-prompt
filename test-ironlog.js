@@ -3254,6 +3254,17 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('124 program 侧引用 __proto__ 同样被拒', !rp124b.ok && rp124b.error.includes('保留名'));
   T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
 
+  /* ============================================================
+   * 125. exerciseId 成员检查只认自有属性（v0.9.102）
+   * 'toString'/'constructor' 走原型链也能取到值，「不在 exercises 中」会被继承属性蒙混过关。
+   * ============================================================ */
+  console.log('== 125. 成员检查用自有属性（v0.9.102）==');
+  const r125a = T.importPlan('{"exercises":{"e125":{"name":"正常125","mode":"weight"}},"program":{"A":[{"exerciseId":"toString","sets":[{"reps":8}]}]}}');
+  check('125 exercises 里没定义的 "toString" 不被继承属性放行', !r125a.ok && r125a.error.includes('不在 exercises 中'));
+  const r125b = T.importPlan('{"exercises":{"toString":{"name":"特殊id125","mode":"bodyweight"}},"program":{"A":[{"exerciseId":"toString","sets":[{"reps":8}]}]}}');
+  check('125 自己定义的 "toString" 作动作 id 正常可用', r125b.ok && T.state.exercises.toString.name === '特殊id125');
+  T.state.program = { A: [], B: [] }; T.state.exercises = {}; T.state.drafts.A = null; T.state.drafts.B = null;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
