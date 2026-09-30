@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.13';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.14';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -663,7 +663,9 @@ function fullScreenHTML(day){
       ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
       <div class="fs-set">
         <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}${set.isPR ? ' <span class="pr-badge">🔥 PR</span>' : ''}</div>
-        <div class="fs-dots" aria-hidden="true">${item.sets.map((st, si) => `<span class="fs-dot${si === pos.setIdx ? ' cur' : ''}${st.done === true ? ' ok' : st.done === false ? ' no' : ''}"></span>`).join('')}</div>
+        // 二态模型里 done=false 只是「还没记」，不是「没做到」：未确认的组保持中性灰点，
+        // 只有确认过的组变绿（三态时代的红点分支会让整列还没开始的组全是红的）
+        <div class="fs-dots" aria-hidden="true">${item.sets.map((st, si) => `<span class="fs-dot${si === pos.setIdx ? ' cur' : ''}${st.done === true ? ' ok' : ''}"></span>`).join('')}</div>
         ${lastHintHTML(pos.exIdx, pos.setIdx, item.exerciseId, ex, set)}
         <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
         <div class="rpe-row">

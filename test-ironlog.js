@@ -1323,6 +1323,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.switchView('today');
   check('恢复后仍能安全渲染', String(document.getElementById('today-view').innerHTML).indexOf('undefined') < 0);
 
+  console.log('== 38. 组点：未确认的组保持中性，不再全红（二态遗留，v0.9.14）==');
+  T.importPlan(planText);   // 37 节把状态换成了空计划的极简备份，先恢复真实计划
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.resetRest(); T.clearTimer();
+  T.switchView('today'); T.switchDay('A');
+  const h38a = T.fullScreenHTML('A');
+  check('未开始的卡片上没有红点', !/fs-dot[^"]* no/.test(h38a));
+  check('当前组仍有 cur 标记', /fs-dot cur|cur[^"]*"/.test(h38a));
+  T.cycleDone('A', 0, 0);
+  const h38b = T.fullScreenHTML('A');
+  check('确认过的组出现 ok 绿点', (h38b.match(/fs-dot[^"]*\bok\b/g) || []).length === 1);
+  check('其余组仍为中性', !/fs-dot[^"]* no/.test(h38b));
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.resetRest();
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
