@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.65';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.66';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -216,6 +216,14 @@ function migrate(d){
    *   d.condDraft[day]   当日状态（佳/一般/差），会话建立前先存在这里
    *   d.ui.curPos[day]   当前停在第几组（扁平位置） */
   if(!d.drafts || typeof d.drafts !== 'object') d.drafts = {};
+  /* 草稿也可能被手工改过：缺 sets 的条目会让训练页渲染崩（筛掉后若与计划数量不符，
+   * getItems 会整份重建草稿，等于自动修复）；字符串数值同日志一样归一化。 */
+  for(const dDay of ['A', 'B']){
+    if(Array.isArray(d.drafts[dDay])){
+      d.drafts[dDay] = d.drafts[dDay].filter(it => it && typeof it === 'object' && Array.isArray(it.sets));
+      d.drafts[dDay].forEach(it => coerceSetNums(it.sets));
+    }
+  }
   if(!d.condDraft || typeof d.condDraft !== 'object') d.condDraft = { A: null, B: null };
   if(!d.ui || typeof d.ui !== 'object') d.ui = {};
   if(!d.ui.curPos || typeof d.ui.curPos !== 'object') d.ui.curPos = {};

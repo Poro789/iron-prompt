@@ -2226,6 +2226,34 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   delete T.state.exercises.l88; T.state.program.A = []; T.state.program.B = [];
   delete T.state.drafts.A; delete T.state.drafts.B; T.state.sessions = { A: null, B: null };
 
+  /* ============================================================
+   * 89. 手工编辑过的草稿：缺 sets 的条目筛掉、字符串数值归一化（v0.9.66）
+   * ============================================================ */
+  console.log('== 89. 手编草稿缺 sets 条目筛掉、字符串数值归一化（v0.9.66）==');
+  T.state.exercises.l89 = { name: '草稿动作', mode: 'weight', unit: 'kg' };
+  T.state.program.A = [
+    { section: '', exerciseId: 'l89', repsRange: '', sets: [{ type: 'work', weight: 10, reps: 8 }] },
+    { section: '', exerciseId: 'l89', repsRange: '', sets: [{ type: 'work', weight: 10, reps: 8 }] }
+  ];
+  T.state.settings.lastDay = 'A'; T.switchDay('A');
+  const m89 = T.migrate({ version: 1, logs: [], drafts: { A: [
+    { exerciseId: 'l89', sets: [{ done: false, weight: '17.5', reps: '6' }] },
+    { exerciseId: 'l89', sets: 'oops' }
+  ] } });
+  check('缺 sets 的草稿条目被筛掉', m89.drafts.A.length === 1);
+  check('草稿数值字段归一化成数字', m89.drafts.A[0].sets[0].weight === 17.5 && m89.drafts.A[0].sets[0].reps === 6);
+  T.state.drafts.A = m89.drafts.A;
+  const g89 = T.getItems('A');
+  check('筛后与计划数量不符时 getItems 整份重建（自动修复不崩）', Array.isArray(g89) && g89.length === 2 && g89.every(it => Array.isArray(it.sets)));
+  const m89b = T.migrate({ version: 1, logs: [], drafts: { A: [
+    { exerciseId: 'l89', sets: [{ done: false, weight: '20', reps: '5' }] },
+    { exerciseId: 'l89', sets: [{ done: false, weight: '20', reps: '5' }] }
+  ] } });
+  T.state.drafts.A = m89b.drafts.A;
+  const g89b = T.getItems('A');
+  check('数量相符时保留草稿并使用归一化后的数字', g89b === T.state.drafts.A && g89b[0].sets[0].weight === 20);
+  delete T.state.exercises.l89; delete T.state.drafts.A; T.state.program.A = [];
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
