@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.71';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.72';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -274,7 +274,11 @@ function load(){
   return d;
 }
 
+/* 清除全部数据后，reload 触发的 pagehide/visibilitychange 会回调 flushSave：
+ * 不拦住它，刚删掉的旧 state 会被原样写回 localStorage——清除等于没清。 */
+let clearingAll = false;
 function save(){
+  if(clearingAll) return;
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
   catch(e){ toast('保存失败：' + e.message); }
 }
@@ -2127,6 +2131,7 @@ async function clearAll(){
   if(!ok1) return;
   const ok2 = await askConfirm({ title: '再次确认', desc: '此操作不可恢复，且无法撤销。', okLabel: '全部清除' });
   if(!ok2) return;
+  clearingAll = true;
   localStorage.removeItem(LS_KEY);
   location.reload();
 }

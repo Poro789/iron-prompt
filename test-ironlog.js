@@ -126,7 +126,7 @@ const testScript = script + `
   set restStartsAt(v){ restStartsAt = v; },
   set restEndsAt(v){ restEndsAt = v; },
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
-  doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict,
+  doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict, clearAll,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
@@ -2404,6 +2404,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.sessions = { A: null, B: null };
   T.state.program.A = []; T.state.program.B = [];
   delete T.state.exercises.t94;
+
+  /* ============================================================
+   * 95. 清除全部数据后，卸载时的落盘不能把旧 state 写回去（v0.9.72）
+   * 真实浏览器里 removeItem→reload 会先触发 pagehide/visibilitychange→flushSave；
+   * 这里用 reload 桩里调 flushSave 来模拟那次回调。
+   * ============================================================ */
+  console.log('== 95. 清除全部数据不会被 flushSave 复活（v0.9.72）==');
+  T.state.logs = [{ date: '2026-01-01', day: 'A', startedAt: 555, exercises: [] }];
+  T.flushSave();
+  check('95 先落盘一次', !!global.localStorage._d['ironlog.v1']);
+  global.location = { reload(){ T.flushSave(); } };   // 模拟 reload 时卸载回调再落盘
+  T.clearAll();
+  T.answerConfirm(true); await null;
+  T.answerConfirm(true); await null;
+  check('95 清除后存储为空，卸载落盘没把它写回', global.localStorage._d['ironlog.v1'] === undefined);
+  delete global.location;
+  T.state.logs = [];
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
