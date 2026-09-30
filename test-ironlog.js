@@ -1774,6 +1774,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = T.state.logs.filter(l => l.startedAt !== ts65);
   delete T.state.sessions.A; delete T.state.drafts.A;
 
+  console.log('== 66. 小结「改一下」不膨胀日期与用时（v0.9.44）==');
+  const ts66 = Date.now() - 1234000;
+  T.state.sessions.A = { startedAt: ts66, items: [{ exerciseId: 'test_pr', note: '', sets: [{ weight: 50, reps: 5, done: true }] }], condition: null };
+  T.endSession();
+  const log66 = T.state.logs.find(l => l.startedAt === ts66);
+  check('首次结束：用时如实', !!log66 && log66.durationSec >= 1233 && log66.durationSec <= 1235);
+  const realNow66 = Date.now;
+  Date.now = () => realNow66.call(Date) + 30000;   // 模拟用户多想 30 秒（stub 的 setTimeout 不会真的到点）
+  T.reeditSession();
+  T.state.sessions.A.items[0].sets[0].weight = 55;
+  T.endSession(); T.closeSummary();
+  Date.now = realNow66;
+  const same66 = T.state.logs.filter(l => l.startedAt === ts66);
+  check('再结束：endedAt/durationSec 沿用原值', same66.length === 1 && same66[0].endedAt === log66.endedAt && same66[0].durationSec === log66.durationSec);
+  check('数值改动仍然生效', same66[0].exercises[0].sets[0].weight === 55);
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== ts66);
+  delete T.state.sessions.A; delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

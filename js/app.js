@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.43';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.44';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1165,7 +1165,10 @@ function reeditSession(){
   const at = state.logs.indexOf(entry);
   if(at >= 0) state.logs.splice(at, 1);
   resetRest();    // 小结开着的时候休息到点了会响铃：放回编辑态不该还挂着那条铃
-  state.sessions[day] = { startedAt, items, condition, originalEntry: entry };   // 放弃这次编辑时原记录要能原样放回（与历史「改一下」同一口径）
+  state.sessions[day] = { startedAt, items, condition, originalEntry: entry,
+    // 改数值不改变它发生在哪一天、实际练了多久：时间戳沿用原记录（与历史「改一下」同一口径），
+    // 否则光是打开编辑多想几分钟，历史里的「用时」就会被凭空拉长
+    keepMeta: { date: entry.date, startedAt: entry.startedAt, endedAt: entry.endedAt, durationSec: entry.durationSec } };
   condDraft[day] = condition;
   lastEnded = null;
   closeSummary();
