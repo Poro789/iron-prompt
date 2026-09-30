@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.52]
+
+### 修复
+- 备份里 profile 被手改成字符串时：内容保留并纠正为对象形状，设置页不再静默丢失背景文本
+
 ## [0.9.51]
 
 ### 修复

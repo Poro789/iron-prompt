@@ -1892,6 +1892,13 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('缺 durationSec 显示破折号而不是 NaN:NaN:NaN', hist72.includes(' · —') && !/NaN:NaN/.test(hist72));
   T.state.logs.splice(n72);
 
+  console.log('== 73. migrate 纠正字符串形 profile（v0.9.52）==');
+  const bare73 = { version: 1, program: T.state.program, exercises: T.state.exercises };
+  const m73a = T.migrate({ ...bare73, profile: '直接在备份里写的背景' });
+  check('字符串 profile 保住内容并纠正成对象', m73a.profile && m73a.profile.background === '直接在备份里写的背景');
+  const m73b = T.migrate({ ...bare73, profile: null });
+  check('缺失 profile 补默认空背景', m73b.profile && m73b.profile.background === '');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

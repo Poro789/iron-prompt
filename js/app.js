@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.51';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.52';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -191,6 +191,8 @@ function migrate(d){
    * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。 */
   d.logs = d.logs.filter(l => l && typeof l === 'object' && Array.isArray(l.exercises));
   if(!d.profile) d.profile = { background: '' };
+  /* profile 被手改成字符串（有人直接在备份里写背景）：保住内容，形状纠正 */
+  else if(typeof d.profile !== 'object') d.profile = { background: String(d.profile) };
   if(!d.sessions) d.sessions = { A: null, B: null };
   /* v0.9.2：草稿与浏览位置进 state，刷新/崩溃不再丢数据
    *   d.drafts[day]      未确认任何一组前的预填数据（含已输入但未确认的数值）
