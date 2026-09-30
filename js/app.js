@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.34';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.35';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -282,9 +282,15 @@ function localDateStr(ts){
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 const isDone = s => s.done === true;
+/* 聚合容量在界面上统一标 kg：lb 动作（拉力绳档位）先换算成 kg 再累加。
+ * 不换算的话，一次训练里 20lb 的绳和 20kg 的哑铃会被当成一样重，总数没有统一含义。 */
+const LB_TO_KG = 0.45359237;
 function sessionVolume(entry){
-  return entry.exercises.reduce((sum, ex) =>
-    sum + ex.sets.filter(isDone).reduce((s, st) => s + (st.weight||0) * (st.reps||0), 0), 0);
+  return entry.exercises.reduce((sum, ex) => {
+    const unit = String(((state.exercises[ex.exerciseId] || {}).unit || 'kg')).trim().toLowerCase();
+    const k = unit === 'lb' ? LB_TO_KG : 1;
+    return sum + ex.sets.filter(isDone).reduce((s, st) => s + (st.weight || 0) * k * (st.reps || 0), 0);
+  }, 0);
 }
 function sessionSets(entry){
   return entry.exercises.reduce((s, ex) => s + ex.sets.filter(isDone).length, 0);

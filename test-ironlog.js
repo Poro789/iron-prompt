@@ -130,6 +130,7 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   reeditSession, closeSummary, showSummary, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
+  sessionVolume,
   buildBackup, parseBackup, restoreBackupText,
   buildTrendCharts, trendKind, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, get timerFor(){ return timerFor; },
@@ -1608,6 +1609,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.drafts.A = { items: [{ exerciseId: 'test57', note: '左肩不适', sets: [{ weight: 20, reps: 8, done: false }] }] };
   const r57b = T.importPlan(JSON.stringify(plan57));
   check('有备注的草稿会说明已丢弃', r57b.ok === true && /已丢弃未确认草稿/.test(r57b.summary));
+
+  console.log('== 58. 聚合容量把 lb 换算成 kg（v0.9.35）==');
+  T.state.exercises.test58kg = { name: '测试58kg', mode: 'weight', unit: 'kg' };
+  T.state.exercises.test58lb = { name: '测试58lb', mode: 'band', unit: 'lb' };
+  const entry58 = { exercises: [
+    { exerciseId: 'test58kg', sets: [{ weight: 20, reps: 10, done: true }] },
+    { exerciseId: 'test58lb', sets: [{ weight: 20, reps: 10, done: true }] },
+    { exerciseId: 'test58gone', sets: [{ weight: 5, reps: 2, done: true }] } ] };
+  const vol58 = T.sessionVolume(entry58);
+  const want58 = 20 * 10 + 20 * 0.45359237 * 10 + 5 * 2;
+  check('lb 组按 0.4536 换算后累加', Math.abs(vol58 - want58) < 1e-6);
+  check('动作库缺失时按 kg 不换算', T.sessionVolume({ exercises: entry58.exercises.slice(0, 1) }) === 200);
+  delete T.state.exercises.test58kg; delete T.state.exercises.test58lb;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

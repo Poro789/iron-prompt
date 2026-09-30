@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.35]
+
+### 修复
+- 训练总容量统一按 kg 统计：拉力绳等 lb 动作的组先换算成 kg 再累加——此前 20lb 和 20kg 会被直接相加，总数没有统一含义
+
 ## [0.9.34]
 
 ### 修复
