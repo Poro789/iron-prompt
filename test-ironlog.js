@@ -25,6 +25,7 @@ const elsById = new Map();      // 同一 id 复用同一桩，便于断言渲�
 const timers = [];              // 捕获 setTimeout 回调，供防抖测试手动触发
 const handlers = new Map();     // (id + '|' + type) -> addEventListener 回调，供点击模拟测试
 const docHandlers = new Map();  // document 级事件（visibilitychange 等），供前后台切换测试
+const DELEGATED = new Set(['ex-list', 'hist-list', 'toast']);   // 用事件委托的容器，需要能向它们派发点击
 let patchTarget = null;         // 增量渲染测试注入的 .sets 容器：{ matches, node }
 global.document = {
   visibilityState: 'visible',
@@ -44,6 +45,9 @@ global.document = {
       }
       elsById.set(id, e);
     }
+    if(DELEGATED.has(id)){
+      elsById.get(id).addEventListener = (type, fn) => handlers.set(id + '|' + type, fn);
+    }
     return elsById.get(id);
   }
 };
@@ -53,7 +57,13 @@ function clickExList(target){
   if(!h) throw new Error('ex-list click handler 未注册');
   h({ target });
 }
-function btnOf(ds){ return { closest: sel => (sel === 'button[data-act]' ? { dataset: ds } : null) }; }
+function btnOf(ds){ return { closest: sel => (/^button\[data-act/.test(sel) ? { dataset: ds } : null) }; }
+// 向任意委托容器派发一次点击
+function clickEl(id, target){
+  const h = handlers.get(id + '|click');
+  if(!h) throw new Error(id + ' click handler 未注册');
+  h({ target });
+}
 function doneBtn(exIdx, setIdx){ return btnOf({ act: 'confirm', ex: String(exIdx), set: String(setIdx) }); }
 function navBtn(act){ return btnOf({ act }); }
 // 从当前渲染的 ex-list 中按组位置提取完成按钮。
@@ -1036,6 +1046,45 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.sessions.A = marker31;
   T.reeditSession();
   check('这一日已有新记录时不覆盖它', T.state.sessions.A === marker31 && T.state.logs.length === 2);
+
+  console.log('== 32. 历史里删除整次记录（试训、填错的记录不必一直留着，删了还能反悔）==');
+  T.state.sessions = {};
+  Object.keys(T.draft).forEach(k => delete T.draft[k]);
+  T.state.logs = [];
+  T.switchView('today');
+  T.switchDay('A');
+  const itA32 = T.getItems('A');
+  itA32[0].sets[0] = { done: true, weight: 20, reps: 5, duration: null, rpe: 8, type: 'work' };
+  T.state.sessions.A = { startedAt: 1700000000000, items: itA32, condition: null };
+  T.endSession();
+  T.closeSummary();
+  T.switchDay('B');
+  const itB32 = T.getItems('B');
+  itB32[0].sets[0] = { done: true, weight: 12, reps: 5, duration: null, rpe: 7, type: 'work' };
+  T.state.sessions.B = { startedAt: 1700000009000, items: itB32, condition: null };
+  T.endSession();
+  T.closeSummary();
+  check('先造出两条记录', T.state.logs.length === 2);
+  T.switchView('history');
+  const hh32 = htmlTouchedHTML('hist-list');
+  check('展开的历史详情里有「删除这次记录」', /data-act="dellog"/.test(hh32));
+  check('删除按钮带上这条记录的时间戳', /data-act="dellog" data-ts="\d+"/.test(hh32));
+  const ts0 = T.state.logs[0].startedAt;
+  clickEl('hist-list', btnOf({ act: 'dellog', ts: String(ts0), i: '0' }));
+  check('删除要先确认，按钮文案是「删除」', textOf('confirm-ok-btn') === '删除');
+  T.answerConfirm(false);
+  await null;
+  check('取消则不删', T.state.logs.length === 2);
+  clickEl('hist-list', btnOf({ act: 'dellog', ts: String(ts0), i: '0' }));
+  T.answerConfirm(true);
+  await null;
+  check('确认删除后只剩另一条', T.state.logs.length === 1 && T.state.logs[0].startedAt !== ts0);
+  check('提示条给出「撤销」按钮', /data-act="undo"/.test(htmlTouchedHTML('toast')));
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('点撤销，记录按原来的位置放回', T.state.logs.length === 2 && T.state.logs[0].startedAt === ts0);
+  clickEl('hist-list', btnOf({ act: 'dellog', ts: '999', i: '' }));
+  await null;
+  check('对应记录已不在时只提示，不会删错', T.state.logs.length === 2);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

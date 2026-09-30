@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.7';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.8';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -284,12 +284,27 @@ function sessionSets(entry){
 }
 
 let toastTimer = null;
-function toast(msg){
+let toastAction = null;   // 提示条上的按钮（目前只有「撤销删除」）
+function hideToast(){
   const t = $('toast');
-  t.textContent = msg;
+  t.classList.remove('show');
+  t.classList.remove('with-act');   // 没有按钮时提示条不接收点击，不挡下面的按钮
+  toastAction = null;
+}
+/* 第二个参数传函数时，提示条里多一个「撤销」按钮，并停留更久（6s） */
+function toast(msg, action){
+  const t = $('toast');
+  toastAction = typeof action === 'function' ? action : null;
+  t.classList.remove('with-act');
+  if(toastAction){
+    t.innerHTML = esc(msg) + '<button class="toast-act" data-act="undo">撤销</button>';
+    t.classList.add('with-act');
+  }else{
+    t.textContent = msg;
+  }
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(hideToast, toastAction ? 6000 : 2200);
 }
 
 /* 应用内确认弹层：替换浏览器原生确认框（iOS 上样式与行为不一致，且无法本地化）
@@ -854,6 +869,43 @@ $('ex-list').addEventListener('touchend', e => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }, { passive: true });
 
+/* 历史里的「删除这次记录」：清掉试训或填错的整次记录，6 秒内在提示条里可撤销 */
+$('hist-list').addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-act="dellog"]');
+  if(!btn) return;
+  const ts = Number(btn.dataset.ts);
+  let i = Number.isFinite(ts) ? state.logs.findIndex(l => l.startedAt === ts) : -1;
+  if(i < 0 && btn.dataset.i !== ''){
+    const alt = state.logs[+btn.dataset.i];
+    if(alt && (alt.startedAt ?? '') === btn.dataset.ts) i = +btn.dataset.i;
+  }
+  if(i < 0){ toast('这条记录已经不在了'); return; }
+  const entry = state.logs[i];
+  const ok = await askConfirm({
+    title: '删除 ' + fmtDate(entry.date) + ' 的记录？',
+    desc: '趋势、导出和 AI 分析都不再包含它。删除后 6 秒内可以撤销。',
+    okLabel: '删除'
+  });
+  if(!ok) return;
+  state.logs.splice(i, 1);
+  flushSave();
+  render();
+  toast('已删除 ' + fmtDate(entry.date) + ' 的记录', () => {
+    state.logs.splice(Math.min(i, state.logs.length), 0, entry);
+    flushSave();
+    render();
+    toast('已恢复');
+  });
+});
+
+/* 提示条上的按钮 */
+$('toast').addEventListener('click', e => {
+  if(!e.target.closest('button[data-act="undo"]')) return;
+  const fn = toastAction;
+  hideToast();
+  if(fn) fn();
+});
+
 /* 结束训练：写入 logs（P0 闭环的落盘点） */
 /* 刚结束的那次记录：summary 里的「改一下」用它把记录放回编辑态，
  * 关掉小结或另开一次记录后就失效（不留悬挂引用）。 */
@@ -1217,7 +1269,7 @@ function renderHistory(){
           <span class="day-badge">${esc(entry.day)}</span>
           <span class="hist-meta">${entry.exercises.length} 动作 · ${doneSets === totalSets ? doneSets : doneSets + '/' + totalSets} 组${cond} · ${vol.toLocaleString()} kg · ${fmtDuration(entry.durationSec)}</span>
         </summary>
-        <div class="hist-detail">${detail}</div>
+        <div class="hist-detail">${detail}<button class="h-del" data-act="dellog" data-ts="${entry.startedAt ?? ''}" data-i="${state.logs.length - 1 - ri}">删除这次记录</button></div>
       </details>`;
   }).join('');
 }
