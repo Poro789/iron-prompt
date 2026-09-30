@@ -133,7 +133,7 @@ const testScript = script + `
   sessionVolume, sessionAvgRest, itemsVolume,
   buildBackup, parseBackup, restoreBackupText,
   buildTrendCharts, trendKind, programOrder,
-  startTimer, stopTimer, clearTimer, timerElapsedSec, get timerFor(){ return timerFor; },
+  startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
   get openNotes(){ return openNotes; },
   startRestTimer, tickRest, finishRest, skipRest, resetRest, askConfirm, answerConfirm,
@@ -2005,6 +2005,44 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('链路：撤销恢复的是改过的那版', T.state.logs.length === lcBase + 1 && T.state.logs[T.state.logs.length - 1].exercises[0].sets[0].weight === 75);
   T.state.logs = T.state.logs.filter(l => (l.startedAt ?? -1) !== (lcEntry.startedAt ?? -2) && (l.startedAt ?? -1) !== 1700000780000);
   delete T.state.exercises.test_lc; delete T.state.drafts.A; delete T.state.sessions.A;
+
+  console.log('== 79. 刷新/杀进程后接上休息与秒表（v0.9.57）==');
+  T.state.exercises.test_rt = { ...mk('测试平板', 'time'), unit: null };
+  T.state.program.A = [{ section: '', exerciseId: 'test_rt', repsRange: '', sets: [{ type: 'work', weight: null, reps: null, duration: 30, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.switchView('today');
+  clickExList(doneBtn(0, 0));   // 建立进行中的会话
+  T.state.settings.restSec = 60;
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });
+  check('休息已随 state 持久化（含归属日与组位置）',
+    T.state.rest && T.state.rest.day === 'A' && T.state.rest.exIdx === 0 && T.state.rest.endsAt > Date.now());
+  // 模拟刷新：模块变量丢失，只剩存储里的副本（把它改到已过点 90 秒，验证接上的是时间戳而不是重开）
+  const persisted79 = JSON.parse(JSON.stringify(T.state.rest));
+  persisted79.startsAt = Date.now() - 90000; persisted79.endsAt = persisted79.startsAt + 60000;
+  T.resetRest();
+  check('resetRest 同时清掉持久化副本', T.state.rest === null);
+  T.state.rest = persisted79;
+  T.resumeTimers();
+  T.skipRest();
+  const rtSet = T.state.sessions.A.items[0].sets[0];
+  check('接上后跳过休息，restAfter 记的是真实经过的 ~90 秒', rtSet.restAfter >= 89 && rtSet.restAfter <= 91);
+  check('结算后不留持久化副本', T.state.rest === null);
+  // 秒表：100 秒前开始，接上后停表写入真实秒数
+  T.state.timer = { day: 'A', exIdx: 0, setIdx: 0, startsAt: Date.now() - 100000 };
+  T.resumeTimers();
+  const st79 = T.stopTimer();
+  check('接上后停表写入真实经过秒数', st79 && st79.elapsed >= 99 && rtSet.duration >= 99);
+  check('停表后不留持久化副本', T.state.timer === null);
+  // 归属日没有进行中记录：陈旧副本被丢弃
+  T.state.rest = { startsAt: Date.now() - 10000, endsAt: Date.now() + 50000, day: 'B', exIdx: 0, setIdx: 0 };
+  T.state.timer = { day: 'B', exIdx: 0, setIdx: 0, startsAt: Date.now() - 10000 };
+  T.resumeTimers();
+  check('归属日无进行中记录时丢弃陈旧副本', T.state.rest === null && T.state.timer === null && T.timerFor === null);
+  // migrate：坏形状归 null
+  const m79 = T.migrate({ version: 1, logs: [], rest: 'oops', timer: { startsAt: 'x' } });
+  check('migrate 把坏 rest/timer 归 null', m79.rest === null && m79.timer === null);
+  T.clearTimer(); T.resetRest();
+  delete T.state.exercises.test_rt; delete T.state.drafts.A; delete T.state.sessions.A;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

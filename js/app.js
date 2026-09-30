@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.56';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.57';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -204,6 +204,9 @@ function migrate(d){
   if(!d.ui.curPos || typeof d.ui.curPos !== 'object') d.ui.curPos = {};
   /* v0.9.9：导入方案前的快照，用于「撤销上次导入」（只留一层） */
   if(!d.lastImport) d.lastImport = null;
+  /* v0.9.57：休息计时器与秒表按时间戳持久化，刷新/浏览器杀进程后能接上继续 */
+  d.rest = (d.rest && typeof d.rest === 'object' && d.rest.endsAt > 0) ? d.rest : null;
+  d.timer = (d.timer && typeof d.timer === 'object' && d.timer.startsAt > 0) ? d.timer : null;
   for(const day of ['A','B']){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);
@@ -1233,6 +1236,9 @@ function startRestTimer(atPos){
   // 触发休息的组：优先用调用方传入的位置，避免渲染后 curPos 已移动导致归属错位
   restForPos = atPos || flatPos(curDay())[curPos] || null;
   restForDay = curDay();
+  state.rest = { startsAt: restStartsAt, endsAt: restEndsAt, day: restForDay,
+    exIdx: restForPos ? restForPos.exIdx : null, setIdx: restForPos ? restForPos.setIdx : null };
+  saveSoon();
   renderRestBar();
   startRestTick();
 }
@@ -1279,6 +1285,7 @@ function finishRest(){
     if(item && item.sets[restForPos.setIdx]) item.sets[restForPos.setIdx].restAfter = elapsed;
   }
   restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null; restForDay = null;
+  state.rest = null;
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
 function skipRest(){
@@ -1292,6 +1299,7 @@ function skipRest(){
 }
 function resetRest(){
   restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null; restForDay = null;
+  state.rest = null;
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
 function restTotalSec(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); }
@@ -1340,12 +1348,15 @@ function stopTimerTicker(){ if(timerTicker){ clearInterval(timerTicker); timerTi
 function startTimer(exIdx, setIdx){
   timerFor = { exIdx, setIdx };
   timerStartsAt = Date.now();
+  state.timer = { day: curDay(), exIdx, setIdx, startsAt: timerStartsAt };
+  saveSoon();
   stopTimerTicker();
   timerTicker = setInterval(() => { const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }, 250);
 }
 /* 停表并把经过的秒数写进这一组；没有在计时则什么都不做 */
 function stopTimer(){
   stopTimerTicker();
+  state.timer = null;
   if(!timerFor) return null;
   const at = timerFor, elapsed = timerElapsedSec();
   timerFor = null; timerStartsAt = null;
@@ -1355,7 +1366,25 @@ function stopTimer(){
   return { at, elapsed };
 }
 /* 放弃/结束/换日：丢掉秒表，不写进任何组 */
-function clearTimer(){ stopTimerTicker(); timerFor = null; timerStartsAt = null; }
+function clearTimer(){ stopTimerTicker(); timerFor = null; timerStartsAt = null; state.timer = null; }
+
+/* 刷新/浏览器杀进程后接上：休息与秒表都是时间戳，经过的秒数不会少算。
+ * 归属日必须仍有进行中记录，否则持久化的副本属于已结束的会话——丢弃。 */
+function resumeTimers(){
+  const r = state.rest, t = state.timer;
+  resetRest(); clearTimer();
+  if(r && (r.day === 'A' || r.day === 'B') && (state.sessions[r.day] || (draft[r.day] && draft[r.day].length))){
+    restStartsAt = r.startsAt; restEndsAt = r.endsAt; restForDay = r.day;
+    restForPos = (Number.isFinite(r.exIdx) && Number.isFinite(r.setIdx)) ? { exIdx: r.exIdx, setIdx: r.setIdx } : null;
+    restDone = Date.now() >= restEndsAt;   // 离开期间已经到点：回来不补响铃，直接显示超时
+    startRestTick();
+  } else if(r) state.rest = null;
+  if(t && state.sessions[t.day]){
+    timerFor = { exIdx: t.exIdx, setIdx: t.setIdx };
+    timerStartsAt = t.startsAt;
+    timerTicker = setInterval(() => { const el = timerInputEl(); if(el) el.value = timerElapsedSec(); }, 250);
+  } else if(t) state.timer = null;
+}
 
 /* ---------------- 历史 & 导出 ---------------- */
 /* 趋势折线图：按指标分组（kg / 秒 / 次 不能共用一条 Y 轴），X=该动作被记录的次数，Y=最好一组的主指标 */
@@ -2025,7 +2054,8 @@ function render(){
   else renderSettings();
 }
 
-/* 首屏：默认视图只渲染一次，设置页控件预先填值 */
+/* 首屏：先接上刷新前挂着的休息/秒表（时间戳连续），再渲染 */
+resumeTimers();
 render();
 renderSettings();
 
