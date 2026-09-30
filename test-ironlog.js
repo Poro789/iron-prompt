@@ -1356,6 +1356,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   legacy39.exercises[0].sets.forEach(s => delete s.type);
   check('旧日志（无 type 字段）按正式组处理', T.buildTrends([legacy39]).db_bench.sessions[0].sets === 2);
 
+  console.log('== 40. 历史详情：热身组标注、重量用动作单位（v0.9.16）==');
+  T.state.exercises.test_band = { name: '弹力侧举', muscles: '', mode: 'band', unit: 'lb', tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' };
+  T.state.logs.push({ date: '2026-02-01', day: 'A', startedAt: 900, endedAt: 901, durationSec: 1, condition: null,
+    exercises: [{ exerciseId: 'test_band', note: null, sets: [
+      { weight: 10, reps: 10, duration: null, rpe: 4, side: null, restAfter: null, done: true, type: 'warmup' },
+      { weight: 20, reps: 10, duration: null, rpe: 8, side: null, restAfter: null, done: true, isPR: true }
+    ] }] });
+  T.switchView('history'); T.render();
+  const hh40 = htmlTouchedHTML('hist-list');
+  check('热身组标注「热身」', hh40.includes('热身 10lb×10'));
+  check('重量用动作单位 lb', hh40.includes('20lb×10'));
+  check('PR 组仍有火焰标记', hh40.includes('🔥'));
+  T.state.logs.pop(); delete T.state.exercises.test_band;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
