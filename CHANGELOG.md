@@ -2,6 +2,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.74]
+
+### 修复
+- 预填与「沿用上次」只填当前模式会显示的字段：动作从计时改成重量后，旧时长不再被悄悄带进新组（此前历史详情会优先读它，把「60kg×10」显示成「45 秒」）
+- 趋势分组（trendKind）与画图取值（trendMetric）严格同序（weight 优先）：混合组不再被分到「时长（秒）」图里却按 kg 画点、图例念 kg
+
 ## [0.9.73]
 
 ### 修复

@@ -2456,6 +2456,36 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.program.A = [];
   delete T.state.exercises.e96a; delete T.state.exercises.e96b; delete T.state.exercises.e96c;
 
+  /* ============================================================
+   * 97. 模式变更后不带入看不见的旧指标；趋势分组与画图同序（v0.9.74）
+   * ============================================================ */
+  console.log('== 97. 模式残留与趋势分组同序（v0.9.74）==');
+  T.state.exercises.e97 = { name: 'E97', mode: 'weight', unit: 'kg' };
+  T.state.logs = [{ date: '2026-01-01', day: 'A', startedAt: 888, condition: null,
+    exercises: [{ exerciseId: 'e97', sets: [{ type: 'work', weight: 60, reps: 10, duration: 45, rpe: null, side: null, done: true }] }] }];
+  T.state.program.A = [{ exerciseId: 'e97', sets: [{ weight: null, reps: null }] }];
+  T.state.sessions = { A: null, B: null };
+  delete T.state.drafts.A;
+  const it97 = T.getItems('A');
+  check('97 重量模式预填带 weight/reps', it97[0].sets[0].weight === 60 && it97[0].sets[0].reps === 10);
+  check('97 重量模式预填不带旧 duration', it97[0].sets[0].duration === null);
+  T.startSessionIfNeeded('A');
+  const s97 = T.state.sessions.A.items[0].sets[0];
+  s97.weight = null; s97.reps = null; s97.duration = null;
+  T.curPos = 0;
+  T.switchView('today'); T.render();
+  clickExList(btnOf({ act: 'uselast', ex: 0, set: 0 }));
+  check('97 沿用上次只填当前模式字段', s97.weight === 60 && s97.reps === 10 && s97.duration === null);
+  T.state.exercises.e97.mode = 'time';
+  T.state.sessions = { A: null, B: null };
+  delete T.state.drafts.A;
+  const it97t = T.getItems('A');
+  check('97 计时模式预填只带 duration', it97t[0].sets[0].duration === 45 && it97t[0].sets[0].weight === null);
+  check('97 trendKind 与 trendMetric 同序（weight 优先）', T.trendKind({ sessions: [{ top: { weight: 60, duration: 45, reps: 10 } }] }) === 'weight');
+  T.state.logs = []; T.state.program.A = [];
+  T.state.sessions = { A: null, B: null }; delete T.state.drafts.A;
+  delete T.state.exercises.e97;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

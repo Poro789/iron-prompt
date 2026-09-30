@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.73';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.74';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -465,6 +465,14 @@ function switchDay(d){
  * 按模式选主指标（weight/time/bodyweight → weight/duration/reps）：
  * 计时动作（平板、拉伸）没有重量，旧写法按 weight 挑会落到第一个已完成组，
  * 一次平板 30/45/60 秒时「上次最长」显示 30 秒，uselast 也填 30——应当是 60。 */
+/* 当前模式会显示/使用的指标。预填与「沿用上次」只填这些：
+ * 动作从计时改成重量后，旧 duration 若被悄悄带进新组，界面上看不见，
+ * 但历史详情会优先读 duration 显示成「45 秒」而不是「60kg×10」。 */
+function modeFields(mode){
+  if(mode === 'time') return ['duration'];
+  if(mode === 'bodyweight') return ['reps'];
+  return ['weight', 'reps'];
+}
 function lastValues(exerciseId){
   const ex = state.exercises[exerciseId];
   const mode = (ex && ex.mode) || 'weight';
@@ -543,14 +551,15 @@ function getItems(day){
   if(!draft[day]){
     draft[day] = (state.program[day] || []).map(p => {
       const lv = lastValues(p.exerciseId);
+      const keep = modeFields((state.exercises[p.exerciseId] || {}).mode || 'weight');
       return {
         exerciseId: p.exerciseId,
         note: '',
         sets: p.sets.map(spec => ({
           type: spec.type,
-          weight: spec.weight ?? lv.weight,
-          reps: spec.reps ?? lv.reps,
-          duration: spec.duration ?? lv.duration,
+          weight: spec.weight ?? (keep.includes('weight') ? lv.weight : null),
+          reps: spec.reps ?? (keep.includes('reps') ? lv.reps : null),
+          duration: spec.duration ?? (keep.includes('duration') ? lv.duration : null),
           rpe: null,
           side: spec.side ?? null,
           targetRpe: spec.rpe,
@@ -954,10 +963,12 @@ $('ex-list').addEventListener('click', e => {
     /* 沿用上次：只填上次真记录过的字段（没记录的不动），填完重画卡片让人看见变化。
      * 这是「比上次加一点」的第一步——先拿到上次的数，再用 ± 往上加。 */
     const lv = lastValues(item.exerciseId);
+    /* 只填当前模式会显示的字段（与预填同规矩）：改过模式的动作不带上看不见旧指标 */
+    const keep = modeFields((state.exercises[item.exerciseId] || {}).mode || 'weight');
     let used = false;
-    if(lv.weight != null){ set.weight = lv.weight; used = true; }
-    if(lv.reps != null){ set.reps = lv.reps; used = true; }
-    if(lv.duration != null){ set.duration = lv.duration; used = true; }
+    if(lv.weight != null && keep.includes('weight')){ set.weight = lv.weight; used = true; }
+    if(lv.reps != null && keep.includes('reps')){ set.reps = lv.reps; used = true; }
+    if(lv.duration != null && keep.includes('duration')){ set.duration = lv.duration; used = true; }
     if(used){
       // 沿用上次改了已确认组的数字：🔥 必须跟着重算（与 step/change 同一规矩）
       refreshPR(day, exIdx, setIdx);
@@ -1457,9 +1468,11 @@ const TREND_KIND_LABEL = { weight: '重量（kg）', duration: '时长（秒）'
 const TREND_DIR = { up: '↑ 上升', down: '↓ 下降', plateau: '→ 持平', new: '· 新出现' };
 const trendMetric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
 function trendKind(t){
+  /* 与 trendMetric 严格同序（weight 优先）：混合组（既有权重又有残留时长）
+   * 若这里先判 duration，会把动作分到「时长」图里却按 kg 画点、图例念 kg——单位和数值打架。 */
   const top = (t.sessions[t.sessions.length - 1] || {}).top || {};
-  if(top.duration != null) return 'duration';
   if(top.weight != null) return 'weight';
+  if(top.duration != null) return 'duration';
   return 'reps';
 }
 /* 单次会话自己的指标类型（与 trendMetric 的优先级一致）。
