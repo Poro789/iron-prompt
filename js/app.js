@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.93';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.94';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -426,14 +426,31 @@ function askConfirm(opts){
   $('confirm-desc').textContent = opts.desc || '';
   $('confirm-ok-btn').textContent = opts.okLabel || '确定';
   $('confirm-overlay').classList.add('show');
+  setBackdropInert(true);
   return new Promise(res => { confirmResolve = res; });
 }
 function answerConfirm(ok){
   $('confirm-overlay').classList.remove('show');
+  setBackdropInert(false);
   const r = confirmResolve;
   confirmResolve = null;
   if(r) r(ok);
 }
+/* 键盘纪律：模态打开时背景整体 inert（Tab 不再落到背景控件），ESC 关闭最上层模态。
+ * 遮罩只挡指针（display:flex），键盘原本是完全穿透的：小结开着时按 Tab+Enter
+ * 能在背后凭空开一次「进行中」；确认框开着时能触发背景按钮，甚至嵌套两个确认
+ * 让第一个 Promise 永不 resolve。 */
+function setBackdropInert(on){
+  [document.querySelector('header'), $('drawer'), document.querySelector('main')].forEach(el => {
+    if(!el || !el.setAttribute) return;
+    if(on) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+  });
+}
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Escape') return;
+  if($('confirm-overlay').classList.contains('show')) answerConfirm(false);
+  else if($('summary-overlay').classList.contains('show')) closeSummary();
+});
 
 /* ---------------- 视图切换（v0.9：抽屉导航） ---------------- */
 let currentView = 'today';
@@ -449,14 +466,21 @@ function switchView(v){
   });
   render();
 }
-/* 抽屉开关 */
+/* 抽屉开关（关闭态 visibility:hidden 由 CSS 保证，控件不进 Tab 序列；
+ * aria-expanded 告诉读屏器菜单状态，打开时焦点进抽屉、关闭时还给汉堡按钮） */
 function toggleDrawer(){
   $('drawer').classList.toggle('open');
   $('drawer-overlay').classList.toggle('show');
+  const isOpen = $('drawer').classList.contains('open');
+  $('hamburger-btn').setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  if(isOpen){ const c = document.querySelector('.drawer-close'); if(c) c.focus(); }
 }
 function closeDrawer(){
+  const wasOpen = $('drawer').classList.contains('open');
   $('drawer').classList.remove('open');
   $('drawer-overlay').classList.remove('show');
+  $('hamburger-btn').setAttribute('aria-expanded', 'false');
+  if(wasOpen) $('hamburger-btn').focus();
 }
 
 /* ---------------- 今日训练 ----------------
@@ -1093,6 +1117,8 @@ $('ex-list').addEventListener('change', e => {
  * 完成的是旧值。移动端数字键盘通常显示「下一项」，不触发 Enter，不会添乱。 */
 $('ex-list').addEventListener('keydown', e => {
   if(e.key !== 'Enter') return;
+  // 模态打开时不推进训练（inert 之外的双保险：老浏览器不认 inert）
+  if($('confirm-overlay').classList.contains('show') || $('summary-overlay').classList.contains('show')) return;
   const inp = e.target.closest && e.target.closest('input.fs-input');
   if(!inp) return;
   e.preventDefault();
@@ -1307,12 +1333,14 @@ function showSummary(entry){
   const re = $('summary-reedit');
   if(re) re.style.display = lastEnded ? '' : 'none';
   $('summary-overlay').classList.add('show');
+  setBackdropInert(true);
 }
 function closeSummary(){
   lastEnded = null;
   const re = $('summary-reedit');
   if(re) re.style.display = 'none';
   $('summary-overlay').classList.remove('show');
+  setBackdropInert(false);
 }
 
 /* 把刚结束的那次记录放回「进行中」，改完再点结束 */

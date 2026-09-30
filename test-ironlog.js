@@ -24,6 +24,7 @@ function makeEl(id){
     id, innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
     classList: makeClassList(),
     attrs: {}, setAttribute(k, v){ this.attrs[k] = v; },
+    removeAttribute(k){ delete this.attrs[k]; }, getAttribute(k){ return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; },
     // 记录所有元素的事件回调（委托容器另有覆盖），供设置页 change 处理测试直接派发
     addEventListener(type, fn){ handlers.set(id + '|' + type, fn); },
     querySelectorAll(){ return []; },
@@ -3013,6 +3014,49 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('116 schema 含 rpeLabel 与至少一日规则', T.PLAN_SCHEMA.includes('rpeLabel') && T.PLAN_SCHEMA.includes('至少要写一个日'));
   check('116 数据说明含 settings 口径', T.buildPrompt(T.buildExport(4)).includes('不是训练数据'));
   delete T.state.exercises.e116;
+
+  /* ============================================================
+   * 117. 模态键盘纪律 + 抽屉 Tab 序列（v0.9.94）
+   * ESC 关闭最上层模态（确认=取消、小结=关闭）；模态打开时背景 inert；
+   * Enter 推进流在模态打开时不触发（老浏览器双保险）；
+   * 抽屉 aria-expanded 成对切换、关闭态 visibility:hidden 不进 Tab 序列。
+   * ============================================================ */
+  console.log('== 117. 模态/抽屉键盘纪律（v0.9.94）==');
+  const drawerEl117 = document.getElementById('drawer');
+  const hamEl117 = document.getElementById('hamburger-btn');
+  const confirmOv117 = document.getElementById('confirm-overlay');
+  const summaryOv117 = document.getElementById('summary-overlay');
+  let res117 = null;
+  T.askConfirm({ title: 't117' }).then(v => { res117 = v; });
+  check('117 确认打开时背景 inert', confirmOv117.classList.contains('show') && drawerEl117.attrs.inert === '');
+  docHandlers.get('keydown')({ key: 'Escape' });
+  await null;
+  check('117 ESC 关闭确认并按取消解决', !confirmOv117.classList.contains('show') && res117 === false && drawerEl117.attrs.inert === undefined);
+  T.showSummary({ day: 'A', exercises: [], durationSec: 0 });
+  check('117 小结打开时背景 inert', summaryOv117.classList.contains('show') && drawerEl117.attrs.inert === '');
+  // Enter 推进流在模态打开时不触发
+  let fired117 = 0;
+  const inp117 = {
+    dataset: { ex: '0', set: '0', f: 'weight' },
+    classList: makeClassList(),
+    closest: sel => /^input(\.fs-input)?$/.test(sel) ? inp117 : null,
+    dispatchEvent(){ fired117++; handlers.get('ex-list|change')({ target: { closest: () => inp117 } }); return true; },
+    focus(){},
+  };
+  handlers.get('ex-list|keydown')({ key: 'Enter', target: inp117, preventDefault(){} });
+  check('117 小结开着时 Enter 不推进', fired117 === 0);
+  docHandlers.get('keydown')({ key: 'Escape' });
+  check('117 ESC 关闭小结', !summaryOv117.classList.contains('show') && drawerEl117.attrs.inert === undefined);
+  handlers.get('ex-list|keydown')({ key: 'Enter', target: inp117, preventDefault(){} });
+  check('117 关闭后 Enter 恢复可用', fired117 === 1);
+  delete T.state.drafts.A;
+  T.toggleDrawer();
+  check('117 开抽屉 aria-expanded=true', hamEl117.attrs['aria-expanded'] === 'true' && drawerEl117.classList.contains('open'));
+  T.closeDrawer();
+  check('117 关抽屉 aria-expanded=false', hamEl117.attrs['aria-expanded'] === 'false' && !drawerEl117.classList.contains('open'));
+  const css117 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+  check('117 抽屉关闭态 visibility:hidden（不进 Tab 序列）', /\.drawer\{[^}]*visibility:hidden/.test(css117) && /\.drawer\.open\{[^}]*visibility:visible/.test(css117));
+  check('117 汉堡带 aria-expanded/aria-controls', html.includes('aria-expanded="false"') && html.includes('aria-controls="drawer"'));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

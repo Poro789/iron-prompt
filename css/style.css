@@ -34,10 +34,11 @@ header .ver{color:var(--muted);font-size:12px}
 .drawer{
   position:fixed;top:0;right:0;bottom:0;z-index:40;width:260px;
   background:var(--panel);border-left:1px solid var(--border);
-  transform:translateX(100%);transition:transform .2s ease;
-  display:flex;flex-direction:column;padding:16px;
+  /* visibility 参与过渡：关闭动画播完才隐藏；隐藏后控件不进 Tab 序列 */
+  transform:translateX(100%);transition:transform .2s ease, visibility .2s;
+  display:flex;flex-direction:column;padding:16px;visibility:hidden;
 }
-.drawer.open{transform:translateX(0)}
+.drawer.open{transform:translateX(0);visibility:visible}
 .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .drawer-header h1{font-size:18px;margin:0;font-weight:700}
 .drawer-close{
