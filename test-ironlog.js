@@ -2089,7 +2089,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
 
   console.log('== 83. A/B 两日完整循环互不串（跨日回归网）==');
   T.state.logs = []; T.state.sessions = {}; delete T.state.drafts.A; delete T.state.drafts.B;
-  T.state.condDraft = { A: null, B: null }; T.state.ui.curPos = {};
+  T.state.condDraft.A = null; T.state.condDraft.B = null; T.state.ui.curPos = {};
   T.state.exercises.l83a = { name: 'A动作', mode: 'weight', unit: 'kg' };
   T.state.exercises.l83b = { name: 'B动作', mode: 'weight', unit: 'kg' };
   T.state.program.A = [{ section: '', exerciseId: 'l83a', repsRange: '', sets: [{ type: 'work', weight: 40, reps: 8 }] }];
@@ -2111,6 +2111,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('lastValues 按动作隔离（A 55 / B 30）', lvA83.weight === 55 && lvB83.weight === 30);
   check('两日会话都已清空', !T.state.sessions.A && !T.state.sessions.B);
   delete T.state.exercises.l83a; delete T.state.exercises.l83b;
+
+  console.log('== 84. 改一下→再结束后状态选择不残留（condDraft 泄漏回归）==');
+  T.state.logs = []; T.state.sessions = {}; delete T.state.drafts.A;
+  T.state.condDraft.A = null; T.state.condDraft.B = null;
+  T.state.exercises.l84 = { name: '状态动作', mode: 'weight', unit: 'kg' };
+  T.state.program.A = [{ section: '', exerciseId: 'l84', repsRange: '', sets: [{ type: 'work', weight: 50, reps: 8 }] }];
+  T.switchDay('A');
+  const it84 = T.getItems('A');
+  it84[0].sets[0] = { done: true, weight: 60, reps: 8, duration: null, rpe: 8, type: 'work' };
+  T.state.sessions.A = { startedAt: 333000, items: it84, condition: '佳' };
+  T.endSession();
+  check('小结打开时「改一下」把状态放回界面用于显示', (() => { T.reeditSession(); return T.state.condDraft.A === '佳'; })());
+  T.endSession(); T.closeSummary();
+  check('再结束一次后状态被清掉', T.state.condDraft.A === null);
+  T.switchView('today');
+  clickExList(doneBtn(0, 0));
+  check('下一次开练不会把旧状态抄进新记录', T.state.sessions.A && T.state.sessions.A.condition === null);
+  T.state.sessions.A = null; delete T.state.drafts.A; delete T.state.exercises.l84;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
