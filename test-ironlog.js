@@ -2266,6 +2266,51 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('items 里的非对象条目被筛掉', m90c.sessions.A.items.length === 1);
   check('会话里的字符串数值归一化', m90c.sessions.A.items[0].sets[0].weight === 30 && m90c.sessions.A.items[0].sets[0].reps === 5);
 
+  /* ============================================================
+   * 91. 导入/撤销导入清掉挂在被丢弃草稿上的休息计时（v0.9.68）
+   * ============================================================ */
+  console.log('== 91. 导入/撤销导入结束孤儿休息计时（v0.9.68）==');
+  T.resetRest(); T.clearTimer();
+  T.state.settings.restSec = 60;
+  const p91 = { type: 'ai-plan', exercises: { e91: { name: '休息目标', mode: 'weight', unit: 'kg' } },
+    program: { A: [{ exerciseId: 'e91', sets: [{ type: 'work', weight: 10, reps: 8 }] }] } };
+  check('首次导入成功', T.importPlan(JSON.stringify(p91)).ok === true);
+  T.state.settings.lastDay = 'A'; T.switchDay('A');
+  T.getItems('A');   // 生成 A 日草稿：没有确认过组 → 无进行中记录
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });
+  check('休息挂在纯草稿日（无进行中记录）', !!T.state.rest && T.state.rest.day === 'A');
+  const p91b = JSON.parse(JSON.stringify(p91));
+  p91b.program.A[0].sets = [{ type: 'work', weight: 12, reps: 8 }];
+  T.importPlan(JSON.stringify(p91b));   // 替换 A 日计划：草稿被丢弃重建
+  check('导入后孤儿休息被结束（不会把 restAfter 写进新计划的组）', T.state.rest === null && T.restEndsAt === null && T.restTotal === 0);
+  // 撤销导入同样：休息归属 A（只有草稿），用户在看着 B —— 撤销也要结束它
+  // （快照只有 doImport 会留，这里按 snapshotPlan 的形状手工构造）
+  T.state.lastImport = { at: Date.now(), program: JSON.parse(JSON.stringify(T.state.program)), exercises: JSON.parse(JSON.stringify(T.state.exercises)) };
+  T.getItems('A');
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });
+  T.state.settings.lastDay = 'B';
+  T.undoImport();
+  check('撤销导入结束孤儿休息', T.state.rest === null && T.restEndsAt === null);
+  // 归属日有进行中记录时：休息/秒表的目标还在，不该清
+  T.state.settings.lastDay = 'A'; T.switchDay('A');
+  clickExList(doneBtn(0, 0));
+  T.answerConfirm(true);
+  await null;
+  check('确认一组后进行中记录与休息都在', !!T.state.sessions.A && !!T.state.rest);
+  const p91c = JSON.parse(JSON.stringify(p91b));
+  p91c.program.A[0].sets = [{ type: 'work', weight: 14, reps: 8 }];
+  const r91c = T.importPlan(JSON.stringify(p91c));
+  check('有进行中记录时导入被拒绝、休息原样保留', r91c.ok === false && !!T.state.rest);
+  T.state.lastImport = { at: Date.now(), program: JSON.parse(JSON.stringify(T.state.program)), exercises: JSON.parse(JSON.stringify(T.state.exercises)) };
+  T.startTimer(0, 0);
+  T.state.settings.lastDay = 'B';   // 不 switchDay（换日本来就清表）：模拟表归属 A、视图在 B
+  T.undoImport();
+  check('撤销导入不误清归属日有进行中记录的秒表', !!T.timerFor && !!T.state.timer);
+  T.clearTimer(); T.resetRest();
+  T.state.sessions = { A: null, B: null };
+  delete T.state.drafts.A; delete T.state.drafts.B;
+  delete T.state.exercises.e91; T.state.program.A = [];
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

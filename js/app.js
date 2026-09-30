@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.67';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.68';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1673,6 +1673,9 @@ function applyPlan(d){
     // 秒表还挂在旧草稿上跑：草稿即将被删掉重建，这块表没有可写的归属了，直接丢掉
     // （按表的归属日判断，不是当前查看的日——导入把视图切去另一日时也要清对表）
     if(timerFor && timerForDay === day && !state.sessions[day]) clearTimer();
+    // 休息计时同口径：休息是由旧草稿的组触发的，草稿删掉重建后 exIdx/setIdx
+    // 指向的是新计划里不相干的组，让它继续倒计时只会把 restAfter 写错地方。
+    if(restForDay === day && !state.sessions[day]) resetRest();
     // 草稿会被整体删掉重建。若里面有用户真实产生过的内容（确认过的组、手写备注），
     // 必须在导入结果里说一声，否则换了计划数量后用户回头才发现「刚才填的东西没了」。
     // 只看 done/notes：新建草稿本身带着上次数值的预填，那不是用户输入，丢了不算损失。
@@ -1719,12 +1722,14 @@ function snapshotPlan(){
 function undoImport(){
   const snap = state.lastImport;
   if(!snap){ toast('没有可撤销的导入'); return; }
-  // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组
-  if(timerFor && !state.sessions[curDay()]) clearTimer();
+  // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组。
+  // 按表的归属日判断（不是当前查看的日）：归属日有进行中记录时表还有可写的地方，不该误清。
+  if(timerFor && !state.sessions[timerForDay]) clearTimer();
   state.program = snap.program;
   state.exercises = snap.exercises;
   state.lastImport = null;
   for(const day of ['A','B']){
+    if(restForDay === day && !state.sessions[day]) resetRest();   // 同 applyPlan：两日草稿都要查
     delete draft[day];          // 草稿是按刚导入的计划生成的，一起丢掉
     state.ui.curPos[day] = 0;   // 旧位置在新计划里未必存在
     if(curDay() === day) curPos = 0;
