@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.68';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.69';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1184,8 +1184,9 @@ async function discardSession(){
   condDraft[day] = null;
   curPos = 0;
   state.ui.curPos[day] = 0;   // 放弃后回到第一组，别把旧位置留着
-  resetRest();
-  clearTimer();
+  /* 只清归属这一日的休息/秒表：另一日正在跑的计时不属于这次放弃（与 applyPlan 同一口径） */
+  if(restForDay === day) resetRest();
+  if(timerFor && timerForDay === day) clearTimer();
   flushSave();
   render();
   toast('已放弃', () => {

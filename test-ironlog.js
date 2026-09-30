@@ -2311,6 +2311,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   delete T.state.drafts.A; delete T.state.drafts.B;
   delete T.state.exercises.e91; T.state.program.A = [];
 
+  /* ============================================================
+   * 92. 放弃 A 日记录不误清归属 B 日的休息/秒表（v0.9.69）
+   * ============================================================ */
+  console.log('== 92. 放弃记录只清归属本日的休息/秒表（v0.9.69）==');
+  T.resetRest(); T.clearTimer();
+  T.state.settings.restSec = 60;
+  T.state.exercises.e92 = { name: '放弃测试', mode: 'weight', unit: 'kg' };
+  T.state.sessions = {
+    A: { startedAt: 111000, items: [{ exerciseId: 'e92', sets: [{ done: true, weight: 20, reps: 5 }] }] },
+    B: { startedAt: 222000, items: [{ exerciseId: 'e92', sets: [{ done: true, weight: 21, reps: 5 }] }] }
+  };
+  T.state.settings.lastDay = 'B';
+  T.startRestTimer({ exIdx: 0, setIdx: 0 });   // 休息归属 B
+  T.startTimer(0, 0);                          // 秒表归属 B
+  check('B 日休息与秒表都在跑', !!T.state.rest && !!T.state.timer && !!T.timerFor);
+  T.state.settings.lastDay = 'A';              // 视图切到 A（不经 switchDay：模拟恢复后的错位视图）
+  T.discardSession(); T.answerConfirm(true); await null;
+  check('A 日记录已放弃', T.state.sessions.A === null);
+  check('归属 B 日的休息不被误清', !!T.state.rest && T.state.rest.day === 'B' && T.restEndsAt !== null);
+  check('归属 B 日的秒表不被误清', !!T.timerFor && !!T.state.timer && T.state.timer.day === 'B');
+  T.state.settings.lastDay = 'B';
+  T.discardSession(); T.answerConfirm(true); await null;
+  check('放弃归属日自己的记录时休息/秒表照常清掉', T.state.sessions.B === null && T.state.rest === null && T.restEndsAt === null && T.state.timer === null && T.timerFor === null);
+  T.state.sessions = { A: null, B: null };
+  delete T.state.exercises.e92;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
