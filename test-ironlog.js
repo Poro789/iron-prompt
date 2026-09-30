@@ -1339,6 +1339,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   Object.keys(T.draft).forEach(k => delete T.draft[k]);
   T.resetRest();
 
+  console.log('== 39. 趋势只统计正式组，热身组不进 top/avgRpe/sets/volume（v0.9.15）==');
+  const warmLog = { date: '2026-01-01', day: 'A', startedAt: 1, endedAt: 2, durationSec: 1, condition: null, exercises: [{ exerciseId: 'db_bench', note: null, sets: [
+    { weight: 20, reps: 10, duration: null, rpe: 3, side: null, restAfter: null, done: true, type: 'warmup' },
+    { weight: 60, reps: 10, duration: null, rpe: 8, side: null, restAfter: null, done: true }
+  ] }] };
+  const tr39 = T.buildTrends([warmLog]);
+  check('top 取正式组最重', tr39.db_bench.sessions[0].top.weight === 60);
+  check('sets 只数正式组', tr39.db_bench.sessions[0].sets === 1);
+  check('avgRpe 不含热身 RPE', tr39.db_bench.sessions[0].avgRpe === 8);
+  check('volume 只算正式组', tr39.db_bench.sessions[0].volume === 600);
+  const warmOnly = JSON.parse(JSON.stringify(warmLog));
+  warmOnly.exercises[0].sets = [warmOnly.exercises[0].sets[0]];
+  check('只完成热身组的会话不产生趋势', !T.buildTrends([warmOnly]).db_bench);
+  const legacy39 = JSON.parse(JSON.stringify(warmLog));
+  legacy39.exercises[0].sets.forEach(s => delete s.type);
+  check('旧日志（无 type 字段）按正式组处理', T.buildTrends([legacy39]).db_bench.sessions[0].sets === 2);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

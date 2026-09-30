@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.14';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.15';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1538,7 +1538,9 @@ function buildTrends(logs){
   const byEx = {};
   for(const entry of logs){
     for(const ex of entry.exercises){
-      const doneSets = ex.sets.filter(isDone);
+      // 趋势只统计正式组：热身组的重量/RPE 天然偏低，混进来会把「最好一组」和平均强度拉歪，
+      // AI 拿到的 sets 数也会虚高（与 lastValues/detectPR 的口径一致；旧日志无 type 字段，按正式组处理）
+      const doneSets = ex.sets.filter(s => isDone(s) && s.type !== 'warmup');
       if(!doneSets.length) continue;
       (byEx[ex.exerciseId] = byEx[ex.exerciseId] || []).push({
         date: entry.date,
