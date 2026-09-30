@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.49]
+
+### 修复
+- 加载/恢复时剔除日志里的坏条目（null、非对象、缺 exercises 的记录）：手工编辑或截断的备份不再让历史、趋势、导出整页崩
+
 ## [0.9.48]
 
 ### 修复

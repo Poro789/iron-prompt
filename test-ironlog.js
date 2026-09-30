@@ -1857,6 +1857,17 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.logs[0] === lA && T.state.logs[1] === lC && T.state.logs[2] === lB);
   T.state.logs = T.state.logs.filter(l => l !== lA && l !== lB && l !== lC);
 
+  console.log('== 70. migrate 剔除备份里的坏日志条目（v0.9.49）==');
+  const bare70 = { version: 1, program: JSON.parse(JSON.stringify(T.state.program)), exercises: JSON.parse(JSON.stringify(T.state.exercises)),
+    settings: JSON.parse(JSON.stringify(T.state.settings)), sessions: { A: null, B: null },
+    logs: [null, 'oops', 42, { date: '2023-11-15', day: 'A', startedAt: 1700000600000, exercises: [] },
+      { date: '2023-11-15', day: 'A', startedAt: 1700000600000 }] };   // 最后一条缺 exercises
+  const m70 = T.migrate(bare70);
+  check('坏条目（null/字符串/数字/缺 exercises）被剔除，完整记录保留',
+    m70.logs.length === 1 && m70.logs[0].startedAt === 1700000600000);
+  const m70b = T.migrate({ version: 1, program: bare70.program, exercises: bare70.exercises, logs: null });
+  check('logs 不是数组时补空数组', Array.isArray(m70b.logs) && m70b.logs.length === 0);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.48';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.49';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -187,6 +187,9 @@ function migrate(d){
   if(d.settings.lastDay !== 'A' && d.settings.lastDay !== 'B') d.settings.lastDay = 'A';
   if(typeof d.settings.weightStep !== 'number' || !(d.settings.weightStep > 0)) d.settings.weightStep = 2.5;
   if(!Array.isArray(d.logs)) d.logs = [];
+  /* 手工编辑/截断的备份里混进坏条目（null、缺 exercises）会让历史/趋势/导出整页崩。
+   * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。 */
+  d.logs = d.logs.filter(l => l && typeof l === 'object' && Array.isArray(l.exercises));
   if(!d.profile) d.profile = { background: '' };
   if(!d.sessions) d.sessions = { A: null, B: null };
   /* v0.9.2：草稿与浏览位置进 state，刷新/崩溃不再丢数据
