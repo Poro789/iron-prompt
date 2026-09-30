@@ -405,6 +405,11 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const refs = [...html.matchAll(/(?:href|src)="(?!http|data:)([^"]+)"/g)].map(x => x[1]);
     return refs.length > 0 && refs.every(r => shell.includes('./' + r));
   })());
+  check('sw.js 的 SHELL 也覆盖 manifest 声明的全部图标', (() => {
+    const shell = (sw.match(/SHELL = \[([^\]]*)\]/) || ['', ''])[1];
+    const icons = (JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8')).icons || []).map(i => i.src);
+    return icons.length > 0 && icons.every(r => shell.includes('./' + r));
+  })());
   check('sw.js 有 install/activate/fetch', ['install','activate','fetch'].every(k => sw.includes("'" + k + "'")));
   check('sw.js 只缓存成功响应（404 不会污染离线回退）', /if\(res\.ok\)/.test(sw) && /res\.status === 200/.test(sw));
   const ciPrepare = fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8');
