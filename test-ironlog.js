@@ -1672,6 +1672,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.sessions.A === fresh60 && T.state.sessions.A.startedAt === 1700000900001);
   T.state.sessions.A = null;
 
+  console.log('== 61. 误加的未确认组可以删掉（带撤销）（v0.9.39）==');
+  T.switchDay('A');
+  delete T.state.drafts.A; delete T.state.sessions.A;
+  T.curPos = 0; T.render();
+  check('只有一组时不出现删除按钮', !/data-act="delset"/.test(htmlTouchedHTML('ex-list')));
+  clickExList(btnOf({ act: 'addset', ex: 0 }));
+  check('加一组后出现删除按钮', /data-act="delset"/.test(htmlTouchedHTML('ex-list')) && T.state.drafts.A[0].sets.length === 2);
+  T.startTimer(0, 1);
+  clickExList(btnOf({ act: 'delset', ex: 0 }));
+  check('删组同时清掉挂在被删组上的秒表', T.state.drafts.A[0].sets.length === 1 && T.timerFor === null);
+  check('提示条给出「撤销」按钮', /data-act="undo"/.test(htmlTouchedHTML('toast')));
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('撤销把组放回', T.state.drafts.A[0].sets.length === 2);
+  clickExList(doneBtn(0, 1));
+  check('已确认的最后一组不出现删除按钮', !/data-act="delset"/.test(htmlTouchedHTML('ex-list')));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
