@@ -1755,6 +1755,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   delete T.state.sessions.A; delete T.state.drafts.A;
   delete T.state.exercises.test64lb; delete T.state.exercises.test64kg;
 
+  console.log('== 65. 放弃小结「改一下」的编辑时，原记录原样放回（v0.9.43）==');
+  const ts65 = 1700000222000;
+  T.state.sessions.A = { startedAt: ts65, items: [{ exerciseId: 'test_pr', note: '', sets: [{ weight: 80, reps: 5, done: true }] }], condition: null };
+  T.endSession();
+  const log65 = T.state.logs.find(l => l.startedAt === ts65);
+  check('先正常写出一条记录', !!log65 && log65.exercises[0].sets[0].weight === 80);
+  T.reeditSession();
+  check('小结改一下：日志摘除、进入编辑态', T.state.logs.indexOf(log65) === -1 && !!T.state.sessions.A);
+  T.discardSession(); T.answerConfirm(true); await null;
+  check('放弃编辑后原记录原样放回', T.state.logs.indexOf(log65) !== -1 && log65.exercises[0].sets[0].weight === 80);
+  clickEl('toast', btnOf({ act: 'undo' }));
+  check('撤销仍回到编辑态', !!T.state.sessions.A);
+  T.state.sessions.A.items[0].sets[0].weight = 75;
+  T.endSession(); T.closeSummary();
+  const same65 = T.state.logs.filter(l => l.startedAt === ts65);
+  check('再结束只留一条且是新值（原条目被替换）', same65.length === 1 && same65[0].exercises[0].sets[0].weight === 75);
+  T.state.logs = T.state.logs.filter(l => l.startedAt !== ts65);
+  delete T.state.sessions.A; delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
