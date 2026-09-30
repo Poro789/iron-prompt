@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.108';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.109';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -2352,7 +2352,9 @@ $('weight-step').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
   /* 精度用 round2 与重量输入一致：1.25 是现实里最常见的微片档，
    * round1 会把它改成 1.3，步进从此永远加不出 1.25。 */
-  state.settings.weightStep = (isNaN(v) || v < 0.5) ? 2.5 : Math.min(100, round2(v));
+  /* 下限 0.25 与输入框 min/step（v0.9.98 起）一致：0.25kg 微片真实存在，
+   * 旧下限 0.5 会让界面允许、代码静默改回 2.5——显示和数据打架。 */
+  state.settings.weightStep = (isNaN(v) || v < 0.25) ? 2.5 : Math.min(100, round2(v));
   e.target.value = state.settings.weightStep;   // 非法输入被纠正后要把纠正结果写回输入框，否则显示 0.2 实际用 2.5
   save();
   toast('重量步进：' + state.settings.weightStep);   // 步进是数字，按各动作自己的单位生效，不写死 kg

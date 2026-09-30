@@ -3403,6 +3403,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('133 个人备注：maxlength=500 与代码封顶成对', uiMax133('personal-note') === 500 && /personal = e\.target\.value\.trim\(\)\.slice\(0, 500\)/.test(script));
   check('133 动作备注：maxlength=500 与代码封顶成对', /class="fs-exnote" maxlength="500"/.test(script) && /item\.note = inp\.value\.trim\(\)\.slice\(0, 500\)/.test(script));
 
+  /* ============================================================
+   * 134. 重量步进下限 0.25 与输入框一致（v0.9.109）
+   * v0.9.98 把输入框 min/step 放到 0.25，但 change 处理器下限还卡在 0.5：
+   * 界面允许 0.25、代码静默改回 2.5——显示和数据打架。0.25kg 微片真实存在。
+   * ============================================================ */
+  console.log('== 134. 重量步进 0.25 不再被静默改回 2.5（v0.9.109）==');
+  const t134 = { value: '0.25' };
+  handlers.get('weight-step|change')({ target: t134 });
+  check('134 0.25 步进被接受', T.state.settings.weightStep === 0.25);
+  check('134 输入框写回 0.25', String(t134.value) === '0.25');
+  const t134b = { value: '0.2' };
+  handlers.get('weight-step|change')({ target: t134b });
+  check('134 低于 0.25 仍纠正为默认 2.5', T.state.settings.weightStep === 2.5 && String(t134b.value) === '2.5');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
