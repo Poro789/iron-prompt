@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.42]
+
+### 修复
+- 训练中的实时进度头部容量与小结/历史同口径：lb 动作先换算成 kg 再累加（此前头部不换算，同一场训练两处数字不一致）
+
 ## [0.9.41]
 
 ### 修复

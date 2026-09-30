@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.41';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.42';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -285,12 +285,16 @@ const isDone = s => s.done === true;
 /* 聚合容量在界面上统一标 kg：lb 动作（拉力绳档位）先换算成 kg 再累加。
  * 不换算的话，一次训练里 20lb 的绳和 20kg 的哑铃会被当成一样重，总数没有统一含义。 */
 const LB_TO_KG = 0.45359237;
-function sessionVolume(entry){
-  return entry.exercises.reduce((sum, ex) => {
-    const unit = String(((state.exercises[ex.exerciseId] || {}).unit || 'kg')).trim().toLowerCase();
+/* items 形状（session/draft 的 items）与日志 entry.exercises 相同，容量统一走这里 */
+function itemsVolume(items){
+  return items.reduce((sum, it) => {
+    const unit = String(((state.exercises[it.exerciseId] || {}).unit || 'kg')).trim().toLowerCase();
     const k = unit === 'lb' ? LB_TO_KG : 1;
-    return sum + ex.sets.filter(isDone).reduce((s, st) => s + (st.weight || 0) * k * (st.reps || 0), 0);
+    return sum + it.sets.filter(isDone).reduce((s, st) => s + (st.weight || 0) * k * (st.reps || 0), 0);
   }, 0);
+}
+function sessionVolume(entry){
+  return itemsVolume(entry.exercises);
 }
 function sessionSets(entry){
   return entry.exercises.reduce((s, ex) => s + ex.sets.filter(isDone).length, 0);
@@ -741,7 +745,7 @@ function renderToday(){
   const items = getItems(day);
   const totalSets = items.reduce((s, it) => s + it.sets.length, 0);
   const doneSets = items.reduce((s, it) => s + it.sets.filter(st => st.done === true).length, 0);
-  const vol = Math.round(items.reduce((s, it) => s + it.sets.filter(st => st.done === true).reduce((v, st) => v + (st.weight||0)*(st.reps||0), 0), 0));
+  const vol = Math.round(itemsVolume(items));
   const progStr = totalSets > 0 ? `<span class="session-progress">${doneSets}/${totalSets} 组${vol > 0 ? ' · ' + vol.toLocaleString() + 'kg' : ''}</span>` : '';
   if(sess){
     status.innerHTML = `<span class="live"></span><span>进行中</span><span class="clock" id="session-clock">${fmtDuration((Date.now() - sess.startedAt)/1000)}</span>${progStr}${condBtn}`;

@@ -130,7 +130,7 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
-  sessionVolume, sessionAvgRest,
+  sessionVolume, sessionAvgRest, itemsVolume,
   buildBackup, parseBackup, restoreBackupText,
   buildTrendCharts, trendKind, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, get timerFor(){ return timerFor; },
@@ -1736,6 +1736,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('普通记录的放弃不会往日志里塞东西', T.state.logs.length === before63);
   T.state.logs = T.state.logs.filter(l => l.startedAt !== ts63);
   delete T.state.sessions.A; delete T.state.drafts.A;
+
+  console.log('== 64. 实时进度头部容量与小结同口径（lb 换算，v0.9.42）==');
+  T.state.exercises.test64lb = { name: '测试绳64', mode: 'band', unit: 'lb' };
+  T.state.exercises.test64kg = { name: '测试哑铃64', mode: 'weight', unit: 'kg' };
+  const items64 = [
+    { exerciseId: 'test64lb', note: '', sets: [{ weight: 20, reps: 10, done: true }] },
+    { exerciseId: 'test64kg', note: '', sets: [{ weight: 100, reps: 5, done: true }] }
+  ];
+  const expected64 = 100 * 5 + 20 * 0.45359237 * 10;
+  check('itemsVolume 换算 lb→kg', Math.abs(T.itemsVolume(items64) - expected64) < 1e-6);
+  check('sessionVolume 与 itemsVolume 同结果', Math.abs(T.sessionVolume({ exercises: items64 }) - T.itemsVolume(items64)) < 1e-9);
+  T.state.sessions.A = { startedAt: Date.now(), items: items64, condition: null };
+  T.switchView('today'); T.render();
+  const statusHtml = elsById.get('session-status').innerHTML;
+  check('头部显示换算后的容量 591kg', statusHtml.includes('591kg'));
+  check('头部不再显示未换算的 700kg', !statusHtml.includes('700kg'));
+  delete T.state.sessions.A; delete T.state.drafts.A;
+  delete T.state.exercises.test64lb; delete T.state.exercises.test64kg;
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
