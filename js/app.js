@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.23';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.24';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1259,7 +1259,7 @@ function programOrder(){
   }));
   return order;
 }
-function trendChartSVG(entries, kind){
+function trendChartSVG(entries, kind, label){
   const W = 320, H = 120, PAD = { t: 14, r: 10, b: 20, l: 34 };
   const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
   const allPts = [];
@@ -1289,7 +1289,7 @@ function trendChartSVG(entries, kind){
     return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>
       <circle cx="${xAt(t.sessions.length - 1).toFixed(1)}" cy="${yScale(trendMetric(last)).toFixed(1)}" r="2.5" fill="${c}"/>`;
   }).join('');
-  return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${TREND_KIND_LABEL[kind]}趋势图">${grid}${axis}${lines}</svg></div>`;
+  return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${label || TREND_KIND_LABEL[kind]}趋势图">${grid}${axis}${lines}</svg></div>`;
 }
 function trendLegend(entries){
   return '<div class="trend-legend">' + entries.map(([id, t], li) => {
@@ -1317,8 +1317,16 @@ function buildTrendCharts(trends, maxLines){
     const list = groups[kind]
       .sort((a, b) => (b[1].sessions.length - a[1].sessions.length) || ((order[a[0]] ?? 999) - (order[b[0]] ?? 999)))
       .slice(0, maxLines || 5);
-    return `<div class="trend-block"><div class="trend-title">${TREND_KIND_LABEL[kind]}</div>`
-      + trendChartSVG(list, kind) + trendLegend(list) + '</div>';
+    /* 组标题的单位：同组动作单位一致才写（lb 组不再念成 kg）；
+     * 混用单位时只写「重量」——各图例行本来就带自己的单位，标题不该替别人代言。 */
+    let title = TREND_KIND_LABEL[kind];
+    if(kind === 'weight'){
+      const us = new Set(list.map(([id]) => ((state.exercises[id] || {}).unit || '').trim()));
+      const u = [...us];
+      title = (u.length === 1 && u[0]) ? `重量（${esc(u[0])}）` : '重量';
+    }
+    return `<div class="trend-block"><div class="trend-title">${title}</div>`
+      + trendChartSVG(list, kind, title) + trendLegend(list) + '</div>';
   }).join('');
 }
 function renderHistory(){

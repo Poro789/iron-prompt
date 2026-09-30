@@ -1479,6 +1479,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('步进到等于历史最好：徽章熄灭', prSet().isPR === false && !String(htmlTouchedHTML('ex-list')).includes('pr-badge'));
   T.state.logs.pop(); delete T.state.exercises.test_pr;
 
+  console.log('== 47. 趋势图标题单位跟随动作实际单位（v0.9.24）==');
+  const lbLog = (d, id, w) => ({ date: d, day: 'A', startedAt: 1, endedAt: 2, durationSec: 1, condition: null, exercises: [
+    { exerciseId: id, note: null, sets: [tset({ weight: w, reps: 5 })] }
+  ] });
+  T.state.exercises.test_lb1 = { ...mk('测试推举甲', 'weight'), unit: 'lb' };
+  T.state.exercises.test_lb2 = { ...mk('测试推举乙', 'weight'), unit: 'lb' };
+  const lbCharts = T.buildTrendCharts(T.buildTrends([
+    lbLog('2026-01-01', 'test_lb1', 100), lbLog('2026-01-05', 'test_lb1', 110),
+    lbLog('2026-01-02', 'test_lb2', 50), lbLog('2026-01-06', 'test_lb2', 55)
+  ]), 5);
+  check('全 lb 动作组标题写 lb 不写 kg', lbCharts.includes('重量（lb）') && !lbCharts.includes('重量（kg）'));
+  T.state.exercises.test_kg1 = { ...mk('测试推举丙', 'weight'), unit: 'kg' };
+  const mixCharts = T.buildTrendCharts(T.buildTrends([
+    lbLog('2026-01-01', 'test_lb1', 100), lbLog('2026-01-05', 'test_lb1', 110),
+    lbLog('2026-01-02', 'test_kg1', 80), lbLog('2026-01-06', 'test_kg1', 85)
+  ]), 5);
+  check('单位混用时标题不带任何单位（图例各自标注）', /class="trend-title">重量</.test(mixCharts) && !/重量（(kg|lb)）/.test(mixCharts));
+  delete T.state.exercises.test_lb1; delete T.state.exercises.test_lb2; delete T.state.exercises.test_kg1;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
