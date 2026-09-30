@@ -1576,6 +1576,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.state.logs = logsBak53;
   delete T.state.exercises.test53;
 
+  console.log('== 54. 单侧动作「加一组」沿用左/右（v0.9.31）==');
+  T.state.exercises.test54 = mk('测试单侧54', 'bodyweight');
+  T.state.program.A = [{ exerciseId: 'test54', sets: [{ type: 'work', weight: null, reps: 10, duration: null, rpe: 8, side: 'R' }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; delete T.state.sessions.B;
+  T.switchView('today'); T.curPos = 0; T.render();
+  clickExList(btnOf({ act: 'addset', ex: 0 }));
+  const sets54 = T.state.drafts.A[0].sets;
+  check('补的组继承最后一组的 side=R', sets54.length === 2 && sets54[1].side === 'R');
+  check('补的组卡片上带右侧标记', htmlTouchedHTML('ex-list').includes('右侧'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

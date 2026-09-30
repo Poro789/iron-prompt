@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.30';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.31';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -811,7 +811,7 @@ $('ex-list').addEventListener('click', e => {
       reps: last ? last.reps : null,
       duration: last ? last.duration : null,
       rpe: null,
-      side: null,
+      side: last ? (last.side ?? null) : null,   // 单侧动作补组：沿用最后一组的左/右（界面上没有改 side 的入口，不继承就丢）
       targetRpe: last ? last.targetRpe : null,
       targetRpeLabel: last ? (last.targetRpeLabel || '') : '',
       restAfter: null,
