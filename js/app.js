@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.59';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.60';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -963,7 +963,11 @@ $('ex-list').addEventListener('change', e => {
   const set = item.sets[+inp.dataset.set];
   if(!set) return;
   const wasPR = set.isPR === true;
-  const v = parseFloat(inp.value);
+  /* 中文输入法的全角字符（１２、全角句点。）先转半角再解析：
+   * 否则「12。5」会被 parseFloat 读成 12，小数位无声丢掉。 */
+  const v = parseFloat(String(inp.value)
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48))
+    .replace(/[．。]/g, '.'));
   if(inp.dataset.f === 'weight'){
     set.weight = isNaN(v) ? null : Math.max(0, round2(v));
   }else if(inp.dataset.f === 'duration'){

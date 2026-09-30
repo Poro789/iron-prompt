@@ -2073,6 +2073,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const m81b = T.migrate({ version: 1, program: { A: [], B: [] }, exercises: {} });
   check('合法的清空计划不被覆盖', m81b.program.A.length === 0 && Object.keys(m81b.exercises).length === 0);
 
+  console.log('== 82. 全角数字/句点输入先转半角（v0.9.60）==');
+  T.state.program.A = [{ section: '', exerciseId: 'test47', repsRange: '', sets: [{ type: 'work', weight: 10, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.render();
+  const inp82 = makeEl('fs-input-82');
+  inp82.dataset = { ex: '0', set: '0', f: 'weight' };
+  const fire82 = v => { inp82.value = v; handlers.get('ex-list|change')({ target: { closest: sel => sel === 'input' ? inp82 : null } }); };
+  fire82('12。5');
+  check('「12。5」解析为 12.5', T.getItems('A')[0].sets[0].weight === 12.5);
+  check('写回的是半角 12.5', String(inp82.value) === '12.5');
+  fire82('１２３');
+  check('全角数字「１２３」解析为 123', T.getItems('A')[0].sets[0].weight === 123);
+  delete T.state.drafts.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
