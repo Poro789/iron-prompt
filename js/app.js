@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.4';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.5';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1137,8 +1137,8 @@ function renderHistory(){
       const exName = (state.exercises[ex.exerciseId] || {}).name || ex.exerciseId;
       const sets = ex.sets.filter(isDone).map(s => {
         let base;
-        if(s.duration != null) base = s.duration + 's';
-        else if(s.weight != null) base = fmtW(s.weight) + '×' + (s.reps ?? '?');
+        if(s.duration != null) base = s.duration + ' 秒';
+        else if(s.weight != null) base = fmtW(s.weight) + 'kg×' + (s.reps ?? '?');
         else base = (s.reps ?? '?') + ' 次';
         return base + (s.rpe ? ` (RPE ${s.rpe})` : '') + (s.isPR ? ' 🔥' : '');
       }).join('，');
@@ -1384,7 +1384,7 @@ ${bg}
 
 以下是我最近的训练记录（JSON，${span}）：
 ${fence}json
-${JSON.stringify(data, null, 2)}
+${JSON.stringify(data)}
 ${fence}
 数据说明：done=false 的组是计划内未完成（数值为上次预填，非实际表现）；condition 为当日整体状态（佳/一般/差）；note 是动作级备注（用户手写的实际情况，如代偿、状态、计划外调整）；isPR=true 的组刷新了该动作的历史最好成绩；trends 由已完成组聚合（top 是该次最好一组的 weight/reps/duration/rpe），回看最近 ${data.trendsSpan || logs.length} 次（可能多于 recentLogs 条数）。
 
@@ -1407,7 +1407,7 @@ function runExport(withPrompt){
   const msg = $('export-msg');
   return copyText(text).then(ok => {
     const note = data.recentLogs.length
-      ? `最近 ${data.recentLogs.length} 次日志 + ${Object.keys(data.trends).length} 个动作趋势`
+      ? `最近 ${data.recentLogs.length} 次日志 + ${Object.keys(data.trends).length} 个动作趋势，共 ${(text.length / 1000).toFixed(1)}k 字符`
       : '暂无训练日志，仅含当前计划与动作库';
     msg.className = 'import-msg ' + (ok ? 'ok' : 'err');
     msg.textContent = ok

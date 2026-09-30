@@ -356,6 +356,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8'));
   check('manifest 合法且 start_url=./', manifest.start_url === './' && manifest.display === 'standalone');
   check('manifest 有图标', Array.isArray(manifest.icons) && manifest.icons.length > 0);
+  check('manifest 提供 192/512 PNG 与 maskable（只有 SVG 时 Android 安装不显示图标）',
+    manifest.icons.some(i => i.sizes === '192x192' && i.type === 'image/png')
+    && manifest.icons.some(i => i.sizes === '512x512' && i.type === 'image/png')
+    && manifest.icons.some(i => i.purpose === 'maskable'));
+  check('iOS 主屏图标指向 PNG（apple-touch-icon 不认 SVG）', /rel="apple-touch-icon" href="apple-touch-icon\.png"/.test(html));
+  check('图标 PNG 文件存在且是真 PNG', ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']
+    .every(f => fs.existsSync(path.join(__dirname, f))
+      && fs.readFileSync(path.join(__dirname, f)).slice(0, 8).toString('hex') === '89504e470d0a1a0a'));
   check('index.html 引用 manifest', html.includes('rel="manifest"'));
   check('app.js 注册 service worker', script.includes("register('sw.js')"));
   const sw = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
@@ -368,10 +376,12 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   })());
   check('sw.js 有 install/activate/fetch', ['install','activate','fetch'].every(k => sw.includes("'" + k + "'")));
   check('sw.js 只缓存成功响应（404 不会污染离线回退）', /if\(res\.ok\)/.test(sw) && /res\.status === 200/.test(sw));
-  check('deploy.yml 发布 css/js 与 PWA 资源', /cp index.html manifest.webmanifest icon.svg sw.js/.test(
-    fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
-    && /cp css\/style.css dist\/css\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8'))
-    && /cp js\/app.js dist\/js\//.test(fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8')));
+  const ciPrepare = fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8');
+  check('deploy.yml 发布 css/js 与全部 PWA 资源（新增静态文件必须同步加 cp）',
+    ['index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'sw.js']
+      .every(f => new RegExp('cp [^\\n]*?\\b' + f.replace('.', '\\.') + '\\b').test(ciPrepare))
+    && /cp css\/style.css dist\/css\//.test(ciPrepare)
+    && /cp js\/app.js dist\/js\//.test(ciPrepare));
 
   console.log('== 14. P1 全屏交互（二态 / 导航 / 备注） ==');
   T.resetRest();
@@ -585,7 +595,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('CI 版本戳有 VER 非空守卫', /test -n "\$VER"/.test(ci));
   check('测试夹具在 fixtures/ 下', fs.existsSync(path.join(__dirname, 'fixtures/plan-A.json'))
     && !fs.existsSync(path.join(__dirname, 'plan-A.json')));
-  check('README 结构清单与实际文件一致', ['index.html','css/style.css','js/app.js','manifest.webmanifest','icon.svg','sw.js','fixtures/plan-A.json']
+  check('README 结构清单与实际文件一致', ['index.html','css/style.css','js/app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','apple-touch-icon.png','sw.js','fixtures/plan-A.json']
     .every(f => readme.includes(f) && fs.existsSync(path.join(__dirname, f))));
 
   console.log('== 19. P3 应用内确认弹层 ==');
@@ -887,6 +897,34 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.curPos = T.flatPos('A').findIndex(p => p.exIdx === wi);
   T.render();
   check('力量动作卡片上不出现秒表', !/data-act="timer"/.test(htmlTouchedHTML('ex-list')));
+
+  console.log('== 29. v0.9.5 导出更短 + 历史详情可读 ==');
+  const exp29 = T.buildExport(4);
+  const prompt29 = T.buildPrompt(exp29);
+  const fence29 = (prompt29.match(/```json\n([\s\S]*?)\n```/) || [, ''])[1];
+  check('prompt 内的记录 JSON 是紧凑单行（缩进会让字符数翻倍）',
+    fence29.includes('"type":"ironlog-export"') && !fence29.includes('\n'));
+  check('紧凑后字符数明显少于缩进版', prompt29.length < JSON.stringify(exp29, null, 2).length * 0.7);
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true, writable: true,
+    value: Object.assign({}, globalThis.navigator, { clipboard: { writeText: async () => {} } })
+  });
+  T.switchView('history');
+  T.doExport();
+  check('复制成功后告知字符数（好判断该导出几次）', /k 字符/.test(textOf('export-msg')));
+  T.state.logs = [{
+    date: '2026-06-01', day: 'A', startedAt: 0, endedAt: 0, durationSec: 2400, condition: null,
+    exercises: [
+      { exerciseId: 'goblet_squat', sets: [{ done: true, weight: 20, reps: 8, duration: null, rpe: 8 }] },
+      { exerciseId: 'plank', sets: [{ done: true, weight: null, reps: null, duration: 45, rpe: null }] },
+      { exerciseId: 'clamshell', sets: [{ done: true, weight: null, reps: 15, duration: null, rpe: null }] }
+    ]
+  }];
+  T.render();
+  const hist29 = htmlTouchedHTML('hist-list');
+  check('历史详情：力量组写清单位 20kg×8', /20kg×8/.test(hist29));
+  check('历史详情：计时组写「45 秒」而不是 45s', /45 秒/.test(hist29) && !/45s/.test(hist29));
+  check('历史详情：自重组写「15 次」', /15 次/.test(hist29));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

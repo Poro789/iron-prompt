@@ -51,7 +51,7 @@ jobs:
       - name: Prepare dist
         run: |
           mkdir -p dist/css dist/js
-          cp index.html manifest.webmanifest icon.svg sw.js dist/
+          cp index.html manifest.webmanifest icon.svg icon-192.png icon-512.png apple-touch-icon.png sw.js dist/
           cp css/style.css dist/css/
           cp js/app.js dist/js/
 
