@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.107';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.108';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -285,8 +285,13 @@ function load(){
   try{
     const raw = localStorage.getItem(LS_KEY);
     if(raw){
-      const d = JSON.parse(raw);
+      let d = null;
+      try{ d = JSON.parse(raw); }
+      catch(e){ console.warn('Iron Log: 读取本地数据失败', e); }
       if(d && d.version === 1) return migrate(d);
+      /* 解析失败或来自更高版本（回滚后旧版读不懂新版数据）：不能迁移，
+       * 但也不能让下面的种子写入把它静默覆盖成全丢——先留一份救援副本。 */
+      try{ localStorage.setItem(LS_KEY + '.bak', raw); }catch(e){}
     }
   }catch(e){ console.warn('Iron Log: 读取本地数据失败', e); }
   const d = JSON.parse(JSON.stringify(SEED));

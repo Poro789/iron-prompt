@@ -149,7 +149,7 @@ const testScript = script + `
   toggleDrawer, closeDrawer,
   cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
-  localDateStr, fmtDate, trimSet, migrate, bindDrafts, clampPos,
+  localDateStr, fmtDate, trimSet, migrate, bindDrafts, clampPos, load,
   beep, unlockAudio, refreshPR,
   get restForPos(){ return restForPos; },
   get draft(){ return draft; },
@@ -3369,6 +3369,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   if(dead131.length) console.log('  未接住的 act: ' + dead131.join(','));
   check('131 没有接了没人发射的 act（死代码）', orphan131.length === 0);
   if(orphan131.length) console.log('  无人发射的 act: ' + orphan131.join(','));
+
+  /* ============================================================
+   * 132. 种子覆盖前留救援副本（v0.9.108）
+   * load() 遇到解析失败或更高版本的数据会回退到种子——之前种子写入会
+   * 把原内容直接覆盖掉，一次不可读=全丢。现在覆盖前先写到 LS_KEY+'.bak'。
+   * ============================================================ */
+  console.log('== 132. 坏数据/新版本数据被种子覆盖前留 .bak（v0.9.108）==');
+  const lsKey132 = 'ironlog.v1';
+  localStorage._d[lsKey132] = '{"version":1,"logs":[截断的坏 JSON';
+  const d132a = T.load();
+  check('132 坏数据仍得到可用的种子', d132a.version === 1 && Array.isArray(d132a.logs) && d132a.logs.length === 0);
+  check('132 坏数据原文留了 .bak 副本', localStorage._d[lsKey132 + '.bak'] === '{"version":1,"logs":[截断的坏 JSON');
+  localStorage._d[lsKey132] = JSON.stringify({ version: 2, logs: [{ fake: '更高版本写的' }] });
+  const d132b = T.load();
+  check('132 更高版本的数据不被旧版误读', d132b.version === 1 && d132b.logs.length === 0);
+  check('132 新版本数据同样留了 .bak 副本', JSON.parse(localStorage._d[lsKey132 + '.bak']).version === 2);
+  delete localStorage._d[lsKey132 + '.bak'];
+  localStorage._d[lsKey132] = JSON.stringify({ version: 1, logs: [], program: { A: [], B: [] }, exercises: {} });
+  T.load();
+  check('132 正常数据不会生成 .bak', localStorage._d[lsKey132 + '.bak'] === undefined);
+  localStorage._d[lsKey132] = JSON.stringify(T.state);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
