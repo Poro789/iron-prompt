@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 177);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 178);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4084,6 +4084,15 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('177 上限钳在 10', T.getItems('A')[0].sets[0].rpe === 10);
     T.state.program = saveProg177; T.state.exercises = saveEx177; T.state.settings.lastDay = saveDay177;
     delete T.state.exercises.e177;
+  }
+  console.log('== 178. 数字键盘 Enter 提示与回车推进流一致（v0.9.127）==');
+  // 回车推进流 js/app.js:1166-1181：重量框 Enter→次数框，次数/时长框 Enter→完成这一组。
+  // 键盘上的键名必须与这个行为一致：重量 enterkeyhint="next"，次数/时长 enterkeyhint="done"。
+  {
+    check('178 重量框：inputmode=decimal 且 enterkeyhint=next', script.includes('inputmode="decimal" enterkeyhint="next"'));
+    check('178 次数/时长框共 3 处 enterkeyhint=done（Enter=完成这一组）', (script.match(/enterkeyhint="done"/g) || []).length === 3);
+    check('178 不引入其它 enterkeyhint 值', (script.match(/enterkeyhint="([a-z]+)"/g) || []).every(s => s === 'enterkeyhint="next"' || s === 'enterkeyhint="done"'));
+    check('178 每个动态输入仍带 inputmode', (script.match(/class="fs-input"[^>]*inputmode=/g) || []).length === 4);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
