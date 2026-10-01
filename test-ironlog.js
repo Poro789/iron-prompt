@@ -3941,6 +3941,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.toast('普通提示169');
     check('169 普通提示不带 with-act、只写文案', !t169.classList.contains('with-act') && t169.textContent === '普通提示169');
   }
+  console.log('== 170. 趋势图全平值/零值不产生 NaN（测试加固，无应用改动）==');
+  // yRange=(yMax-yMin)||1、yMax=(hi*1.06)||1 两个兜底此前只靠人工推演：
+  // 两次同重量（lo=hi）与全零值是最容易翻车的两个输入，钉住。
+  {
+    T.state.exercises = {}; T.state.program = { A: [], B: [] };
+    T.state.exercises.e170 = { name: '平线动作170', mode: 'weight', unit: 'kg' };
+    const log170 = n => ({ date: `2026-04-0${n}`, day: 'A', startedAt: n, exercises: [
+      { exerciseId: 'e170', sets: [{ weight: 60, reps: 8, done: true }] }] });
+    const ch170 = T.buildTrendCharts(T.buildTrends([log170(1), log170(2)]), 5);
+    check('170 两次同重量：图里没有任何 NaN', !/NaN/.test(ch170));
+    check('170 平线仍画出两点折线与末点圆', /<polyline points="[\d., -]+"/.test(ch170) && /<circle cx=/.test(ch170));
+    T.state.exercises.e170z = { name: '零值动作170', mode: 'weight', unit: 'kg' };
+    const log170z = n => ({ date: `2026-04-0${n}`, day: 'A', startedAt: n, exercises: [
+      { exerciseId: 'e170z', sets: [{ weight: 0, reps: 5, done: true }] }] });
+    const chz = T.buildTrendCharts(T.buildTrends([log170z(1), log170z(2)]), 5);
+    check('170 全零值也不产生 NaN', !/NaN/.test(chz));
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
