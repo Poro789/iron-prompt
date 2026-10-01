@@ -3982,7 +3982,29 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 172);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 173);
+  }
+  console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
+  // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
+  // 剪贴板桩自带并成对还原（§161 教训），先置 copied=null。
+  {
+    const saveLogs173 = T.state.logs;
+    const saveProg173 = T.state.program, saveEx173 = T.state.exercises;
+    T.state.program = { A: [{ section: '', exerciseId: 'e173', sets: [{ type: 'work', weight: 10, reps: 8, duration: null, rpe: null, rpeLabel: '', side: null }] }], B: [] };
+    T.state.exercises = { e173: { name: '导出动作173', mode: 'weight', unit: 'kg' } };
+    const nav173prev = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, writable: true, value: { clipboard: { writeText: async t => { globalThis.copied = t; } } } });
+    globalThis.copied = null;
+    T.state.logs = [];
+    document.getElementById('export-n').value = '4';
+    await T.runExport(false);
+    const msg173 = String(document.getElementById('export-msg').textContent);
+    check('173 空日志提示「暂无训练日志」而不是虚报条数', msg173.includes('暂无训练日志') && !/最近 \d+ 次/.test(msg173));
+    const data173 = JSON.parse(globalThis.copied);
+    check('173 导出文本仍含当前计划与动作库', data173.program.A.length === 1 && data173.exercises.e173.name === '导出动作173');
+    check('173 空的 B 日不写进导出（粘回导入时不会被自己的空日拒掉）', !('B' in data173.program));
+    T.state.logs = saveLogs173; T.state.program = saveProg173; T.state.exercises = saveEx173;
+    if(nav173prev) Object.defineProperty(globalThis, 'navigator', nav173prev); else delete globalThis.navigator;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
