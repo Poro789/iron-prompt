@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.131';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.132';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -975,7 +975,14 @@ function patchRpe(exIdx, setIdx){
 }
 
 /* 全屏卡片交互（事件委托）：组导航 / 二态完成 / RPE 步进 / 加组 / 跳过动作 */
-$('ex-list').addEventListener('click', e => {
+/* 按住连发（v0.9.132）：训练中常见的是连续步进（5→15 次、+2.5kg×2），逐次点击最烦。
+ * 按住 0.4 秒后开始连发：首个间隔 200ms，每步缩短 20ms、下限 100ms；抬手即停。
+ * 抬手后跟随的那次 click 属于同一手势——连发已经步进过就吞掉它（holdFires）；
+ * 轻点（没触发连发）仍走原 click 路径，行为与旧版完全一致。 */
+let holdTimer = null, holdFires = 0, holdSeq = 0;
+function endHold(){ holdSeq++; if(holdTimer !== null){ clearTimeout(holdTimer); holdTimer = null; } }
+function exClick(e){
+  if(!e.holdStep && holdFires){ holdFires = 0; return; }
   const btn = e.target.closest('button[data-act]');
   if(!btn) return;
   unlockAudio();   // 用户手势：解锁提示音用的 AudioContext（iOS 上之后定时器里无法解锁）
@@ -1127,7 +1134,29 @@ $('ex-list').addEventListener('click', e => {
     saveSoon();
     if(!patchRpe(exIdx, setIdx)) renderToday();
   }
+}
+$('ex-list').addEventListener('click', exClick);
+/* 按住连发的触发端：只认 ± 步进和 RPE 步进按钮；多指触摸只认主指针。
+ * 连发用 setTimeout 链而不是 setInterval：间隔要逐步缩短（加速），且每次步进后
+ * 卡片可能局部更新，链式定时器天然跟着最新状态走。 */
+$('ex-list').addEventListener('pointerdown', e => {
+  if(e.isPrimary === false) return;
+  const btn = e.target && e.target.closest && e.target.closest('button.fs-step, button.rpe-btn');
+  if(!btn) return;
+  endHold(); holdFires = 0;
+  const seq = holdSeq;   // 本次手势的代次：抬手后端上若还排着一步（测试桩里 clearTimeout 不生效），代次不符直接作废
+  let delay = 200;
+  const tick = () => {
+    if(seq !== holdSeq) return;
+    holdFires++;
+    exClick({ holdStep: true, target: { closest: () => btn } });
+    delay = Math.max(100, delay - 20);
+    holdTimer = setTimeout(tick, delay);
+  };
+  holdTimer = setTimeout(tick, 400);
 });
+$('ex-list').addEventListener('pointerup', endHold);
+$('ex-list').addEventListener('pointercancel', endHold);
 
 /* 直接输入（change：失焦或回车时提交）：数值 / 动作备注 */
 $('ex-list').addEventListener('change', e => {

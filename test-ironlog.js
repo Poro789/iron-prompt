@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 196);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 197);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4529,6 +4529,52 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('196 变量定义扫描非空（防恒真）', defs196.size >= 8 && uses196.size >= 8);
     const undef196 = [...uses196].filter(u => !defs196.has(u));
     check('196 所有 var() 引用的变量都在 style.css 定义' + (undef196.length ? '（未定义：' + undef196.join(', ') + '）' : ''), undef196.length === 0);
+  }
+  console.log('== 197. ± 按住连发：长按自动步进、抬手吞掉同手势的 click（v0.9.132）==');
+  // js/app.js pointerdown 连发链：400ms 后起步，间隔 200→100ms 递减；抬手/取消即停（代次守卫 + clearTimeout）。
+  // 测试桩的 setTimeout 只排队不看延迟（runTimers 每次执行当前已排队的一轮），所以这里钉的是连发链的
+  // 结构行为：一次 runTimers = 一步；抬手后排着的旧步被代次守卫作废。轻点路径必须与旧版一致。
+  {
+    const saveProg197 = T.state.program, saveEx197 = T.state.exercises, saveDay197 = T.state.settings.lastDay;
+    T.state.settings.lastDay = 'A';
+    T.state.logs = []; delete T.state.drafts.A;
+    T.state.program = { A: [
+      { section: '', exerciseId: 'e197b', sets: [{ type: 'work', weight: null, reps: 5, duration: null, rpe: null, rpeLabel: '', side: null }] }
+    ], B: [] };
+    T.state.exercises = Object.assign({}, T.state.exercises, { e197b: { name: '俯卧撑197', mode: 'bodyweight', unit: null } });
+    const it197 = T.getItems('A')[0];
+    const pdH197 = handlers.get('ex-list|pointerdown');
+    const puH197 = handlers.get('ex-list|pointerup');
+    check('197 连发的 pointerdown/up/cancel 监听都已注册', !!pdH197 && !!puH197 && !!handlers.get('ex-list|pointercancel'));
+    const btn197 = { dataset: { act: 'step', ex: '0', set: '0', f: 'reps', dir: '1' } };
+    const pd197 = () => ({ isPrimary: true, target: { closest: sel => /fs-step/.test(sel) ? btn197 : null } });
+    pdH197(pd197());
+    runTimers();
+    check('197 连发第一步自动步进', it197.sets[0].reps === 6);
+    runTimers(); runTimers();
+    check('197 连发链持续步进（每轮一步）', it197.sets[0].reps === 8);
+    puH197({});
+    runTimers(); runTimers();
+    check('197 抬手后排队中的旧步被代次守卫作废（即停）', it197.sets[0].reps === 8);
+    clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'reps', dir: '1' }));
+    check('197 抬手后跟随的 click 被吞掉（同手势不多走一步）', it197.sets[0].reps === 8);
+    pdH197(pd197()); puH197({}); runTimers();
+    clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'reps', dir: '1' }));
+    check('197 轻点行为不变：只走 click 的一步', it197.sets[0].reps === 9);
+    pdH197({ isPrimary: true, target: { closest: () => null } });
+    runTimers();
+    check('197 非步进按钮长按不步进', it197.sets[0].reps === 9);
+    pdH197({ isPrimary: false, target: { closest: () => btn197 } });
+    runTimers();
+    check('197 多指触摸的次级指针不触发连发', it197.sets[0].reps === 9);
+    // RPE 按钮同样连发（inc：默认从 7.5 起步，+0.5/步）
+    const btnR197 = { dataset: { act: 'inc', ex: '0', set: '0', f: 'rpe' } };
+    pdH197({ isPrimary: true, target: { closest: sel => /rpe-btn/.test(sel) ? btnR197 : null } });
+    runTimers(); runTimers();
+    puH197({});
+    check('197 RPE 按钮长按连发（7.5 起两次 +0.5）', it197.sets[0].rpe === 8.5);
+    T.state.program = saveProg197; T.state.exercises = saveEx197; T.state.settings.lastDay = saveDay197;
+    delete T.state.exercises.e197b;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
