@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.116]
+
+### 修复
+- 浏览器禁用 JavaScript 时页面不再是一片无声的空白：现在有明确说明需要启用 JavaScript
+
 ## [0.9.115]
 
 ### 修复

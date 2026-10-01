@@ -3593,6 +3593,9 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('144 导航失败回退缓存首页', /req\.mode === 'navigate'/.test(sw144) && /caches\.match\('\.\/index\.html'\)/.test(sw144));
   }
 
+  // §145：JS 被禁用时页面不能是无声的空白——必须有 noscript 说明。
+  check('145 有 noscript 提示', /<noscript>[\s\S]*JavaScript[\s\S]*<\/noscript>/.test(html));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
