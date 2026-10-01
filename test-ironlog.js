@@ -3632,6 +3632,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     delete T.state.exercises.real147a; delete T.state.exercises.real147b;
   }
 
+  // §148：训练卡字段名一致性——模板里发出的 data-f 只能是 change/step/RPE 处理器
+  // 认识的四个字段（weight/reps/duration/rpe）。拼错的 data-f 会静默丢写入：
+  // change 委托 else 分支按 reps 处理，拼错名会写进错误字段或写不进去。
+  {
+    const fields148 = new Set();
+    let m148;
+    const reLit148 = /data-f="([a-z]+)"/g;
+    while((m148 = reLit148.exec(script))) fields148.add(m148[1]);
+    const reDyn148 = /\b(?:d|step)\('([a-z]+)'/g;
+    while((m148 = reDyn148.exec(script))) fields148.add(m148[1]);
+    const legal148 = new Set(['weight', 'reps', 'duration', 'rpe']);
+    check('148 data-f 只出现合法字段', [...fields148].every(f => legal148.has(f)));
+    check('148 四个字段都在模板中出现过', ['weight', 'reps', 'duration', 'rpe'].every(f => fields148.has(f)));
+    check('148 change 委托显式处理 weight 与 duration',
+      script.includes("dataset.f === 'weight'") && script.includes("dataset.f === 'duration'"));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
