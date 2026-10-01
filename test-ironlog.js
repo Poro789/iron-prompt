@@ -3806,6 +3806,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('159 数字输入带 inputmode（decimal/numeric）', /inputmode="decimal"/.test(script) && /inputmode="numeric"/.test(script));
   }
 
+  console.log('== 160. ± 步进用 round2 消浮点误差（测试加固，无应用改动）==');
+  // 步进 1.23 连点三次：裸加法是 3.6899999999999995，会被写进输入框和存档。
+  {
+    T.state.exercises.test160 = { ...mk('测试卧推160', 'weight'), unit: 'kg' };
+    T.state.program.A = [{ section: '', exerciseId: 'test160', repsRange: '', sets: [{ type: 'work', weight: 0, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+    delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+    T.state.settings.weightStep = 1.23;
+    T.render();
+    for(let i = 0; i < 3; i++) clickExList(btnOf({ act: 'step', ex: 0, set: 0, f: 'weight', dir: 1 }));
+    check('160 连点步进不积累浮点误差（1.23×3 = 3.69）', T.getItems('A')[0].sets[0].weight === 3.69);
+    T.state.settings.weightStep = 2.5;
+    delete T.state.exercises.test160; delete T.state.drafts.A; delete T.state.sessions.A;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
