@@ -124,8 +124,13 @@ header .ver{color:var(--muted);font-size:12px}
   vertical-align:middle;
 }
 /* 要点/避坑 */
-.ex-notes{margin:10px 0 4px;border-top:1px solid var(--border);padding-top:6px}
-.ex-notes summary{color:var(--muted);font-size:13px;cursor:pointer;user-select:none}
+.ex-notes{margin:10px 0 4px;border-top:1px solid var(--border);padding-top:2px}
+/* 整行折叠按钮（v0.9.135）：触达 ≥44px、自带 chevron 指示展开/收起——
+ * 原来是小字+系统小三角，训练间隙单手点不中。原生 details 语义保留（读屏可展开）。 */
+.ex-notes summary{display:flex;align-items:center;gap:6px;min-height:44px;color:var(--muted);font-size:14px;cursor:pointer;user-select:none;list-style:none}
+.ex-notes summary::-webkit-details-marker{display:none}
+.ex-notes summary::before{content:'▸';font-size:12px;transition:transform .15s}
+.ex-notes[open] summary::before{transform:rotate(90deg)}
 .ex-notes .note{font-size:13px;color:var(--muted);margin-top:6px;white-space:pre-line} /* 个人备注是 textarea、AI 要点常带换行：换行要按行显示 */
 .ex-notes .note b{color:var(--text);font-weight:600;margin-right:4px}
 /* 组内容（始终可见） */
