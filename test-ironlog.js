@@ -127,7 +127,9 @@ const testScript = script + `
   get restEndsAt(){ return restEndsAt; },
   get restStartsAt(){ return restStartsAt; },
   set restStartsAt(v){ restStartsAt = v; },
-  get restTotal(){ return restTotalSec(); },
+  // restTotalSec/setDoneState 曾住在 app.js 里但应用从不调用（纯测试桩）；
+  // 为了让发布代码不含死函数，桩搬到这里（语义逐字保持）。
+  get restTotal(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); },
   get restDone(){ return restDone; },
   set restStartsAt(v){ restStartsAt = v; },
   set restEndsAt(v){ restEndsAt = v; },
@@ -149,7 +151,7 @@ const testScript = script + `
   get openNotes(){ return openNotes; },
   startRestTimer, tickRest, finishRest, skipRest, resetRest, resumeClocks, askConfirm, answerConfirm,
   toggleDrawer, closeDrawer,
-  cycleDone, setDoneState, nextPos, prevPos, get curPos(){ return curPos; },
+  cycleDone, setDoneState: (day, exIdx, setIdx, val) => { const st = getItems(day)[exIdx].sets[setIdx]; if(st) st.done = val; }, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
   localDateStr, fmtDate, trimSet, migrate, bindDrafts, clampPos, load,
   beep, unlockAudio, refreshPR,

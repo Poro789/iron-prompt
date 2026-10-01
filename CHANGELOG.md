@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.123]
+
+### 变更
+- 移除应用代码里两个从未被调用的函数（一个组完成状态 setter、一个休息总时长 helper）：它们只被测试用到，现已搬进测试自己的桩，发布代码不再携带死函数，行为零变化
+
 ## [0.9.122]
 
 ### 修复

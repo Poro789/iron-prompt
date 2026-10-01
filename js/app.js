@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.122';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.123';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -746,11 +746,6 @@ function cycleDone(day, exIdx, setIdx){
     // 用户此刻可能已经手动切组，用 curPos 会把休息时长写到别的组上。
     startRestTimer({ exIdx, setIdx });
   }
-}
-function setDoneState(day, exIdx, setIdx, val){
-  const set = getItems(day)[exIdx].sets[setIdx];
-  if(!set) return;
-  set.done = val;
 }
 /* 已确认的组改了数字：PR 徽章必须跟着重算。
  * 确认 105 拿到 🔥 后改成 90，🔥 还挂着；确认 90 后 ± 加到 105 却没有 🔥——
@@ -1497,7 +1492,6 @@ function resetRest(){
   state.rest = null;
   if(restTimer){ clearInterval(restTimer); restTimer = null; }
 }
-function restTotalSec(){ return restEndsAt === null ? 0 : Math.round((restEndsAt - restStartsAt) / 1000); }
 
 /* iOS/Safari：AudioContext 必须在用户手势里创建或恢复，否则之后在定时器回调里
  * 调用 resume() 无效——休息结束提示音会永远静音。第一次点训练卡片任意按钮时解锁。 */
