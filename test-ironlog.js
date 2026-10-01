@@ -3696,6 +3696,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('151 非法 JSON 给出结构化错误', /^恢复失败/.test(String(msg151.textContent || '')));
   }
 
+  // §152：设置页每个输入都必须在渲染时被回填（renderSettings/renderPersonalPicker）。
+  // 新增设置只加 HTML 不加回填，备份恢复后输入框会显示旧值——静默的假象 bug。
+  {
+    const sIdx152 = html.indexOf('id="view-settings"');
+    const inputs152 = [];
+    const reIn152 = /<(?:input|textarea|select)[^>]*\bid="([^"]+)"/g;
+    let m152;
+    while((m152 = reIn152.exec(html.slice(sIdx152)))) inputs152.push(m152[1]);
+    const syncStart = script.indexOf('function renderSettings');
+    const syncSrc = script.slice(syncStart, script.indexOf('/* 首屏'));
+    check('152 找到设置渲染区', syncStart > 0 && inputs152.length >= 5);
+    for(const id of inputs152){
+      check(`152 设置输入 #${id} 在渲染时被回填`, syncSrc.includes(`$('${id}')`));
+    }
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
