@@ -3973,6 +3973,15 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('171 fs-exnote maxlength=500 与 slice(0,500) 成对',
       /class="fs-exnote" maxlength="500"/.test(app171) && /item\.note = inp\.value\.trim\(\)\.slice\(0, 500\)/.test(app171));
   }
+  console.log('== 172. 测试小节编号严格递增（测试自检，无应用改动）==');
+  // 编号重复/回绕会让「§N」引用失去指向（历史上真出现过写错的提交信息）。
+  // 允许跳号（历史小节删除过），不允许重复或倒退。
+  {
+    const self172 = fs.readFileSync(__filename, 'utf8');
+    const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
+    check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 172);
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
