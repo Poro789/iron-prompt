@@ -3755,6 +3755,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('时长步进越界钳到 1e6', T.getItems('A')[0].sets[0].duration === 1e6);
   delete T.state.exercises.test155; delete T.state.drafts.A; delete T.state.sessions.A;
 
+  console.log('== 156. 休息时长设置输入的钳位与写回（测试加固，无应用改动）==');
+  // rest-sec/warmup-rest-sec 的 change 处理器此前只被 migrate 侧（§110）覆盖，
+  // 设置页这条「纠正后写回输入框」的同款路径（js/app.js:2402-2415）没有直接测过。
+  {
+    const hRs = handlers.get('rest-sec|change');
+    const hWr = handlers.get('warmup-rest-sec|change');
+    const r0 = T.state.settings.restSec, w0 = T.state.settings.warmupRestSec;
+    const t156 = { value: '5000' }; hRs({ target: t156 });
+    check('156 休息秒数封顶 1800 并写回输入框', T.state.settings.restSec === 1800 && t156.value === 1800);
+    const t156b = { value: 'abc' }; hRs({ target: t156b });
+    check('156 非法休息秒数回默认 90', T.state.settings.restSec === 90 && t156b.value === 90);
+    const t156c = { value: '0' }; hRs({ target: t156c });
+    check('156 0 是合法的关闭值，不被纠正为默认', T.state.settings.restSec === 0 && t156c.value === 0);
+    const t156d = { value: '-5' }; hWr({ target: t156d });
+    check('156 负热身休息回默认 30', T.state.settings.warmupRestSec === 30 && t156d.value === 30);
+    T.state.settings.restSec = r0; T.state.settings.warmupRestSec = w0;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
