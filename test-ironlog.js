@@ -3743,6 +3743,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('154 空集合安全返回', e154 && e154.reps === null);
   }
 
+  console.log('== 155. ± 步进上限与手输同规矩（1e6）（v0.9.120）==');
+  T.state.exercises.test155 = { ...mk('测试深蹲155', 'weight'), unit: 'kg' };
+  T.state.program.A = [{ section: '', exerciseId: 'test155', repsRange: '', sets: [{ type: 'work', weight: 999999, reps: 10, duration: 999999, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; delete T.state.sessions.A; T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.state.settings.weightStep = 2.5;
+  T.render();
+  clickExList(btnOf({ act: 'step', ex: 0, set: 0, f: 'weight', dir: 1 }));
+  check('重量步进越界钳到 1e6（不会存出 migrate 会清成 null 的值）', T.getItems('A')[0].sets[0].weight === 1e6);
+  clickExList(btnOf({ act: 'step', ex: 0, set: 0, f: 'duration', dir: 1 }));
+  check('时长步进越界钳到 1e6', T.getItems('A')[0].sets[0].duration === 1e6);
+  delete T.state.exercises.test155; delete T.state.drafts.A; delete T.state.sessions.A;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
