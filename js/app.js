@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.138';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.139';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -865,7 +865,12 @@ function fullScreenHTML(day){
     ex.alternatives ? `<div class="note"><b>替代</b>${esc(ex.alternatives)}</div>` : '',
     ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
   ].join('');
-  const rpeTarget = set.targetRpe != null ? `<span class="rpe-target">目标 ${esc(set.targetRpe)}${set.targetRpeLabel ? ` <span class="rpe-target-label">${esc(set.targetRpeLabel)}</span>` : ''}</span>` : '';
+  /* RPE 数值块（v0.9.139）：未填时原来只有一个「–」，看不见将要记什么。
+   * 现在未填就把目标值作为占位显示（弱化色），点 ± 会落在 目标±0.5——和占位对得上。
+   * 占位已经显示目标数字时，「目标 N」文字不再重复；只有说明文字（rpeLabel）保留。 */
+  const rpeTarget = set.targetRpe != null ? (set.rpe == null
+    ? (set.targetRpeLabel ? `<span class="rpe-target-label">${esc(set.targetRpeLabel)}</span>` : '')
+    : `<span class="rpe-target">目标 ${esc(set.targetRpe)}${set.targetRpeLabel ? ` <span class="rpe-target-label">${esc(set.targetRpeLabel)}</span>` : ''}</span>`) : '';
   /* 语义色（v0.9.133）：红色留给破坏性操作（结束/删除/清空）。此前巨大的红 ✗ 占满卡片主体，
    * 深色页面上第一眼像「出错了」，且 ✗ 的心智是取消。未完成 = 中性描边 + 文字，完成 = 绿实底。 */
   const doneCls = set.done === true ? 'done' : 'undone';
@@ -911,7 +916,7 @@ function fullScreenHTML(day){
         <div class="rpe-row">
           <span class="rpe-label">RPE</span>
           <button class="rpe-btn" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-f="rpe" data-act="dec" aria-label="RPE 减 0.5">−</button>
-          <span class="rpe-val">${set.rpe ?? '–'}</span>
+          <span class="rpe-val${set.rpe == null ? ' ghost' : ''}">${set.rpe ?? (set.targetRpe ?? '–')}</span>
           <button class="rpe-btn" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-f="rpe" data-act="inc" aria-label="RPE 加 0.5">＋</button>
           ${rpeTarget}
         </div>
@@ -985,6 +990,7 @@ function patchRpe(exIdx, setIdx){
   const val = document.querySelector(`#ex-list .rpe-val`);
   if(!val) return false;
   val.textContent = item.sets[setIdx].rpe ?? '–';
+  val.classList.remove('ghost');   // 已记值：去掉占位弱化样式（v0.9.139）
   return true;
 }
 

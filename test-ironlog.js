@@ -3985,7 +3985,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 203);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 204);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4704,6 +4704,30 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.curPos = 0;
     T.state.sessions.A = sess203; T.state.drafts.A = draft203; T.state.program.A = prog203;
     delete T.state.exercises.ex203a; delete T.state.exercises.ex203b;
+  }
+  console.log('== 204. RPE 数值块：未填时把目标值作为占位显示，不再是一个孤零零的 –（v0.9.139）==');
+  {
+    const css204 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    check('204 占位弱化样式已定义', /\.rpe-val\.ghost\{/.test(css204));
+    const sess204 = T.state.sessions.A, draft204 = T.state.drafts.A;
+    const prog204 = T.state.program.A;
+    T.state.exercises.ex204 = { name: '测试动作204', mode: 'weight', unit: 'kg', tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' };
+    T.state.program.A = [{ exerciseId: 'ex204', sets: [{ weight: 10, reps: 10 }] }];
+    T.state.sessions.A = { startedAt: Date.now(), condition: null, items: [
+      { exerciseId: 'ex204', note: '', sets: [{ weight: 10, reps: 10, done: false, rpe: null, targetRpe: 8, targetRpeLabel: '留一次余力' }] }
+    ] };
+    T.switchDay('A'); T.curPos = 0;
+    let card204 = T.fullScreenHTML('A');
+    check('204 未填时显示目标占位且带 ghost 类', /class="rpe-val ghost">8</.test(card204));
+    check('204 占位显示时不重复「目标 8」文字', !/目标 8/.test(card204));
+    check('204 目标说明文字保留', card204.includes('留一次余力'));
+    clickExList(btnOf({ act: 'inc', ex: 0, set: 0, f: 'rpe' }));
+    check('204 点 + 记入 目标+0.5', T.state.sessions.A.items[0].sets[0].rpe === 8.5);
+    card204 = T.fullScreenHTML('A');
+    check('204 已记值：显示实际值无 ghost 类', /class="rpe-val">8\.5</.test(card204));
+    check('204 已记值：「目标 8」对照回来', /目标 8/.test(card204));
+    T.state.sessions.A = sess204; T.state.drafts.A = draft204; T.state.program.A = prog204;
+    delete T.state.exercises.ex204;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

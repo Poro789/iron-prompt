@@ -180,6 +180,8 @@ header .ver{color:var(--muted);font-size:12px}
 }
 .rpe-btn:active{background:var(--border)}
 .rpe-val{min-width:44px;text-align:center;font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+/* 未填时把目标值作为占位显示（v0.9.139）：弱化色，一眼能分清「计划值」和「已记值」 */
+.rpe-val.ghost{color:var(--muted);opacity:.55}
 .rpe-target{color:var(--muted);font-size:12px}
 .rpe-target-label{color:var(--muted);opacity:.75;margin-left:6px;padding-left:6px;border-left:1px solid var(--border)}
 /* 二态完成按钮（v0.9.133）：未完成 = 中性描边 + 文字「完成这组」，完成 = 绿实底。
