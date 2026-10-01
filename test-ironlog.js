@@ -115,8 +115,14 @@ global.Date.UTC = RealDate.UTC;
 global.Date.prototype = RealDate.prototype;
 function advanceClock(ms){ clockOffset += ms; }
 global.confirm = () => true;
-const windowHandlers = new Map();  // window 级事件（pagehide / load），供落盘与 SW 注册测试
-global.window = { addEventListener(t, fn){ windowHandlers.set(t, fn); }, scrollTo(){}, AudioContext: null };
+const windowHandlers = new Map();  // window 级事件（pagehide / popstate / load），供落盘与返回键测试
+const historyStub = {              // 极简历史栈：pushState 入栈，back() 出栈并同步触发 popstate
+  stack: [null],
+  pushState(s){ this.stack.push(s); },
+  back(){ if(this.stack.length > 1){ this.stack.pop(); const h = windowHandlers.get('popstate'); if(h) h(); } },
+  get state(){ return this.stack[this.stack.length - 1]; }
+};
+global.window = { addEventListener(t, fn){ windowHandlers.set(t, fn); }, scrollTo(){}, AudioContext: null, history: historyStub };
 Object.defineProperty(globalThis, 'navigator', {
   value: { clipboard: { writeText: async t => { globalThis.copied = t; } } },
   configurable: true, writable: true
@@ -3983,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 185);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 186);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4232,6 +4238,26 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     onClickDoc185({ target: null });                       // 无 closest 的异常目标也按外部处理
     check('185 异常目标按外部处理并关闭', !drawerEl185.classList.contains('open'));
     drawerEl185.classList.remove('open');
+  }
+  console.log('== 186. Android 返回键关闭菜单而不是退出应用（v0.9.131）==');
+  // js/app.js:531-547：开抽屉压一条历史；popstate 关抽屉；主动关闭同步回退一条，避免历史栈残留。
+  {
+    const onPop186 = windowHandlers.get('popstate');
+    check('186 注册了 popstate 处理', typeof onPop186 === 'function');
+    const h186 = window.history, depth0 = h186.stack.length;
+    T.toggleDrawer();                                       // 打开
+    check('186 打开抽屉压入一条历史', h186.stack.length === depth0 + 1 && !!(h186.state && h186.state.ironlogDrawer === true));
+    T.toggleDrawer();                                       // 汉堡键主动关闭 → 同步回退
+    check('186 主动关闭不留重复历史（再按返回不会白按一次）', h186.stack.length === depth0);
+    T.toggleDrawer();                                       // 再开
+    h186.back();                                            // 模拟按返回键（浏览器语义：先出栈再触发 popstate）
+    check('186 返回键关闭抽屉', !document.getElementById('drawer').classList.contains('open'));
+    check('186 返回键后历史栈不多弹也不少弹', h186.stack.length === depth0);
+    h186.back();                                            // 再按一次：抽屉已关，无副作用（真实场景=退出应用）
+    const expect186 = Math.max(1, depth0 - 1);              // 栈底时 back 无操作（浏览器语义=离开页面）
+    check('186 第二次返回无副作用', h186.stack.length === expect186 && !document.getElementById('drawer').classList.contains('open'));
+    document.getElementById('drawer').classList.remove('open');
+    h186.stack.length = depth0;                             // 还原栈深，不影响后续节
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

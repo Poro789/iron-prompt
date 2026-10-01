@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.130';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.131';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -518,6 +518,7 @@ function toggleDrawer(){
   $('hamburger-btn').setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   setBackdropInert(false); // 抽屉打开 → main 进 inert（Tab 不再逃进被遮罩盖住的控件）
   if(isOpen){ const c = document.querySelector('.drawer-close'); if(c) c.focus(); }
+  if(isOpen) drawerLayerPush(); else drawerLayerPop();
 }
 function closeDrawer(){
   const wasOpen = $('drawer').classList.contains('open');
@@ -526,7 +527,25 @@ function closeDrawer(){
   $('hamburger-btn').setAttribute('aria-expanded', 'false');
   setBackdropInert(false); // 抽屉关闭 → 解除 main 的 inert（若模态还开着则保持）
   if(wasOpen) $('hamburger-btn').focus();
+  drawerLayerPop();
 }
+/* Android 返回键应关闭菜单而不是退出应用：开抽屉时压入一条历史；
+ * 主动关闭（点项/点外/ESC/汉堡）同步回退一条——popstate 看到已关则空转，不会来回弹。 */
+let drawerPushed = false;
+function drawerLayerPush(){
+  if(drawerPushed || !window.history || !window.history.pushState) return;
+  try{ window.history.pushState({ ironlogDrawer: true }, ''); drawerPushed = true; }catch(e){}
+}
+function drawerLayerPop(){
+  if(!drawerPushed) return;
+  drawerPushed = false;
+  try{ if(window.history.state && window.history.state.ironlogDrawer) window.history.back(); }catch(e){}
+}
+window.addEventListener('popstate', () => {
+  if(!drawerPushed) return;
+  drawerPushed = false;
+  closeDrawer();
+});
 
 /* ---------------- 今日训练 ----------------
  * 草稿（未确认任何一组前的预填数据、当日状态选择）存在 state 里而不是内存变量：
