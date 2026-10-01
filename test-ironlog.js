@@ -3730,6 +3730,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('153 还原后与原来一致', logs153.length === saved153.length && logs153.every((e, i) => e === saved153[i]));
   }
 
+  // §154：topSet 是趋势/导出里「最好一组」的唯一口径：重量优先、同重量比次数；
+  // 无重量看时长（计时动作）；都没有看次数；空数组安全返回 {reps:null}。
+  {
+    const t154 = T.topSet([{weight:100,reps:5},{weight:100,reps:8},{weight:90,reps:12}]);
+    check('154 重量优先，同重量比次数', t154.weight === 100 && t154.reps === 8);
+    const d154 = T.topSet([{weight:null,duration:30},{weight:null,duration:45},{weight:null,duration:20}]);
+    check('154 无重量回落时长', d154.duration === 45);
+    const r154 = T.topSet([{weight:null,reps:6},{weight:null,reps:9}]);
+    check('154 无重量无时长回落次数', r154.reps === 9);
+    const e154 = T.topSet([]);
+    check('154 空集合安全返回', e154 && e154.reps === null);
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
