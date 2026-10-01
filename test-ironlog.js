@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 187);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 188);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4271,6 +4271,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const missing187 = [];
     for(const m of script.matchAll(/\$\('([^']+)'\)/g)) if(!defined187.has(m[1])) missing187.push(m[1]);
     check('187 每个 $() 引用的 id 都在页面或生成的模板里存在' + (missing187.length ? '（缺：' + missing187.join(', ') + '）' : ''), missing187.length === 0 && defined187.size >= 40);
+  }
+  console.log('== 188. 用到的每个类名都在 CSS 里有定义（测试加固，无应用改动）==');
+  // 拼错的类名不会报错，只会静默失去样式（比如 sumary-card 少个 m，卡片直接裸奔）。
+  // 静态 class="..." 与 classList 切换的类名都扫；含 ${} 模板表达式的属性跳过（那些由各自的行为测试覆盖）。
+  {
+    const css188 = require('fs').readFileSync('css/style.css', 'utf8');
+    const tokens = new Set();
+    for(const m of (html + script).matchAll(/class="([^"]*)"/g)){
+      if(m[1].includes('${')) continue;   // 含模板表达式的属性跳过（那些由各自的行为测试覆盖）
+      for(const t of m[1].split(/\s+/)) if(/^[a-z][a-z0-9-]*$/.test(t)) tokens.add(t);
+    }
+    for(const m of script.matchAll(/classList\.(?:add|remove|toggle|contains)\('([a-z][a-z0-9-]*)'/g)) tokens.add(m[1]);
+    const undef188 = [...tokens].filter(t => !new RegExp('\\.' + t + '(?![-\\w])').test(css188));
+    check('188 每个用到的类名都有样式定义' + (undef188.length ? '（未定义：' + undef188.join(', ') + '）' : ''), undef188.length === 0 && tokens.size >= 80);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
