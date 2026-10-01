@@ -2470,14 +2470,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.curPos = 0;
   T.switchView('today'); T.render();
   const h96n = htmlTouchedHTML('ex-list');
-  check('96 正常视图：第 1 个动作 + 热身段', /fs-num">1\./.test(h96n) && /fs-section">热身段/.test(h96n));
+  check('96 正常视图：标题无编号前缀 + 热身段（v0.9.140 去号）', !/fs-num/.test(h96n) && /fs-section">热身段/.test(h96n));
   T.state.logs = [{ date: '2026-01-01', day: 'A', startedAt: 777, condition: null,
     exercises: [{ exerciseId: 'e96b', sets: [{ type: 'work', weight: 50, reps: 8, duration: null, rpe: null, side: null, done: true }] }] }];
   T.switchView('history'); T.render();
   clickEl('hist-list', btnOf({ act: 'reeditlog', ts: '777', i: '0' }));
   T.switchView('today'); T.curPos = 0; T.render();
   const h96 = htmlTouchedHTML('ex-list');
-  check('96 再编辑卡片按计划编号（2.）', /fs-num">2\./.test(h96));
+  check('96 再编辑卡片标题无编号（编号已去掉，分区仍按计划）', !/fs-num/.test(h96));
   check('96 再编辑分区名跟着计划（主课段）', /fs-section">主课段/.test(h96) && !/fs-section">热身段/.test(h96));
   check('96 名称是实际编辑的动作 B96', /B96/.test(h96));
   T.state.sessions = { A: null, B: null };
@@ -3985,7 +3985,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 204);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 205);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4728,6 +4728,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('204 已记值：「目标 8」对照回来', /目标 8/.test(card204));
     T.state.sessions.A = sess204; T.state.drafts.A = draft204; T.state.program.A = prog204;
     delete T.state.exercises.ex204;
+  }
+  console.log('== 205. 动作标题去掉「N.」编号前缀：与分区行编号是两套，容易误读（v0.9.140）==');
+  {
+    const css205 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const app205 = fs.readFileSync(path.join(__dirname, 'js/app.js'), 'utf8');
+    check('205 fs-num 已从脚本与样式中移除', !/fs-num/.test(app205) && !/\.fs-num/.test(css205));
+    const sess205 = T.state.sessions.A, draft205 = T.state.drafts.A;
+    const prog205 = T.state.program.A;
+    T.state.exercises.ex205 = { name: '测试动作205', mode: 'weight', unit: 'kg', tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' };
+    T.state.program.A = [{ exerciseId: 'ex205', section: '2. 主课段', sets: [{ weight: 10, reps: 10 }] }];
+    T.state.sessions.A = { startedAt: Date.now(), condition: null, items: [
+      { exerciseId: 'ex205', note: '', sets: [{ weight: 10, reps: 10, done: false }] }
+    ] };
+    T.switchDay('A'); T.curPos = 0;
+    const card205 = T.fullScreenHTML('A');
+    check('205 标题只有名称，没有编号前缀', /class="fs-name">测试动作205</.test(card205));
+    check('205 分区行照常显示', /fs-section">2\. 主课段/.test(card205));
+    T.state.sessions.A = sess205; T.state.drafts.A = draft205; T.state.program.A = prog205;
+    delete T.state.exercises.ex205;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

@@ -113,7 +113,7 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-nav:active{background:var(--border)}
 .fs-title{flex:1;min-width:0}
 .fs-name{font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fs-num{color:var(--accent);font-size:14px;font-weight:600;margin-right:2px}
+/* 动作标题编号已去掉（v0.9.140）：标题前的「8.」和分区行的「2. 主课段」是两套编号，容易误读；位置由 ← → 导航和组数表达 */
 .pr-badge{color:var(--red);font-size:13px;font-weight:700;margin-left:6px}
 .session-progress{font-size:13px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
 .fs-muscles{color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
