@@ -3478,6 +3478,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   if(prevNavDesc) Object.defineProperty(global, 'navigator', prevNavDesc); else delete global.navigator;
   T.clearingAll = false;
 
+  /* ============================================================
+   * 138. uselast 无历史时说明原因，而不是静默无反应（v0.9.113）
+   * 「沿用上次」在没历史（或历史里没有当前模式字段）时原本什么都不发生，
+   * 用户只会以为按钮坏了。
+   * ============================================================ */
+  console.log('== 138. uselast 无历史给出说明（v0.9.113）==');
+  T.state.exercises.e138 = mk('测试无历史', 'weight');
+  T.state.program.A = [{ section: '', exerciseId: 'e138', repsRange: '', sets: [{ type: 'work', weight: null, reps: null, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+  delete T.state.drafts.A; T.state.sessions.A = null;
+  T.state.settings.lastDay = 'A'; T.curPos = 0;
+  T.render();
+  clickExList(btnOf({ act: 'uselast', ex: '0', set: '0' }));
+  const d138 = T.getItems('A')[0].sets[0];   // 草稿就是 state.drafts[day] 数组本身（bindDrafts）
+  check('138 无历史不填任何数字', d138.weight == null && d138.reps == null);
+  check('138 无历史时说明原因', String(document.getElementById('toast').textContent).includes('没有可沿用的上次记录'));
+  // 有历史时照常填数、不出提示（成功路径回归）
+  T.state.logs.push({ date: '2026-06-01', day: 'A', startedAt: 1700001380000, endedAt: 1700001390000, durationSec: 10, condition: null, exercises: [
+    { exerciseId: 'e138', note: null, sets: [tset({ weight: 42.5, reps: 8 })] }
+  ] });
+  T.render();
+  document.getElementById('toast').textContent = '';   // 清掉上一条提示残留：验证成功路径不再写 toast
+  clickExList(btnOf({ act: 'uselast', ex: '0', set: '0' }));
+  check('138 有历史照常沿用', d138.weight === 42.5 && d138.reps === 8);
+  check('138 成功路径不出提示', !String(document.getElementById('toast').textContent).includes('没有可沿用的上次记录'));
+  T.state.logs.pop(); delete T.state.exercises.e138; delete T.state.drafts.A; T.state.sessions.A = null; T.state.program.A = [];
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
