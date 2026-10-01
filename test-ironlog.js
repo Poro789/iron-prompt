@@ -139,7 +139,7 @@ const testScript = script + `
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
   insertLog,
   reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
-  buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
+  buildExport, buildTrends, topSet, doExport, doExportData, runExport, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
   buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA, copyText,
   renderBakRow, restoreBak, dropBak,
@@ -3818,6 +3818,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('160 连点步进不积累浮点误差（1.23×3 = 3.69）', T.getItems('A')[0].sets[0].weight === 3.69);
     T.state.settings.weightStep = 2.5;
     delete T.state.exercises.test160; delete T.state.drafts.A; delete T.state.sessions.A;
+  }
+
+  console.log('== 161. export-n 条数与非法值回退（测试加固，无应用改动）==');
+  // 导出条数来自 #export-n（js/app.js:2237 parseInt||4），此前从未被行为测试覆盖。
+  // 注意：末尾作用域的 navigator 已被后续剪贴板测试换过多次（没有 clipboard），必须自带桩并成对还原。
+  {
+    const saveLogs = T.state.logs;
+    const nav161prev = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, writable: true, value: { clipboard: { writeText: async t => { globalThis.copied = t; } } } });
+    globalThis.copied = null;
+    T.state.logs = Array.from({ length: 6 }, (_, i) => ({ date: '2024-01-0' + (i + 1), day: 'A', startedAt: 1700000000000 + i * 86400000, duration: 60, volume: 0, setsDone: 1, restTotalSec: null, exercises: [], condition: null, note: '' }));
+    const sel161 = document.getElementById('export-n');
+    sel161.value = '2';
+    await T.runExport(false);
+    check('161 export-n=2 只导出 2 条日志', globalThis.copied && JSON.parse(globalThis.copied).recentLogs.length === 2);
+    sel161.value = 'oops';
+    await T.runExport(false);
+    check('161 非法条数回退 4', globalThis.copied && JSON.parse(globalThis.copied).recentLogs.length === 4);
+    check('161 导出提示如实报告条数', String(document.getElementById('export-msg').textContent).includes('最近 4 次日志'));
+    T.state.logs = saveLogs;
+    if(nav161prev) Object.defineProperty(globalThis, 'navigator', nav161prev); else delete globalThis.navigator;
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
