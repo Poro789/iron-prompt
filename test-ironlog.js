@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 192);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 193);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4374,6 +4374,71 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.exercises = snapEx192;
     T.state.lastImport = snapImp192;
     T.state.sessions = snapSess192;
+  }
+  console.log('== 193. 产品闭环冒烟：导入→记录→导出→导入新方案→再记录→备份还原（测试加固，无应用改动）==');
+  // 产品承诺的闭环是「记录→导出→AI 分析→导入方案→执行」。各环节各自有钉，
+  // 但没有任何一条测试按真实顺序把整条链串起来——跨环节的接口漂移（快照格式 vs 导出解析、
+  // 导入后草稿失效、备份还原丢日志）只有串起来才会撞红。这里按用户视角跑一遍全程。
+  {
+    const snap193 = {
+      program: JSON.parse(JSON.stringify(T.state.program)),
+      ex: JSON.parse(JSON.stringify(T.state.exercises)),
+      settings: JSON.parse(JSON.stringify(T.state.settings)),
+      logs: T.state.logs, sessions: JSON.parse(JSON.stringify(T.state.sessions)),
+      lastImport: T.state.lastImport,
+    };
+    T.state.settings.lastDay = 'A';
+    T.state.sessions = { A: null, B: null };
+    T.clearDraft('A'); T.clearDraft('B');
+    const plan193 = (w) => JSON.stringify({
+      type: 'ai-plan',
+      exercises: { sq193: { name: '高脚杯深蹲193', mode: 'weight', unit: 'kg' } },
+      program: { A: [{ exerciseId: 'sq193', sets: [{ type: 'work', weight: w, reps: 5, duration: null, rpe: null }] }] },
+    });
+    const base193 = T.state.logs.length;
+    const r1a = T.importPlan(plan193(50));
+    check('193 闭环第1步：AI 方案导入成功' + (r1a && r1a.error ? '（' + r1a.error + '）' : ''), r1a && r1a.ok === true);
+    T.startSessionIfNeeded('A');
+    const sess193 = T.state.sessions.A;
+    check('193 开始训练会按新计划物化进行中的记录', !!sess193 && sess193.items.length === 1 && sess193.items[0].exerciseId === 'sq193');
+    if(sess193){
+      sess193.items[0].sets[0].done = true;
+      sess193.items[0].sets[0].weight = 50;
+      sess193.items[0].sets[0].reps = 5;
+    }
+    T.endSession();
+    check('193 结束训练后日志 +1 且进行中记录清空', T.state.logs.length === base193 + 1 && T.state.sessions.A === null);
+    const ex193 = T.buildExport(3);
+    const mine193 = (ex193.recentLogs || []).filter(l => (l.exercises || []).some(e => e.exerciseId === 'sq193'));
+    check('193 导出对象包含刚记录的那次训练（重量 50）',
+      mine193.length >= 1 && mine193.some(l => l.exercises.some(e => e.sets.some(s => s.weight === 50 && s.done === true))));
+    const r2a = T.importPlan(plan193(55));
+    check('193 闭环第3步：进阶方案（55kg）导入成功' + (r2a && r2a.error ? '（' + r2a.error + '）' : ''), r2a && r2a.ok === true);
+    const items193 = T.getItems('A');
+    check('193 新计划成为下一堂训练的目标（预填 55）', items193.length === 1 && items193[0].sets[0].weight === 55);
+    advanceClock(60000);   // 两次训练真实相隔几十分钟：startedAt 相同毫秒会被 insertLog 按 startedAt 去重（测试节奏太快的假象）
+    T.startSessionIfNeeded('A');
+    if(T.state.sessions.A){
+      T.state.sessions.A.items[0].sets[0].done = true;
+      T.state.sessions.A.items[0].sets[0].weight = 55;
+      T.state.sessions.A.items[0].sets[0].reps = 5;
+    }
+    T.endSession();
+    check('193 按新方案再记录一次，历史累计 +2', T.state.logs.length === base193 + 2);
+    const bak193 = JSON.stringify(T.buildBackup());
+    // restoreBackupText 是「解析→弹确认→应用」：先起 Promise，再用 answerConfirm 按下确认，最后取布尔结果。
+    const rbP193 = T.restoreBackupText(bak193);
+    await T.answerConfirm(true);
+    const rb193 = await rbP193;
+    check('193 备份→还原成功且不丢日志/方案',
+      rb193 === true && T.state.logs.length === base193 + 2 && T.state.program.A[0].sets[0].weight === 55);
+    T.state.program = snap193.program;
+    T.state.exercises = snap193.ex;
+    T.state.settings = snap193.settings;
+    T.state.logs = snap193.logs;
+    T.state.sessions = snap193.sessions;
+    T.state.lastImport = snap193.lastImport;
+    T.clearDraft('A'); T.clearDraft('B');
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
