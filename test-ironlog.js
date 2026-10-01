@@ -3893,6 +3893,15 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('165 背景已填写时原文进入提示词', T.buildPrompt(T.buildExport(4)).includes('体态问题：圆肩'));
     T.state.profile.background = saveBg165;
   }
+  console.log('== 166. SW 更新路径三要素齐备（测试加固，无应用改动）==');
+  // activate 必须删除非当前版本的旧缓存：caches.match 按创建顺序取首个命中，
+  // 旧缓存若不清理，离线回退可能返回最老那份 index.html，且存储随版本无限膨胀。
+  // skipWaiting + clients.claim 保证新版本不必「重启两次」才接管。
+  {
+    const sw166 = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
+    check('166 activate 删除非当前版本的旧缓存', /keys\.filter\(k => k !== CACHE\)/.test(sw166) && /caches\.delete\(k\)/.test(sw166));
+    check('166 install 有 skipWaiting、activate 有 claim', /skipWaiting\(\)/.test(sw166) && /clients\.claim\(\)/.test(sw166));
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
