@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 194);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 195);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4459,6 +4459,66 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('194 sw.js 顶层可执行' + (runErr194 ? '（' + runErr194 + '）' : ''), runErr194 === null);
     check('194 install/activate/fetch 监听在运行时确实注册',
       ['install', 'activate', 'fetch'].every(k => typeof swEvents194[k] === 'function'));
+  }
+  console.log('== 195. sw.js fetch 策略的行为级钉测（测试加固，无应用改动）==');
+  // §16/§162 只正则钉过缓存策略；这里真调 fetch 处理器，钉住实际行为：
+  // 非 GET / 非同域直接放行；导航网络优先且 404 不写缓存；导航离线回退命中缓存；
+  // 资源命中缓存直接回缓存（网络只作后台更新）；资源未命中走网络且非 200 不写缓存。
+  {
+    const vm195 = require('vm');   // §194 的 vm194 是块级作用域，这里要自己 require
+    const mkRes195 = (status, body) => ({ ok: status === 200, status, body, clone() { return this; } });
+    const store195 = new Map([['https://example.test/css/style.css', mkRes195(200, 'CACHED')]]);
+    const cache195 = {
+      match: r => Promise.resolve(store195.get(typeof r === 'string' ? r : r.url)),
+      put: (r, res) => { store195.set(typeof r === 'string' ? r : r.url, res); },
+    };
+    let net195 = [];
+    let fetchMode195 = '404';   // 控制沙箱 fetch：'404' 返回 404，'fail' 直接 reject
+    const self195 = {
+      location: { origin: 'https://example.test' },
+      addEventListener: () => {},
+      skipWaiting: () => {}, clients: { claim: () => {} },
+    };
+    const sandbox195 = {
+      self: self195,
+      caches: { open: () => Promise.resolve(cache195), keys: () => Promise.resolve([]), match: r => cache195.match(r) },
+      URL,
+      fetch: r => {
+        const u = typeof r === 'string' ? r : r.url;
+        net195.push(u);
+        if (fetchMode195 === 'fail') return Promise.reject(new Error('offline'));
+        return Promise.resolve(mkRes195(404, 'NOTFOUND'));
+      },
+    };
+    sandbox195.self.globalThis = sandbox195.self;
+    const swEvents195 = {};
+    self195.addEventListener = (t, fn) => { swEvents195[t] = fn; };
+    vm195.runInNewContext(sw, sandbox195, { filename: 'sw.js' });
+    const callFetch195 = async (req) => {
+      let out = 'NO_RESPOND';
+      swEvents195.fetch({ request: req, respondWith: p => { out = p; } });
+      if (out === 'NO_RESPOND') return { handled: false };
+      try { return { handled: true, res: await out }; }
+      catch (e) { return { handled: true, res: undefined }; }
+    };
+    const r1 = await callFetch195({ method: 'POST', url: 'https://example.test/save' });
+    const r2 = await callFetch195({ method: 'GET', url: 'https://other.example/x.css' });
+    check('195 非 GET 与非同域请求直接放行（不接管、不联网）',
+      !r1.handled && !r2.handled && net195.length === 0);
+    const r3 = await callFetch195({ method: 'GET', mode: 'navigate', url: 'https://example.test/' });
+    check('195 导航走网络，404 原样返回且不写进离线回退',
+      r3.handled && r3.res && r3.res.status === 404 && !store195.has('./index.html'));
+    store195.set('./index.html', mkRes195(200, 'INDEX'));
+    fetchMode195 = 'fail';
+    const r4 = await callFetch195({ method: 'GET', mode: 'navigate', url: 'https://example.test/' });
+    fetchMode195 = '404';
+    check('195 导航离线失败回退到缓存的 index.html', r4.handled && r4.res && r4.res.body === 'INDEX');
+    const r5 = await callFetch195({ method: 'GET', url: 'https://example.test/css/style.css' });
+    check('195 资源命中缓存直接回缓存副本（网络仅作后台更新）',
+      r5.handled && r5.res && r5.res.body === 'CACHED');
+    const r6 = await callFetch195({ method: 'GET', url: 'https://example.test/icon.svg' });
+    check('195 资源未命中走网络，非 200 不写入缓存',
+      r6.handled && r6.res && r6.res.status === 404 && !store195.has('https://example.test/icon.svg'));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
