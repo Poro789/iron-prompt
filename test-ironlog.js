@@ -3985,7 +3985,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 202);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 203);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4674,6 +4674,36 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('202 没有组时条隐藏', document.getElementById('daybar').style.display === 'none');
     T.state.program.A = prog202;
     T.render();
+  }
+  console.log('== 203. 下一动作预览行：点它直接跳到下一个动作的第一组（v0.9.138）==');
+  {
+    // 自带夹具：不依赖全局 program/exercises 的内容（前面有些节替换或删除过它们）
+    const sess203 = T.state.sessions.A, draft203 = T.state.drafts.A;
+    const mkEx203 = nm => ({ name: nm, mode: 'weight', unit: 'kg', tips: '', pitfalls: '', tempo: '', alternatives: '', personal: '' });
+    T.state.exercises.ex203a = mkEx203('测试动作A203');
+    T.state.exercises.ex203b = mkEx203('测试动作B203');
+    const prog203 = T.state.program.A;
+    T.state.program.A = [
+      { exerciseId: 'ex203a', sets: [{ reps: 10, weight: 5 }] },
+      { exerciseId: 'ex203b', sets: [{ reps: 10, weight: 10 }, { reps: 10, weight: 10 }] }
+    ];
+    T.state.sessions.A = { startedAt: Date.now(), condition: null, items: [
+      { exerciseId: 'ex203a', note: '', sets: [{ weight: 5, reps: 10, done: false }] },
+      { exerciseId: 'ex203b', note: '', sets: [{ weight: 10, reps: 10, done: false }, { weight: 10, reps: 10, done: false }] }
+    ] };
+    T.switchDay('A'); T.curPos = 0;
+    const card203 = T.fullScreenHTML('A');
+    check('203 卡片底部有下一动作行（名称+安排）', /class="fs-next"/.test(card203) && card203.includes('测试动作B203'));
+    check('203 下一动作行带 nextex 动作', /data-act="nextex"/.test(card203));
+    clickExList(btnOf({ act: 'nextex' }));
+    const pos203 = T.flatPos('A')[T.curPos];
+    check('203 点击后跳到下一个动作的第一组', pos203.exIdx === 1 && pos203.setIdx === 0 && T.curPos === 1);
+    // 最后一个动作：没有下一行
+    T.curPos = 1;
+    check('203 最后一个动作不显示下一行', !/fs-next/.test(T.fullScreenHTML('A')));
+    T.curPos = 0;
+    T.state.sessions.A = sess203; T.state.drafts.A = draft203; T.state.program.A = prog203;
+    delete T.state.exercises.ex203a; delete T.state.exercises.ex203b;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

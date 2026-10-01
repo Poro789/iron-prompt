@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.137';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.138';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -847,6 +847,17 @@ function fullScreenHTML(day){
     : Math.max(0, program.findIndex(pr => pr.exerciseId === item.exerciseId));
   const secName = (program[planIdx] || {}).section || '';
   const sectionLine = secName ? `<div class="fs-section">${esc(secName)}</div>` : '';
+  /* 下一动作预览（v0.9.138）：现在到下一个动作只能一组一组 ← → 翻，
+   * 卡片底部放一条「下一个 · 名称 · 组数安排」，点它直接跳到那个动作的第一组。 */
+  let nextExIdx = pos.exIdx + 1;
+  while(nextExIdx < items.length && items[nextExIdx].sets.length === 0) nextExIdx++;
+  const nextItem = nextExIdx < items.length ? items[nextExIdx] : null;
+  const nextExDef = nextItem ? state.exercises[nextItem.exerciseId] : null;
+  const nextLine = nextItem ? `<button class="fs-next" data-act="nextex" aria-label="跳到下一个动作：${esc(nextExDef ? nextExDef.name : nextItem.exerciseId)}">
+         <span class="fs-next-label">下一个</span>
+         <span class="fs-next-name">${esc(nextExDef ? nextExDef.name : nextItem.exerciseId)}</span>
+         <span class="fs-next-meta">${esc(targetLabel(nextItem))}</span>
+       </button>` : '';
   const notes = [
     ex.tips ? `<div class="note"><b>要点</b>${esc(ex.tips)}</div>` : '',
     ex.pitfalls ? `<div class="note"><b>避坑</b>${esc(ex.pitfalls)}</div>` : '',
@@ -913,6 +924,7 @@ function fullScreenHTML(day){
         <input class="fs-exnote" maxlength="500" data-ex="${pos.exIdx}" aria-label="该动作的备注（可选）" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
       </div>
       ${allUndone ? `<button class="skip-ex" data-act="skipex" aria-label="跳过此动作">跳过此动作 →</button>` : ''}
+      ${nextLine}
     </div>`;
 }
 
@@ -1017,6 +1029,24 @@ function exClick(e){
         curPos = count;
       } else {
         nextPos(day);
+      }
+    }
+    saveSoon(); renderToday();
+    scrollToTop();
+    return;
+  }
+
+  if(act === 'nextex'){
+    // 跳到下一个动作的第一组（预览行点击）：与 skipex 不同，不看完成状态，纯导航。
+    const pos = flatPos(day)[curPos];
+    if(pos){
+      const items = getItems(day);
+      let nextEx = pos.exIdx + 1;
+      while(nextEx < items.length && items[nextEx].sets.length === 0) nextEx++;
+      if(nextEx < items.length){
+        let count = 0;
+        for(let i = 0; i < nextEx; i++) count += items[i].sets.length;
+        curPos = count;
       }
     }
     saveSoon(); renderToday();
