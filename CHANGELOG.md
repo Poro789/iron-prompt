@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.119]
+
+### 修复
+- 声明 `color-scheme: dark`：深色主题下原生控件（下拉弹层、滚动条、输入框自动填充）不再被浏览器画成浅色，移动端观感一致
+
 ## [0.9.118]
 
 ### 修复

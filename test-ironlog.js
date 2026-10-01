@@ -3671,6 +3671,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     if(prevMM149) global.window.matchMedia = prevMM149;
   }
 
+  // §150：深色主题声明完整——:root 必须有 color-scheme:dark（原生控件跟随主题），
+  // 且 theme-color 与 --bg 一致（状态栏融合，两处改了其一必须同步另一处）。
+  {
+    const css150 = require('fs').readFileSync('css/style.css', 'utf8');
+    check('150 :root 声明 color-scheme:dark', /:root\{[^}]*color-scheme:\s*dark/.test(css150));
+    const bg150 = (css150.match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+    const tc150 = (html.match(/name="theme-color" content="([^"]+)"/) || [])[1];
+    check('150 theme-color 与 --bg 一致', !!bg150 && !!tc150 && tc150.toLowerCase() === bg150.toLowerCase());
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

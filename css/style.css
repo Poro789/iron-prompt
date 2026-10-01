@@ -1,4 +1,5 @@
 :root{
+  color-scheme:dark; /* 原生控件（下拉弹层、滚动条、自动填充）跟随深色主题 */
   --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#262b36;
   --text:#e6e9ef; --muted:#8b93a3; --accent:#4f8cff; --green:#3fb96f; --red:#e05252;
 }
