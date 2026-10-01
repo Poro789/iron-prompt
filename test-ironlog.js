@@ -115,7 +115,8 @@ global.Date.UTC = RealDate.UTC;
 global.Date.prototype = RealDate.prototype;
 function advanceClock(ms){ clockOffset += ms; }
 global.confirm = () => true;
-global.window = { addEventListener(){}, scrollTo(){}, AudioContext: null };
+const windowHandlers = new Map();  // window 级事件（pagehide / load），供落盘与 SW 注册测试
+global.window = { addEventListener(t, fn){ windowHandlers.set(t, fn); }, scrollTo(){}, AudioContext: null };
 Object.defineProperty(globalThis, 'navigator', {
   value: { clipboard: { writeText: async t => { globalThis.copied = t; } } },
   configurable: true, writable: true
@@ -3982,7 +3983,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 183);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 184);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4188,6 +4189,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     }
     check('183 index.html 每个可见输入控件都有 label 或 aria-label' + (unnamed183.length ? '（缺：' + unnamed183.join(', ') + '）' : ''), unnamed183.length === 0);
     check('183 全屏卡片生成的动作备注输入也有 aria-label', /class="fs-exnote"[^>]*aria-label=/.test(script));
+  }
+  console.log('== 184. 切后台/关页面都会强制落盘（测试加固，无应用改动）==');
+  // js/app.js:336-340：visibilitychange 的 hidden 分支和 pagehide 都调 flushSave。
+  // iOS 上 pagehide 常常不触发，hidden 分支才是移动端不丢数据的主路径；此前只钉了 visible 分支（§27），
+  // pagehide 注册被 window 桩吞掉——删掉任何一条都不会有测试红。
+  {
+    const onPagehide = windowHandlers.get('pagehide');
+    check('184 注册了 window pagehide 处理', typeof onPagehide === 'function');
+    const onVis184 = docHandlers.get('visibilitychange');
+    const saveClear184 = T.clearingAll, saveStep184 = T.state.settings.weightStep, saveVis184 = global.document.visibilityState;
+    T.clearingAll = false;   // §95 之后清除守卫为 true，save 是空转；这里要的是真实落盘路径
+    const read184 = () => (JSON.parse(global.localStorage._d['ironlog.v1'] || '{}').settings || {}).weightStep;
+    T.state.settings.weightStep = 7;
+    T.saveSoon();
+    check('184 防抖未到期时不落盘', read184() !== 7);
+    global.document.visibilityState = 'hidden';
+    onVis184();
+    check('184 切到后台立即强制落盘（iOS 上这是主要路径）', read184() === 7);
+    T.state.settings.weightStep = 8;
+    T.saveSoon();
+    onPagehide();
+    check('184 页面卸载（pagehide）也立即强制落盘', read184() === 8);
+    global.document.visibilityState = saveVis184;
+    T.state.settings.weightStep = saveStep184;
+    T.clearingAll = saveClear184;
+    runTimers();
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
