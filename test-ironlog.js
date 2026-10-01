@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 179);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 180);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4115,6 +4115,26 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('179 计划不带 personal 时保留本地值', r179b.ok && T.state.exercises.e179.personal === '本地备注');
     T.state.exercises = saveEx179; T.state.program = saveProg179; T.state.sessions = saveSess179;
     delete T.state.exercises.e179;
+  }
+  console.log('== 180. 连续两次确认（clearAll 模式）焦点链不断（v0.9.125 回归）==');
+  // clearAll js/app.js:2448-2456 是两次「打开→关闭」的 askConfirm：第二次的焦点来源
+  // 必须是第一次归还后的原触发者，modalOpener 不能断链。
+  {
+    const opener180 = makeEl('opener180');
+    opener180.focus = function(){ this.focused = (this.focused || 0) + 1; };
+    const ok180 = document.getElementById('confirm-ok-btn');
+    let n180 = 0; ok180.focus = () => { n180++; };
+    const prev180 = document.activeElement;
+    document.activeElement = opener180;
+    const p1 = T.askConfirm('第一步');
+    T.answerConfirm(true); await p1;
+    check('180 第一次确认关闭：焦点归还触发者', opener180.focused === 1);
+    document.activeElement = opener180; // 真实浏览器里焦点就在归还后的按钮上
+    const p2 = T.askConfirm('再次确认');
+    check('180 第二次确认打开：焦点进确定按钮', n180 === 2);
+    T.answerConfirm(true); await p2;
+    check('180 第二次确认关闭：焦点仍归还最初的触发者，链不断', opener180.focused === 2);
+    document.activeElement = prev180;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

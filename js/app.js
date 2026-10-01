@@ -2386,7 +2386,7 @@ function renderSettings(){
   if(undoBtn) undoBtn.style.display = state.lastImport ? '' : 'none';
   renderBakRow();
 }
-/* 设置页「动作个人备注」：编辑 state.exercises[id].personal（卡片上显示，导入计划时保留本地值）。
+/* 设置页「动作个人备注」：编辑 state.exercises[id].personal（卡片上显示；导入计划时计划留空则保留本地值）。
  * 此前该字段只能靠 AI 计划写入，用户自己没有任何入口能记。 */
 let personalExId = '';
 function renderPersonalPicker(){
