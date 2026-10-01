@@ -3958,6 +3958,21 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const chz = T.buildTrendCharts(T.buildTrends([log170z(1), log170z(2)]), 5);
     check('170 全零值也不产生 NaN', !/NaN/.test(chz));
   }
+  console.log('== 171. 每个自由文本输入框的 maxlength 与 JS 封顶成对（测试加固，无应用改动）==');
+  // 只改一边会悄悄丢字：maxlength 拦不住导入，JS slice 又会让输入框里的超长内容失焦即蒸发。
+  // 四处配对：restNote 200 / profile 2000 / personal 500 / 动作备注 500。
+  {
+    const html171 = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    const app171 = fs.readFileSync(path.join(__dirname, 'js/app.js'), 'utf8');
+    check('171 rest-note 输入框 maxlength=200 与 slice(0,200) 成对',
+      /id="rest-note"[^>]*maxlength="200"/.test(html171) && /settings\.restNote = e\.target\.value\.trim\(\)\.slice\(0, 200\)/.test(app171));
+    check('171 profile-bg maxlength=2000 与 slice(0,2000) 成对',
+      /id="profile-bg"[^>]*maxlength="2000"/.test(html171) && /profile\.background = e\.target\.value\.slice\(0, 2000\)/.test(app171));
+    check('171 personal-note maxlength=500 与 slice(0,500) 成对',
+      /id="personal-note"[^>]*maxlength="500"/.test(html171) && /exercises\[personalExId\]\.personal = e\.target\.value\.trim\(\)\.slice\(0, 500\)/.test(app171));
+    check('171 fs-exnote maxlength=500 与 slice(0,500) 成对',
+      /class="fs-exnote" maxlength="500"/.test(app171) && /item\.note = inp\.value\.trim\(\)\.slice\(0, 500\)/.test(app171));
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
