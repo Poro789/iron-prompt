@@ -3573,6 +3573,26 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.sessions.A = null; delete T.state.exercises.e142; T.state.program.A = [];
   }
 
+  // §143：index.html 里所有 onclick="fn(...)" 内联处理器必须对应 app.js 里真实存在的函数。
+  // §131 只覆盖 data-act 委托；内联 onclick 拼错/改名会静默失效（点击无反应），这里补静态扫描。
+  {
+    const handlers143 = new Set();
+    const re143 = /onclick="([a-zA-Z_$][\w$]*)\s*\(/g;
+    let m143; while((m143 = re143.exec(html))) handlers143.add(m143[1]);
+    check('143 内联处理器扫描到足够多', handlers143.size >= 10);
+    for(const fn of handlers143) check(`143 ${fn} 在 app.js 里有定义`, new RegExp('function ' + fn + '\\s*\\(').test(script));
+  }
+
+  // §144：sw.js 的更新机制必须保留——skipWaiting/clients.claim 让新版本在常驻打开的 PWA 里尽快生效，
+  // activate 清旧缓存防止存储膨胀，导航网络失败回退缓存的 index.html 保证离线可开。
+  {
+    const sw144 = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
+    check('144 sw 安装即跳过等待', /self\.skipWaiting\(\)/.test(sw144));
+    check('144 sw 激活即接管客户端', /self\.clients\.claim\(\)/.test(sw144));
+    check('144 sw 激活时清旧缓存', /caches\.keys\(\)/.test(sw144) && /caches\.delete\(/.test(sw144));
+    check('144 导航失败回退缓存首页', /req\.mode === 'navigate'/.test(sw144) && /caches\.match\('\.\/index\.html'\)/.test(sw144));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
