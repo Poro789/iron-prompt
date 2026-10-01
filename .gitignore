@@ -4,3 +4,6 @@ Thumbs.db
 
 # 旧版归档（完整保留在 git 历史中，不入库）
 archive/
+
+# 真实浏览器视觉冒烟的截图产物（tools/visual-check.js 生成）
+.visual/
