@@ -2,6 +2,8 @@
   "name": "Iron Log · 力量训练记录",
   "short_name": "Iron Log",
   "description": "力量训练记录 · 单文件纯前端 · 移动端优先 · 零后端",
+  "lang": "zh-CN",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

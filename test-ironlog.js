@@ -387,6 +387,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   console.log('== 13. P1 PWA 资源 ==');
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8'));
   check('manifest 合法且 start_url=./', manifest.start_url === './' && manifest.display === 'standalone');
+  check('manifest 声明语言（安装提示与无障碍按语言处理）', manifest.lang === 'zh-CN' && manifest.dir === 'ltr');
   check('manifest 有图标', Array.isArray(manifest.icons) && manifest.icons.length > 0);
   check('manifest 提供 192/512 PNG 与 maskable（只有 SVG 时 Android 安装不显示图标）',
     manifest.icons.some(i => i.sizes === '192x192' && i.type === 'image/png')
