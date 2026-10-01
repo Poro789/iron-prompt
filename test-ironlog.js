@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 181);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 182);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4144,6 +4144,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     // 抽屉遮罩的关闭机制是 index.html 的内联 onclick——不是文档级监听（v0.9.126 只是兜底）。
     check('181 遮罩存在且点击即 closeDrawer', /class="drawer-overlay"[^>]*onclick="closeDrawer\(\)"/.test(html));
     check('181 遮罩默认不接收点击（关闭状态不挡页面）', /\.drawer-overlay\{[^}]*pointer-events:none/.test(css181) && /\.drawer-overlay\.show\{[^}]*pointer-events:auto/.test(css181));
+  }
+  console.log('== 182. ± 步进下限：时长钳 0、次数钳 1（测试加固，无应用改动）==');
+  // js/app.js:1044-1048：时长 ±5 秒、次数 ±1，下限分别是 0 和 1，上限与手输同规矩 1e6。
+  // 时长为负会让小结与趋势的合计出错；次数 0 组没有训练意义（手输 0 是另一条已钉路径）。
+  {
+    const saveProg182 = T.state.program, saveEx182 = T.state.exercises, saveDay182 = T.state.settings.lastDay;
+    T.state.settings.lastDay = 'A';
+    T.state.logs = []; delete T.state.drafts.A;
+    T.state.program = { A: [
+      { section: '', exerciseId: 'e182t', sets: [{ type: 'work', weight: null, reps: null, duration: 0, rpe: null, rpeLabel: '', side: null }] },
+      { section: '', exerciseId: 'e182b', sets: [{ type: 'work', weight: null, reps: 1, duration: null, rpe: null, rpeLabel: '', side: null }] }
+    ], B: [] };
+    T.state.exercises = Object.assign({}, T.state.exercises, {
+      e182t: { name: '平板支撑182', mode: 'time', unit: null },
+      e182b: { name: '俯卧撑182', mode: 'bodyweight', unit: null }
+    });
+    const it182a = T.getItems('A')[0];
+    clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'duration', dir: '-1' }));
+    check('182 时长下限钳在 0（不会变负数把合计和显示搞坏）', it182a.sets[0].duration === 0);
+    clickExList(btnOf({ act: 'step', ex: '0', set: '0', f: 'duration', dir: '1' }));
+    check('182 时长步进 +5 秒', it182a.sets[0].duration === 5);
+    const it182b = T.getItems('A')[1];
+    clickExList(btnOf({ act: 'step', ex: '1', set: '0', f: 'reps', dir: '-1' }));
+    check('182 次数下限钳在 1', it182b.sets[0].reps === 1);
+    T.state.program = saveProg182; T.state.exercises = saveEx182; T.state.settings.lastDay = saveDay182;
+    delete T.state.exercises.e182t; delete T.state.exercises.e182b;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
