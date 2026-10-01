@@ -3548,6 +3548,31 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('140 确认删除副本', localStorage.getItem(bakKey) === null);
   }
 
+  // §141：导入确认弹窗的 desc 是多行的 planDiffText——它渲染在 .summary-card p 里，
+  // 该规则必须保留换行（pre-line），否则「按这份方案更新计划？」的 diff 挤成一行。
+  {
+    const css141 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const pRule = css141.match(/\.summary-card p\{[^}]*\}/);
+    check('141 确认弹窗描述保留换行', !!pRule && /white-space:\s*pre-line/.test(pRule[0]));
+    const confirmBlock = html.match(/id="confirm-overlay"[\s\S]*?<\/div>\s*<\/div>/);
+    check('141 确认描述确实在 summary-card 的 p 里', !!confirmBlock && /class="summary-card"/.test(confirmBlock[0]) && /<p id="confirm-desc">/.test(confirmBlock[0]));
+  }
+
+  // §142：结束训练时没有任何一组被确认过——不产生记录、给出提示、会话保留可继续。
+  {
+    T.state.exercises.e142 = { name: '测试动作', mode: 'weight', unit: 'kg' };
+    T.state.program.A = [{ exerciseId: 'e142', section: '', sets: [{ type: 'work', reps: 5, weight: 10 }] }];
+    T.state.drafts.A = null;
+    T.startSessionIfNeeded('A');
+    const n142 = T.state.logs.length;
+    document.getElementById('toast').textContent = '';
+    T.endSession();
+    check('142 零完成不新增记录', T.state.logs.length === n142);
+    check('142 提示还没有确认', String(document.getElementById('toast').textContent).includes('还没有确认任何一组'));
+    check('142 会话仍在可继续', !!T.state.sessions.A);
+    T.state.sessions.A = null; delete T.state.exercises.e142; T.state.program.A = [];
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
