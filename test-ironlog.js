@@ -3781,6 +3781,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('157 .summary-card 有 max-height 与 overflow-y:auto', !!card157 && card157[0].includes('max-height:calc(100dvh - 48px)') && card157[0].includes('overflow-y:auto'));
   }
 
+  console.log('== 158. 同方案重复导入的差异说明不为空、不误报增删（测试加固，无应用改动）==');
+  // 用户把 AI 原样返回的方案再贴一遍：desc 必须仍给出「N → N 个动作」的如实计数（确认框不会空白），
+  // 且不得出现「移除/新增/目标改为」的假改动。
+  {
+    const ex158 = { test158a: { name: '动作甲', mode: 'weight', unit: 'kg' }, test158b: { name: '动作乙', mode: 'bodyweight' } };
+    const it158 = [{ section: '', exerciseId: 'test158a', repsRange: '8-12', sets: [{ type: 'work', weight: 50, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }] },
+      { section: '', exerciseId: 'test158b', repsRange: '', sets: [{ type: 'work', weight: null, reps: 15, duration: null, rpe: null, rpeLabel: '', side: null }] }];
+    const saveP = T.state.program, saveE = T.state.exercises;
+    T.state.program = { A: JSON.parse(JSON.stringify(it158)), B: [] };
+    T.state.exercises = JSON.parse(JSON.stringify(ex158));
+    const diff158 = T.planDiffText({ program: { A: JSON.parse(JSON.stringify(it158)) }, exercises: ex158 });
+    check('158 同方案仍给出如实计数行', diff158.includes('A 日 2 → 2 个动作') && diff158.includes('动作库共 2 项'));
+    check('158 不出现假增删', !diff158.includes('移除') && !diff158.includes('新增') && !diff158.includes('目标改为'));
+    T.state.program = saveP; T.state.exercises = saveE;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
