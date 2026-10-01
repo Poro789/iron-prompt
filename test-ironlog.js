@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 197);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 198);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4573,8 +4573,38 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     runTimers(); runTimers();
     puH197({});
     check('197 RPE 按钮长按连发（7.5 起两次 +0.5）', it197.sets[0].rpe === 8.5);
+    clickExList(btnOf({ act: 'inc', ex: '0', set: '0', f: 'rpe' }));
+    check('197 连发手势收尾：跟随的 click 被吞，不留下未消费的计数', it197.sets[0].rpe === 8.5);
     T.state.program = saveProg197; T.state.exercises = saveEx197; T.state.settings.lastDay = saveDay197;
     delete T.state.exercises.e197b;
+  }
+  console.log('== 198. 完成按钮语义色：未完成中性描边+文字、完成绿实底，红色留给破坏性操作（v0.9.133）==');
+  {
+    const css198 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const undone198 = (css198.match(/\.fs-done\.undone\{([^}]*)\}/) || ['', ''])[1];
+    const done198 = (css198.match(/\.fs-done\.done\{([^}]*)\}/) || ['', ''])[1];
+    check('198 未完成按钮不用红色（红色只留给破坏性操作）', !!undone198 && !/var\(--red\)/.test(undone198));
+    check('198 完成态是绿色实底', !!done198 && /background:var\(--green\)/.test(done198));
+    const saveProg198 = T.state.program, saveEx198 = T.state.exercises, saveDay198 = T.state.settings.lastDay, savePos198 = T.curPos;
+    T.state.settings.lastDay = 'A'; T.curPos = 0;
+    T.state.logs = []; delete T.state.drafts.A;
+    T.state.program = { A: [
+      { section: '', exerciseId: 'e198b', sets: [
+        { type: 'work', weight: null, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null },
+        { type: 'work', weight: null, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }
+      ] }
+    ], B: [] };
+    T.state.exercises = Object.assign({}, T.state.exercises, { e198b: { name: '俯卧撑198', mode: 'bodyweight', unit: null } });
+    const card198 = T.fullScreenHTML('A');
+    check('198 未完成按钮：中性类 + 文字「✓ 完成这组」', /class="fs-done undone"[^>]*>✓ 完成这组<\/button>/.test(card198));
+    check('198 卡片上不再出现 ✗ 符号', !card198.includes('✗'));
+    check('198 aria-pressed 语义不变（未完成 false）', /aria-pressed="false"/.test(card198));
+    clickExList(btnOf({ act: 'confirm', ex: '0', set: '0' }));
+    const card198b = T.fullScreenHTML('A');
+    check('198 确认后：绿实底类 + 文字「✓ 已完成」', /class="fs-done done"[^>]*>✓ 已完成<\/button>/.test(card198b));
+    check('198 确认后 aria-pressed true', /aria-pressed="true"/.test(card198b));
+    T.state.program = saveProg198; T.state.exercises = saveEx198; T.state.settings.lastDay = saveDay198; T.curPos = savePos198;
+    delete T.state.exercises.e198b;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

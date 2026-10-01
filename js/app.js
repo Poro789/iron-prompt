@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.132';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.133';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -855,8 +855,10 @@ function fullScreenHTML(day){
     ex.personal ? `<div class="note"><b>个人</b>${esc(ex.personal)}</div>` : ''
   ].join('');
   const rpeTarget = set.targetRpe != null ? `<span class="rpe-target">目标 ${esc(set.targetRpe)}${set.targetRpeLabel ? ` <span class="rpe-target-label">${esc(set.targetRpeLabel)}</span>` : ''}</span>` : '';
+  /* 语义色（v0.9.133）：红色留给破坏性操作（结束/删除/清空）。此前巨大的红 ✗ 占满卡片主体，
+   * 深色页面上第一眼像「出错了」，且 ✗ 的心智是取消。未完成 = 中性描边 + 文字，完成 = 绿实底。 */
   const doneCls = set.done === true ? 'done' : 'undone';
-  const doneIcon = set.done === true ? '✓' : '✗';
+  const doneText = set.done === true ? '✓ 已完成' : '✓ 完成这组';
   const doneLabel = set.done === true ? '已完成' : '未完成';
   // 休息条同秒表口径：只在归属日的卡片上显示（applyPlan/刷新可以带着视图切到另一日，
   // 归属另一日的倒计时不该画进当前卡片；切日手势本身会先结算它）。
@@ -909,7 +911,7 @@ function fullScreenHTML(day){
           ${rpeTarget}
         </div>
         <button class="fs-done ${doneCls}" data-ex="${pos.exIdx}" data-set="${pos.setIdx}" data-act="confirm"
-                aria-label="完成状态：${doneLabel}" aria-pressed="${set.done === true ? 'true' : 'false'}">${doneIcon}</button>
+                aria-label="完成状态：${doneLabel}" aria-pressed="${set.done === true ? 'true' : 'false'}">${doneText}</button>
       </div>
       <div class="fs-foot">
         <button class="add-set" data-ex="${pos.exIdx}" data-act="addset">＋ 加一组</button>

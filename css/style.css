@@ -180,14 +180,15 @@ header .ver{color:var(--muted);font-size:12px}
 .rpe-val{min-width:44px;text-align:center;font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
 .rpe-target{color:var(--muted);font-size:12px}
 .rpe-target-label{color:var(--muted);opacity:.75;margin-left:6px;padding-left:6px;border-left:1px solid var(--border)}
-/* 二态完成按钮 */
+/* 二态完成按钮（v0.9.133）：未完成 = 中性描边 + 文字「完成这组」，完成 = 绿实底。
+ * 红色只留给破坏性操作——此前红 ✗ 是深色卡片上唯一高饱和元素，第一眼像「出错了」。 */
 .fs-done{
-  width:100%;height:64px;border-radius:14px;border:2px solid var(--border);
-  background:var(--panel2);color:var(--muted);font-size:26px;font-weight:700;
+  width:100%;height:56px;border-radius:14px;border:2px solid var(--muted);
+  background:none;color:var(--text);font-size:19px;font-weight:700;letter-spacing:1px;
 }
 .fs-done:active{transform:scale(.98)}
 .fs-done.done{background:var(--green);border-color:var(--green);color:#fff}
-.fs-done.undone{background:var(--red);border-color:var(--red);color:#fff}
+.fs-done.undone{background:none;border-color:var(--muted);color:var(--text)}
 /* 底部：加组 + 动作备注 */
 .fs-foot{display:flex;gap:10px;align-items:center}
 .fs-foot .add-set{flex:none;width:auto;padding:0 14px;height:40px;border-radius:10px;border:1px dashed var(--border);background:none;color:var(--muted);font-size:14px}
