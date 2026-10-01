@@ -3611,6 +3611,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('146 两类关联都扫描到', acCount >= 4 && forCount >= 3);
   }
 
+  // §147：个人备注选择器不认不存在的 id——下拉里选了个已被删掉的 id 时，
+  // renderPersonalPicker 必须回退到第一个真实动作（js/app.js:2373），
+  // 保存路径也不能为幽灵 id 创建动作条目（:2380 守卫）。
+  {
+    const sel147 = document.getElementById('personal-ex');
+    const note147 = document.getElementById('personal-note');
+    // 自带夹具：末尾作用域里全局 exercises 已被各段增删，这里放两个确定存在的动作（含中文名验证排序）
+    T.state.exercises.real147b = { name: '乙动作', mode: 'weight', unit: 'kg' };
+    T.state.exercises.real147a = { name: '甲动作', mode: 'weight', unit: 'kg', personal: '旧备忘' };
+    sel147.value = 'ghost147';
+    handlers.get('personal-ex|change')({ target: sel147 });
+    const selId147 = (String(sel147.innerHTML).match(/value="([^"]+)" selected/) || [])[1];
+    check('147 幽灵 id 回退为第一个真实动作（按名称 zh 排序）', selId147 === 'real147a');
+    check('147 备注框显示回退动作的备注', note147.value === '旧备忘');
+    note147.value = '§147 备忘';
+    handlers.get('personal-note|change')({ target: note147 });
+    check('147 保存落在回退动作上', T.state.exercises.real147a.personal === '§147 备忘');
+    check('147 不为幽灵 id 创建条目', T.state.exercises.ghost147 === undefined);
+    delete T.state.exercises.real147a; delete T.state.exercises.real147b;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
