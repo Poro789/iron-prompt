@@ -58,7 +58,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const waitReady = async () => { for (let i = 0; i < 60; i++) { if (await evaljs('document.readyState') === 'complete') { await sleep(300); return; } await sleep(200); } throw new Error('页面未就绪'); };
 
   let overflow = false;
+  const applyMetrics = () => send('Emulation.setDeviceMetricsOverride', { width: W, height: 844, deviceScaleFactor: 2, mobile: true });
   const audit = async label => {
+    await applyMetrics();   // 覆盖可能被导航/时序悄悄清掉——每次测量前重下发，视口读数才可信
     const r = await evaljs(`(() => {
       const vw = innerWidth, bad = [];
       for (const el of document.querySelectorAll('body *')) {
@@ -66,43 +68,52 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         if (!r.width && !r.height) continue;
         const st = getComputedStyle(el);
         if (st.visibility === 'hidden' || st.display === 'none') continue;
-        if (r.right > vw + 0.5 || r.left < -0.5) {
+        if (r.right > ${W} + 0.5 || r.left < -0.5) {
           const cls = (el.className && el.className.toString ? el.className.toString() : '').split(/\\s+/).filter(Boolean).join('.');
           bad.push(el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cls ? '.' + cls : '') + ' [' + Math.round(r.left) + '..' + Math.round(r.right) + ']');
         }
       }
       return { vw, scrollW: document.documentElement.scrollWidth, bad: bad.slice(0, 12) };
     })()`);
-    const hit = r.scrollW > r.vw + 1 || r.bad.length > 0;
+    const hit = r.scrollW > W + 1 || r.bad.length > 0 || r.vw !== W;
     if (hit) overflow = true;
-    console.log(`[${label}] viewport=${r.vw} scrollWidth=${r.scrollW} 溢出=${hit ? '有' : '无'}`);
+    console.log(`[${label}] viewport=${r.vw} scrollWidth=${r.scrollW} 溢出=${hit ? '有' : '无'}` + (r.vw !== W ? '（视口被内容撑开——内容宽超过目标宽）' : ''));
     if (r.bad.length) console.log('  越界元素:\n  ' + r.bad.join('\n  '));
     return r;
   };
   const shot = async name => {
+    await applyMetrics();
     const m = await send('Page.captureScreenshot', { format: 'png' });
     const f = path.join(outDir, `vc-${W}-${name}.png`);
     fs.writeFileSync(f, Buffer.from(m.result.data, 'base64'));
     console.log(`  截图 -> .visual/${path.basename(f)}`);
   };
 
-  await send('Emulation.setDeviceMetricsOverride', { width: W, height: 844, deviceScaleFactor: 2, mobile: true });
+  await applyMetrics();
   await waitReady();
   await audit('空状态首屏'); await shot('empty');
 
   // 填充真实形态数据：3 天前一次 A 日全完成的日志——真机上「点按沿用」「状态」等行就是靠它出现的。
+  // 注意：program 条目的键是 exerciseId（不是 id）；组要带 type——lastValues 会过滤热身组。
   await evaljs(`(() => {
     const d = new Date(Date.now() - 3 * 864e5);
     const ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     state.logs.push({ date: ds, startedAt: d.getTime(), endedAt: d.getTime() + 36e5, day: 'A',
-      exercises: state.program.A.slice(0, 6).map(it => ({ exerciseId: it.id, sets: it.sets.map(s => ({ weight: s.weight, reps: s.reps, duration: s.duration, done: true })) })) });
+      exercises: state.program.A.map(it => ({ exerciseId: it.exerciseId, sets: it.sets.map(s => ({ type: s.type, weight: s.weight, reps: s.reps, duration: s.duration, done: true })) })) });
     save();
     return true;
   })()`);
   await send('Page.reload');
   await waitReady();
   // 页面重新加载会清掉设备度量覆盖——重载后必须重新下发，否则视口退回窗口最小宽。
-  await send('Emulation.setDeviceMetricsOverride', { width: W, height: 844, deviceScaleFactor: 2, mobile: true });
+  await applyMetrics();
+  // 首张卡是热身动作（热身组不显示「点按沿用」）——把游标挪到当天第一个正式组，让该行进入截图。
+  await evaljs(`(() => {
+    const day = state.settings.lastDay;
+    curPos = flatPos(day).findIndex(p => getItems(day)[p.exIdx].sets[p.setIdx].type !== 'warmup');
+    render();
+    return curPos;
+  })()`);
   await audit('有数据首屏'); await shot('filled');
 
   for (const v of ['trends', 'history', 'settings']) {

@@ -3985,7 +3985,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 200);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 201);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4638,6 +4638,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('200 隐藏系统默认三角（两套引擎都隐藏）', /list-style:none/.test(sum200) && /::-webkit-details-marker\{display:none\}/.test(css200));
     check('200 自定义 chevron 且展开时旋转 90°', /\.ex-notes summary::before\{content:'▸'/.test(css200) && /\.ex-notes\[open\] summary::before\{transform:rotate\(90deg\)/.test(css200));
     check('200 原生 details 语义与按动作记忆展开态不变', /details class="ex-notes" data-notes=/.test(script) && /openNotes\[day \+ ':' \+ d\.dataset\.notes\]/.test(script));
+  }
+  console.log('== 201. 卡片底部行可换行：备注框不再把 390px 视口撑到 478（v0.9.136 修复）==');
+  // 多组动作时 .fs-foot 里有 加一组 + 删最后一组 + 备注输入 三件；input 的固有最小宽让整行 478px，
+  // 备注框被裁在屏幕外（CDP 390px 审计实测 viewport 被内容撑开到 478）。
+  {
+    const css201 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const foot201 = (css201.match(/\.fs-foot\{([^}]*)\}/) || ['', ''])[1];
+    const note201 = (css201.match(/\.fs-exnote\{([^}]*)\}/) || ['', ''])[1];
+    check('201 底部行允许换行', /flex-wrap:wrap/.test(foot201));
+    check('201 备注框可收缩（min-width:0 + 有基准的 flex）', /min-width:0/.test(note201) && /flex:1 1 /.test(note201));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

@@ -193,11 +193,14 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-done.done{background:var(--green);border-color:var(--green);color:#fff}
 .fs-done.undone{background:none;border-color:var(--muted);color:var(--text)}
 /* 底部：加组 + 动作备注 */
-.fs-foot{display:flex;gap:10px;align-items:center}
+/* 底部按钮行（v0.9.136 修复）：多组动作时「加一组+删最后一组+备注」三件并排，
+ * 备注输入框的固有最小宽把整行撑到 478px——390px 视口下备注框被裁在屏幕外。
+ * 现在允许换行：放不下时备注框整行落到第二行（min-width:0 让它可压缩）。 */
+.fs-foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .fs-foot .add-set{flex:none;width:auto;padding:0 14px;height:40px;border-radius:10px;border:1px dashed var(--border);background:none;color:var(--muted);font-size:14px}
 .fs-foot .add-set:active{background:var(--panel2)}
 .fs-exnote{
-  flex:1;height:40px;padding:0 12px;font-size:16px;background:none;   /* 16px：iOS 上小于 16px 的输入框聚焦会把整页放大 */
+  flex:1 1 160px;min-width:0;height:40px;padding:0 12px;font-size:16px;background:none;   /* 16px：iOS 上小于 16px 的输入框聚焦会把整页放大 */
   border:1px solid var(--border);border-radius:10px;color:var(--text);
 }
 .fs-exnote::placeholder{color:var(--muted)}
