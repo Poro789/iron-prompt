@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 176);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 177);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4065,6 +4065,25 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.closeDrawer();
     clickH176({ target: { closest: () => null } });
     check('176 抽屉未开时点击无操作', !drawer176.classList.contains('open'));
+  }
+  console.log('== 177. RPE 步进器：从计划目标起步，钳位 1–10（测试加固，无应用改动）==');
+  // js/app.js:1105-1107：base = set.rpe ?? set.targetRpe ?? (inc?7.5:8.5)；inc 钳 10、dec 钳 1。
+  // 下限 1 是拉伸/呼吸（目标 RPE 2–4）能记真实强度的关键，此前从未钉过。
+  {
+    const saveProg177 = T.state.program, saveEx177 = T.state.exercises, saveDay177 = T.state.settings.lastDay;
+    T.state.settings.lastDay = 'A';
+    T.state.logs = [];
+    T.state.program = { A: [{ section: '', exerciseId: 'e177', sets: [{ type: 'work', weight: 10, reps: 8, duration: null, rpe: 6, rpeLabel: '', side: null }] }], B: [] };
+    T.state.exercises = Object.assign({}, T.state.exercises, { e177: { name: 'RPE 动作177', mode: 'weight', unit: 'kg' } });
+    const bR177 = act => clickExList(btnOf({ act, f: 'rpe', ex: '0', set: '0' }));
+    bR177('dec');
+    check('177 没记过 RPE 时从计划里的 targetRpe 起步（6 → 5.5）', T.getItems('A')[0].sets[0].rpe === 5.5);
+    for(let i = 0; i < 20; i++) bR177('dec');
+    check('177 下限钳在 1：拉伸/呼吸这类低强度也能记', T.getItems('A')[0].sets[0].rpe === 1);
+    for(let i = 0; i < 30; i++) bR177('inc');
+    check('177 上限钳在 10', T.getItems('A')[0].sets[0].rpe === 10);
+    T.state.program = saveProg177; T.state.exercises = saveEx177; T.state.settings.lastDay = saveDay177;
+    delete T.state.exercises.e177;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
