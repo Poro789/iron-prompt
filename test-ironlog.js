@@ -3854,6 +3854,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     }));
     check('162 离线回退依赖的 ./index.html 在 SHELL 里', entries.includes('./index.html'));
   }
+  console.log('== 163. 剪贴板不可用时导出文本仍完整可见（测试加固，无应用改动）==');
+  // copyText 的两级回退（js/app.js:2154-2170）：clipboard API → execCommand → 手动全选。
+  // 不变量：无论复制成败，#export-text 必须完整包含待复制文本，且提示引导手动复制。
+  {
+    const saveLogs163 = T.state.logs;
+    const nav163prev = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, writable: true, value: { } }); // 无 clipboard，execCommand 也未定义
+    T.state.logs = [{ date: '2024-02-01', day: 'A', startedAt: 1706745600000, duration: 60, volume: 100, setsDone: 1, restTotalSec: null, exercises: [], condition: null, note: '' }];
+    document.getElementById('export-n').value = '4';
+    await T.runExport(false);
+    const ta163 = document.getElementById('export-text');
+    let parsed163 = null;
+    try{ parsed163 = JSON.parse(ta163.value); }catch(e){}
+    check('163 复制失败时 textarea 仍完整包含导出 JSON', parsed163 && parsed163.recentLogs.length === 1);
+    check('163 复制失败提示引导手动全选', String(document.getElementById('export-msg').textContent).includes('手动全选'));
+    T.state.logs = saveLogs163;
+    if(nav163prev) Object.defineProperty(globalThis, 'navigator', nav163prev); else delete globalThis.navigator;
+  }
   __finished = true;
   process.exit(fail ? 1 : 0);
 })();
