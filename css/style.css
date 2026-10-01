@@ -293,6 +293,8 @@ header .ver{color:var(--muted);font-size:12px}
 .summary-card{
   width:100%;max-width:360px;background:var(--panel);border:1px solid var(--border);
   border-radius:16px;padding:20px;text-align:center;
+  /* 导入确认的 desc 可能很长（整份方案的差异清单）：卡片限高内部滚动，按钮才不会被顶出屏幕 */
+  max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px);overflow-y:auto;overscroll-behavior:contain;
 }
 .summary-card h2{margin:0 0 12px;font-size:18px}
 .summary-card .stat{font-size:14px;color:var(--muted);margin:4px 0}

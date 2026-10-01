@@ -3773,6 +3773,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.settings.restSec = r0; T.state.settings.warmupRestSec = w0;
   }
 
+  console.log('== 157. 弹层卡片限高内滚，长 desc 不顶走按钮（v0.9.121）==');
+  // 导入确认会把整份方案差异列在 desc 里，22 个动作的方案能把「取消/导入」按钮顶出屏幕外。
+  {
+    const css157 = require('fs').readFileSync('css/style.css', 'utf8');
+    const card157 = css157.match(/\.summary-card\{[^}]*\}/);
+    check('157 .summary-card 有 max-height 与 overflow-y:auto', !!card157 && card157[0].includes('max-height:calc(100dvh - 48px)') && card157[0].includes('overflow-y:auto'));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
