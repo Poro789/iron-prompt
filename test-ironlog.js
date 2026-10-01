@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 188);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 189);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4285,6 +4285,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     for(const m of script.matchAll(/classList\.(?:add|remove|toggle|contains)\('([a-z][a-z0-9-]*)'/g)) tokens.add(m[1]);
     const undef188 = [...tokens].filter(t => !new RegExp('\\.' + t + '(?![-\\w])').test(css188));
     check('188 每个用到的类名都有样式定义' + (undef188.length ? '（未定义：' + undef188.join(', ') + '）' : ''), undef188.length === 0 && tokens.size >= 80);
+  }
+  console.log('== 189. 抽屉开关时焦点进关闭按钮、归还汉堡键（测试加固，无应用改动）==');
+  // js/app.js:520/:529：键盘/读屏用户开抽屉后落在第一个可操作项，关抽屉后回到触发它的汉堡键；
+  // 确认框/小结的焦点归还已钉（§175/§180），抽屉这条此前没钉。
+  {
+    const ham189 = document.getElementById('hamburger-btn');
+    let closeFocus189 = 0, hamFocus189 = 0;
+    const closeStub189 = makeEl('drawer-close');
+    closeStub189.focus = () => { closeFocus189++; };
+    ham189.focus = () => { hamFocus189++; };
+    patchTarget = { matches: sel => sel === '.drawer-close', node: closeStub189 };
+    T.toggleDrawer();                                        // 开
+    check('189 开抽屉后焦点进入抽屉内第一个可操作项', closeFocus189 === 1);
+    T.closeDrawer();                                         // 经遮罩/ESC/菜单项关闭（汉堡键关闭时焦点本就在汉堡上，无需归还）
+    check('189 关抽屉后焦点归还汉堡键', hamFocus189 === 1);
+    patchTarget = null;
+    ham189.focus = () => {};                               // 还原桩的 no-op focus，不影响后续节
+    document.getElementById('drawer').classList.remove('open');
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
