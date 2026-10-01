@@ -3649,6 +3649,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
       script.includes("dataset.f === 'weight'") && script.includes("dataset.f === 'duration'"));
   }
 
+  // §149：系统「减弱动态效果」贯通 CSS 与 JS——CSS 有 reduced-motion 兜底；
+  // JS 所有回顶走 scrollToTop()，matchMedia 命中时 behavior:'auto'，否则保持 'smooth'。
+  {
+    const css149 = require('fs').readFileSync('css/style.css', 'utf8');
+    check('149 CSS 有 reduced-motion 兜底', css149.includes('prefers-reduced-motion:reduce'));
+    check('149 平滑滚动只存在于 scrollToTop 一处',
+      (script.match(/behavior:/g) || []).length === 1 && script.includes("behavior: rm ? 'auto' : 'smooth'"));
+    check('149 回顶调用全部走 scrollToTop', (script.match(/scrollToTop\(\)/g) || []).length >= 7);
+    const prevScroll149 = global.window.scrollTo, prevMM149 = global.window.matchMedia;
+    let opts149 = null;
+    global.window.scrollTo = o => { opts149 = o; };
+    global.window.matchMedia = () => ({ matches: true });
+    T.switchView('history');
+    check('149 减弱动态时瞬时回顶', opts149 && opts149.top === 0 && opts149.behavior === 'auto');
+    delete global.window.matchMedia;
+    opts149 = null;
+    T.switchView('today');
+    check('149 默认仍平滑回顶', opts149 && opts149.behavior === 'smooth');
+    global.window.scrollTo = prevScroll149;
+    if(prevMM149) global.window.matchMedia = prevMM149;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

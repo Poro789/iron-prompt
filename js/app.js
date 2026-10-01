@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.117';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.118';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -471,6 +471,11 @@ document.addEventListener('keydown', e => {
 
 /* ---------------- 视图切换（v0.9：抽屉导航） ---------------- */
 let currentView = 'today';
+/* 回顶：系统开启「减弱动态效果」时用瞬时滚动（CSS 侧的过渡禁用见 style.css 末尾） */
+function scrollToTop(){
+  const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: 0, behavior: rm ? 'auto' : 'smooth' });
+}
 function switchView(v){
   currentView = v;
   ['today','history','settings'].forEach(x => {
@@ -482,7 +487,7 @@ function switchView(v){
     }
   });
   // 切视图后回到页首：新视图更短时浏览器只会夹掉多余滚动，仍停在旧位置
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  scrollToTop();
   render();
 }
 /* 抽屉开关（关闭态 visibility:hidden 由 CSS 保证，控件不进 Tab 序列；
@@ -944,12 +949,12 @@ $('ex-list').addEventListener('click', e => {
 
   if(act === 'prev'){
     prevPos(day); saveSoon(); renderToday();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
     return;
   }
   if(act === 'next'){
     nextPos(day); saveSoon(); renderToday();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
     return;
   }
   if(act === 'skipex'){
@@ -971,7 +976,7 @@ $('ex-list').addEventListener('click', e => {
       }
     }
     saveSoon(); renderToday();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
     return;
   }
 
@@ -1173,7 +1178,7 @@ $('ex-list').addEventListener('touchend', e => {
   const day = curDay();
   if(dx < 0) nextPos(day); else prevPos(day);
   saveSoon(); renderToday();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  scrollToTop();
 }, { passive: true });
 
 /* 历史里的「删除这次记录」：清掉试训或填错的整次记录，6 秒内在提示条里可撤销。
@@ -1485,7 +1490,7 @@ function skipRest(){
   nextPos(curDay());
   saveSoon();
   renderToday();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  scrollToTop();
 }
 function resetRest(){
   restEndsAt = null; restStartsAt = null; restDone = false; restForPos = null; restForDay = null;
