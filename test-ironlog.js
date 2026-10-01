@@ -3681,6 +3681,21 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('150 theme-color 与 --bg 一致', !!bg150 && !!tc150 && tc150.toLowerCase() === bg150.toLowerCase());
   }
 
+  // §151：文件恢复选完必须清空 file input 的 value——否则「再选同一个文件」
+  // （比如改好坏备份后重选）不会触发 change，按钮看起来失灵。
+  {
+    const el151 = document.getElementById('restore-file');
+    const msg151 = document.getElementById('restore-msg');
+    const h151 = handlers.get('restore-file|change');
+    check('151 restore-file 有 change 处理器', typeof h151 === 'function');
+    el151.value = 'C:\\fakepath\\backup.json';
+    el151.files = [{ text: async () => '{ not json' }];
+    h151({ target: el151 });
+    await null; await null;
+    check('151 选完即清空 value（允许连续选同一文件）', el151.value === '');
+    check('151 非法 JSON 给出结构化错误', /^恢复失败/.test(String(msg151.textContent || '')));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
