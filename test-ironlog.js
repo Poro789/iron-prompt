@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 190);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 191);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4334,6 +4334,21 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const d2 = T.load();
     check('190 再存再读完全一致（规范化是幂等的，不会每次刷新改一次数据）', JSON.stringify(d2) === fixed190);
     if(origStore190 !== undefined) global.localStorage._d[key190] = origStore190;
+  }
+  console.log('== 191. SEED 计划引用的动作全部存在，无孤儿无重复（测试加固，无应用改动）==');
+  // 计划条目指向不存在的动作时界面会退化成显示 id；动作库里留着 A/B 日都用不到的孤儿会污染动作选择器。
+  // SEED 是出厂数据，改种子（换动作/改 id）时最容易碰断这条。
+  {
+    const seed191 = script.slice(script.indexOf('const SEED'), script.indexOf('/* ---------------- 迁移'));
+    const defIds191 = [...seed191.matchAll(/^\s{4}([a-z_]+):\s*\{ name:/gm)].map(m => m[1]);
+    const refIds191 = [...seed191.matchAll(/exerciseId:\s*'([a-z_]+)'/g)].map(m => m[1]);
+    const defSet191 = new Set(defIds191);
+    const miss191 = [...new Set(refIds191)].filter(r => !defSet191.has(r));
+    const orphan191 = [...defSet191].filter(d => !refIds191.includes(d));
+    const dup191 = defIds191.filter((x, i) => defIds191.indexOf(x) !== i);
+    check('191 计划引用的每个动作都在动作库里' + (miss191.length ? '（缺：' + miss191.join(', ') + '）' : ''), miss191.length === 0 && defSet191.size >= 20);
+    check('191 动作库没有 A/B 日都用不到的孤儿' + (orphan191.length ? '（孤儿：' + orphan191.join(', ') + '）' : ''), orphan191.length === 0);
+    check('191 动作库没有重复 id' + (dup191.length ? '（重复：' + dup191.join(', ') + '）' : ''), dup191.length === 0);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
