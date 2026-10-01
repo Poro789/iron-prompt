@@ -121,7 +121,7 @@ header .ver{color:var(--muted);font-size:12px}
 /* 要点/避坑 */
 .ex-notes{margin:10px 0 4px;border-top:1px solid var(--border);padding-top:6px}
 .ex-notes summary{color:var(--muted);font-size:13px;cursor:pointer;user-select:none}
-.ex-notes .note{font-size:13px;color:var(--muted);margin-top:6px}
+.ex-notes .note{font-size:13px;color:var(--muted);margin-top:6px;white-space:pre-line} /* 个人备注是 textarea、AI 要点常带换行：换行要按行显示 */
 .ex-notes .note b{color:var(--text);font-weight:600;margin-right:4px}
 /* 组内容（始终可见） */
 .fs-set{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:18px 0}

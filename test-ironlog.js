@@ -3504,6 +3504,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('138 成功路径不出提示', !String(document.getElementById('toast').textContent).includes('没有可沿用的上次记录'));
   T.state.logs.pop(); delete T.state.exercises.e138; delete T.state.drafts.A; T.state.sessions.A = null; T.state.program.A = [];
 
+  // §139（v0.9.114）：个人备注是多行 textarea、AI 要点常带换行——
+  // 训练卡展示块 .ex-notes .note 必须 white-space:pre-line，否则换行被折叠成一行。
+  {
+    const css139 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const noteRule = css139.match(/\.ex-notes \.note\{[^}]*\}/);
+    check('139 .note 展示规则存在', !!noteRule);
+    check('139 .note 保留换行', !!noteRule && /white-space:\s*pre-line/.test(noteRule[0]));
+    check('139 不误伤单行截断规则', /\.fs-name\{[^}]*text-overflow:ellipsis/.test(css139) && /\.lg-name\{[^}]*text-overflow:ellipsis/.test(css139));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
