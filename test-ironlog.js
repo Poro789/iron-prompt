@@ -3596,6 +3596,20 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   // §145：JS 被禁用时页面不能是无声的空白——必须有 noscript 说明。
   check('145 有 noscript 提示', /<noscript>[\s\S]*JavaScript[\s\S]*<\/noscript>/.test(html));
 
+  // §146：无障碍关联必须落在真实存在的 id 上——aria-controls 与 label for 拼错时
+  // 屏幕阅读器静默失去关联（id 一致性扫描只覆盖 getElementById，这两类属性不在其中）。
+  {
+    const ids146 = new Set();
+    let m146; const reId146 = /\bid="([^"]+)"/g;
+    while((m146 = reId146.exec(html))) ids146.add(m146[1]);
+    let acCount = 0, forCount = 0;
+    const reAc146 = /aria-controls="([^"]+)"/g;
+    while((m146 = reAc146.exec(html))) { acCount++; check(`146 aria-controls #${m146[1]} 存在`, ids146.has(m146[1])); }
+    const reFor146 = /<label[^>]*\bfor="([^"]+)"/g;
+    while((m146 = reFor146.exec(html))) { forCount++; check(`146 label for #${m146[1]} 存在`, ids146.has(m146[1])); }
+    check('146 两类关联都扫描到', acCount >= 4 && forCount >= 3);
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
