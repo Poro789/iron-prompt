@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.129';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.130';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -895,7 +895,7 @@ function fullScreenHTML(day){
       <div class="fs-foot">
         <button class="add-set" data-ex="${pos.exIdx}" data-act="addset">＋ 加一组</button>
         ${item.sets.length > 1 && item.sets[item.sets.length - 1].done !== true ? `<button class="add-set" data-ex="${pos.exIdx}" data-act="delset">− 删掉最后一组</button>` : ''}
-        <input class="fs-exnote" maxlength="500" data-ex="${pos.exIdx}" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
+        <input class="fs-exnote" maxlength="500" data-ex="${pos.exIdx}" aria-label="该动作的备注（可选）" value="${esc(item.note || '')}" placeholder="动作备注（可选）">
       </div>
       ${allUndone ? `<button class="skip-ex" data-act="skipex" aria-label="跳过此动作">跳过此动作 →</button>` : ''}
     </div>`;

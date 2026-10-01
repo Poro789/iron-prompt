@@ -2,6 +2,10 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.130]
+### 修复
+- 无障碍：导出文本框、导入文本框、训练背景、动作个人备注、全屏卡片上的动作备注输入——这五处此前没有可访问名（placeholder 不算），读屏软件念不出它们。现在全部补上 aria-label；测试新增通用扫描，index.html 里每个可见输入控件都必须有 label 或 aria-label。
+
 ## [0.9.129]
 
 ### 修复

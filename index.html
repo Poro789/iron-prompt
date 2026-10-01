@@ -66,7 +66,7 @@
           <option value="12">12 次</option>
         </select>
       </div>
-      <textarea id="export-text" class="import-box" readonly placeholder="点击生成后，导出的文本显示在这里（可手动全选复制）"></textarea>
+      <textarea id="export-text" class="import-box" readonly aria-label="导出文本（只读，可手动全选复制）" placeholder="点击生成后，导出的文本显示在这里（可手动全选复制）"></textarea>
       <button class="import-btn" onclick="doExport()">生成并复制（含 prompt）</button>
       <button class="discard-btn" style="margin-top:6px" onclick="doExportData()">仅复制数据（不含 prompt）</button>
       <div id="export-msg" class="import-msg" role="status"></div>
@@ -74,7 +74,7 @@
     <div class="set-card">
       <h3>导入 AI 方案</h3>
       <p>粘贴 AI 返回的 JSON（容忍 ```json 包裹与多余逗号）。只更新 Program 与动作库，不动训练日志；个人注意事项字段保留。导入前会先列出会改什么，导入后可以撤销这一次。</p>
-      <textarea id="import-text" class="import-box" placeholder='{"type":"ai-plan","exercises":{...},"program":{"A":[...]}}'></textarea>
+      <textarea id="import-text" class="import-box" aria-label="粘贴 AI 返回的方案 JSON" placeholder='{"type":"ai-plan","exercises":{...},"program":{"A":[...]}}'></textarea>
       <button class="import-btn" onclick="doImport()">导入</button>
       <button class="discard-btn" id="undo-import" style="display:none;margin-top:6px" onclick="undoImport()">撤销上次导入</button>
       <div id="import-msg" class="import-msg" role="status"></div>
@@ -123,7 +123,7 @@
     <div class="set-card">
       <h3>训练备注 / 背景</h3>
       <p>自由填写：身体数据、体态问题、目标、器械范围、伤病、当前状态…导出时自动附带给 AI。</p>
-      <textarea id="profile-bg" class="wide-area" maxlength="2000" placeholder="身高体重、体态问题、目标、训练水平、器械范围、伤病备注…"></textarea>
+      <textarea id="profile-bg" class="wide-area" maxlength="2000" aria-label="训练备注与背景（随导出给 AI）" placeholder="身高体重、体态问题、目标、训练水平、器械范围、伤病备注…"></textarea>
     </div>
     <div class="set-card">
       <h3>动作个人备注</h3>
@@ -132,7 +132,7 @@
         <label for="personal-ex">选择动作</label>
         <select id="personal-ex"></select>
       </div>
-      <textarea id="personal-note" class="wide-area" maxlength="500" placeholder="例：超过 12kg 换正握；第 3 组前先做一组热身"></textarea>
+      <textarea id="personal-note" class="wide-area" maxlength="500" aria-label="该动作的个人备注" placeholder="例：超过 12kg 换正握；第 3 组前先做一组热身"></textarea>
     </div>
     <div class="set-card">
       <h3>危险区</h3>

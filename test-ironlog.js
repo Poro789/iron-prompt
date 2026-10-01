@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 182);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 183);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4170,6 +4170,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('182 次数下限钳在 1', it182b.sets[0].reps === 1);
     T.state.program = saveProg182; T.state.exercises = saveEx182; T.state.settings.lastDay = saveDay182;
     delete T.state.exercises.e182t; delete T.state.exercises.e182b;
+  }
+  console.log('== 183. 输入控件都有可读名字（v0.9.130）==');
+  // 读屏软件念不出没有可访问名的输入框：placeholder 不是规范意义上的名字，卡片标题也不会自动关联。
+  // 通用扫描 index.html 每一个可见的 input/textarea：要么有 label for= 指向它，要么自带 aria-label。
+  // 隐藏的文件选择器（restore-file）由按钮触发，不参与读屏遍历，跳过。
+  {
+    const html183 = fs.readFileSync('index.html', 'utf8');
+    const named183 = new Set([...html183.matchAll(/<label[^>]*for="([^"]+)"/g)].map(m => m[1]));
+    const unnamed183 = [];
+    for(const m of html183.matchAll(/<(input|textarea)\b[^>]*>/g)){
+      const tag = m[0];
+      if(/type="hidden"|type="file"| hidden>/.test(tag)) continue;
+      const idm = tag.match(/id="([^"]+)"/);
+      const hasName = /aria-label=/.test(tag) || (idm && named183.has(idm[1]));
+      if(!hasName) unnamed183.push(idm ? idm[1] : tag.slice(1, 40));
+    }
+    check('183 index.html 每个可见输入控件都有 label 或 aria-label' + (unnamed183.length ? '（缺：' + unnamed183.join(', ') + '）' : ''), unnamed183.length === 0);
+    check('183 全屏卡片生成的动作备注输入也有 aria-label', /class="fs-exnote"[^>]*aria-label=/.test(script));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
