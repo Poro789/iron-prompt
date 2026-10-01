@@ -3797,6 +3797,15 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.program = saveP; T.state.exercises = saveE;
   }
 
+  console.log('== 159. 移动端输入静态守卫（测试加固，无应用改动）==');
+  // ± 按钮防双击缩放、viewport 保留捏合缩放、数字输入唤起正确的手机键盘——都是移动端体验的地基。
+  {
+    const css159 = require('fs').readFileSync('css/style.css', 'utf8');
+    check('159 按钮有 touch-action:manipulation（禁双击缩放）', /button\{[^}]*touch-action:manipulation/.test(css159));
+    check('159 viewport 不禁用捏合缩放', !/user-scalable=no|maximum-scale/.test(html));
+    check('159 数字输入带 inputmode（decimal/numeric）', /inputmode="decimal"/.test(script) && /inputmode="numeric"/.test(script));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
