@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 189);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 190);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4303,6 +4303,37 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     patchTarget = null;
     ham189.focus = () => {};                               // 还原桩的 no-op focus，不影响后续节
     document.getElementById('drawer').classList.remove('open');
+  }
+  console.log('== 190. 畸形存档读入后规范化，且再存再读到达不动点（测试加固，无应用改动）==');
+  // migrate（js/app.js:150-264）是数据面的最后防线：手工编辑/截断/旧版备份都要落到同一个合法形状。
+  // 此前各字段分别钉过，但没有一条「整个存档 = 固定点」的性质测试：规范化若不收敛（存一次读一次变一次），
+  // 用户每次刷新都会被改数据，没有任何单测会红。load() 只返回迁移结果不改内存，正好做纯函数往返。
+  {
+    const key190 = 'ironlog.v1';
+    const origStore190 = global.localStorage._d[key190];
+    global.localStorage._d[key190] = JSON.stringify({
+      version: 1,
+      settings: { restSec: -5, warmupRestSec: 99999, lastDay: 'Z', weightStep: 'x' },
+      profile: '直接在备份里写的字符串背景',
+      program: { A: [{ section: 's', exerciseId: 'e190', sets: [{ type: 'weird', weight: 'abc', reps: NaN, duration: -5, rpe: 99, rpeLabel: 'l'.repeat(2000), side: null }] }], B: [] },
+      exercises: { e190: '不是对象' },
+      logs: [null, 'x', { date: 'd', exercises: 'notarray' }, { date: '2024-01-02', exercises: [null, { sets: 'x' }, { sets: [{ weight: '100', reps: '8' }] }] }],
+      drafts: { A: [null, { sets: 'x' }, { sets: [{ weight: '50.5', reps: 'x' }] }] },
+      sessions: { A: null, B: null },
+      rest: { endsAt: -1 }, timer: { startsAt: 0 }, ui: null
+    });
+    const d190 = T.load();
+    const s190 = d190.settings;
+    check('190 非法设置回默认或钳进范围（休息 90/热身 1800/步进 2.5/日期 A）', s190.restSec === 90 && s190.warmupRestSec === 1800 && s190.weightStep === 2.5 && s190.lastDay === 'A');
+    check('190 字符串 profile 保住内容并纠正形状', d190.profile && typeof d190.profile === 'object' && d190.profile.background === '直接在备份里写的字符串背景');
+    check('190 日志只留合法条目且字符串数值归一化', d190.logs.length === 1 && d190.logs[0].exercises.length === 1 && d190.logs[0].exercises[0].sets[0].weight === 100 && d190.logs[0].exercises[0].sets[0].reps === 8);
+    check('190 非对象的动作条目被规范化而不是留毒', d190.exercises.e190 && typeof d190.exercises.e190 === 'object' && d190.exercises.e190.name === 'e190');
+    check('190 坏的 rest/timer 计时器被丢弃', d190.rest === null && d190.timer === null);
+    const fixed190 = JSON.stringify(d190);
+    global.localStorage._d[key190] = fixed190;             // 与 save() 写入的内容等价
+    const d2 = T.load();
+    check('190 再存再读完全一致（规范化是幂等的，不会每次刷新改一次数据）', JSON.stringify(d2) === fixed190);
+    if(origStore190 !== undefined) global.localStorage._d[key190] = origStore190;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
