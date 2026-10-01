@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 175);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 176);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4044,6 +4044,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.closeSummary();
     check('175 小结关闭：焦点归还触发者', opener175.focused === 1);
     document.activeElement = prevActive175;
+  }
+  console.log('== 176. 点抽屉外任意处即关抽屉（v0.9.126）==');
+  {
+    const drawer176 = document.getElementById('drawer');
+    T.toggleDrawer();
+    check('176 前置：抽屉已开', drawer176.classList.contains('open'));
+    const clickH176 = docHandlers.get('click');
+    check('176 文档级 click 监听已注册', typeof clickH176 === 'function');
+    // 点抽屉外的空白（main inert 后点击穿透到 body）→ 关抽屉
+    clickH176({ target: { closest: () => null } });
+    check('176 点抽屉外：关闭', !drawer176.classList.contains('open'));
+    T.toggleDrawer();
+    // 点抽屉内部（菜单项在 .drawer 里）→ 不误关，由各自的 onclick 处理
+    clickH176({ target: { closest: sel => sel === '.drawer' ? {} : null } });
+    check('176 点抽屉内部：不误关', drawer176.classList.contains('open'));
+    // 点 header（汉堡）→ toggleDrawer 自己处理，这里不重复处理
+    clickH176({ target: { closest: sel => sel === 'header' ? {} : null } });
+    check('176 点 header：不重复处理', drawer176.classList.contains('open'));
+    T.closeDrawer();
+    clickH176({ target: { closest: () => null } });
+    check('176 抽屉未开时点击无操作', !drawer176.classList.contains('open'));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

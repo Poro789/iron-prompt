@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.126]
+
+### 修复
+- 打开的抽屉现在点它和顶栏之外的任何地方即可关闭（此前背景被 inert 后那片区域是点了没反应的死区）
+
 ## [0.9.125]
 
 ### 修复
