@@ -3872,6 +3872,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.logs = saveLogs163;
     if(nav163prev) Object.defineProperty(globalThis, 'navigator', nav163prev); else delete globalThis.navigator;
   }
+  console.log('== 164. 启动屏/状态栏/浏览器壳颜色一致（测试加固，无应用改动）==');
+  // §150 钉过 meta theme-color == --bg；这里补齐 manifest 的两个颜色字段：
+  // background_color 决定 PWA 启动屏底色，theme_color 决定状态栏——改一处忘另一处会闪色差。
+  {
+    const man164 = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8'));
+    const css164 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const bg164 = (css164.match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+    check('164 manifest background_color 与 --bg 一致', !!bg164 && String(man164.background_color).toLowerCase() === bg164.toLowerCase());
+    check('164 manifest theme_color 与 --bg 一致', !!bg164 && String(man164.theme_color).toLowerCase() === bg164.toLowerCase());
+  }
   __finished = true;
   process.exit(fail ? 1 : 0);
 })();
