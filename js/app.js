@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.136';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.137';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -863,11 +863,6 @@ function fullScreenHTML(day){
   // 休息条同秒表口径：只在归属日的卡片上显示（applyPlan/刷新可以带着视图切到另一日，
   // 归属另一日的倒计时不该画进当前卡片；切日手势本身会先结算它）。
   const restActive = restEndsAt !== null && restForDay === day;
-  // 当日进度
-  const allPos = flatPos(day);
-  const totalSets = allPos.length;
-  const doneSets = items.reduce((s, it) => s + it.sets.filter(st => st.done === true).length, 0);
-  const pct = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : 0;
   // 跳过此动作：当前动作所有组都是 ✗
   const allUndone = item.sets.every(st => st.done === false);
   const restClock = restActive
@@ -880,7 +875,6 @@ function fullScreenHTML(day){
    * 注意这段必须在 return 的模板字符串外面：写在模板里的 // 注释会被原样渲染到卡片上。 */
   return `
     <div class="fs-card">
-      <div class="fs-progress" aria-hidden="true"><div class="fs-progress-fill" style="width:${pct}%"></div></div>
        ${sectionLine}
       ${restActive ? `
       <div class="fs-rest-bar" role="timer" aria-label="组间休息计时">
@@ -939,6 +933,12 @@ function renderToday(){
   const doneSets = items.reduce((s, it) => s + it.sets.filter(st => st.done === true).length, 0);
   const vol = Math.round(itemsVolume(items));
   const progStr = totalSets > 0 ? `<span class="session-progress">${doneSets}/${totalSets} 组${vol > 0 ? ' · ' + vol.toLocaleString() + 'kg' : ''}</span>` : '';
+  // 页头常驻日进度线（v0.9.137）：卡片顶的条会滚出屏幕，页头不会。
+  const daybar = $('daybar'), daybarFill = $('daybar-fill');
+  if(daybar && daybarFill){
+    daybar.style.display = totalSets > 0 ? '' : 'none';
+    daybarFill.style.width = Math.round(doneSets / Math.max(1, totalSets) * 100) + '%';
+  }
   if(sess){
     status.innerHTML = `<span class="live"></span><span>进行中</span><span class="clock" id="session-clock">${fmtDuration((Date.now() - sess.startedAt)/1000)}</span>${progStr}${condBtn}`;
   }else{

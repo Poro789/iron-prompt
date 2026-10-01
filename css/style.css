@@ -86,11 +86,10 @@ header .ver{color:var(--muted);font-size:12px}
   padding:16px;margin-bottom:12px;min-height:420px;
   display:flex;flex-direction:column;
 }
-/* 当日进度条 */
-.fs-progress{
-  height:3px;border-radius:2px;background:var(--panel2);margin:-16px -16px 12px;overflow:hidden;
-}
-.fs-progress-fill{height:100%;background:var(--accent);transition:width .3s ease}
+/* 当日进度条（v0.9.137：从卡片顶移入 sticky 页头底部——卡片比屏幕高，
+ * 训练中卡片顶部的条经常滚出屏幕；页头常驻，做完一组抬头就能看到进度） */
+.daybar{height:2px;background:var(--panel2);border-radius:2px;margin:8px 0 -6px;overflow:hidden}
+.daybar-fill{height:100%;background:var(--green);border-radius:2px;transition:width .3s ease}
 /* 计划段落名（热身段/主课段/拉伸段），来自计划的 section 字段 */
 .fs-section{color:var(--muted);font-size:12px;letter-spacing:.03em;margin:6px 2px 10px}
 /* 休息窄条 */

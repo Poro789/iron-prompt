@@ -552,7 +552,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('组导航按钮存在', /data-act="prev"/.test(fsA) && /data-act="next"/.test(fsA));
   check('无步进按钮（除 RPE）', !/step-btn/.test(fsA));
   check('完成按钮带 aria-pressed', /aria-pressed="(true|false)"/.test(fsA));
-  check('进度条存在', /fs-progress/.test(fsA));
+  check('日进度条不在卡片里（v0.9.137 移入页头）', !/fs-progress/.test(fsA));
   // 组进度细条（v0.9.134 替代小圆环）：宽度 = 渲染动作的已完成组数/总组数。
   const renderEx = +fsA.match(/class="fs-done[^"]*" data-ex="(\d+)"/)[1];
   const barM = fsA.match(/class="fs-setbar"[^>]*>\s*<div class="fs-setbar-fill" style="width:(\d+)%"/);
@@ -3985,7 +3985,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 201);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 202);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4648,6 +4648,32 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const note201 = (css201.match(/\.fs-exnote\{([^}]*)\}/) || ['', ''])[1];
     check('201 底部行允许换行', /flex-wrap:wrap/.test(foot201));
     check('201 备注框可收缩（min-width:0 + 有基准的 flex）', /min-width:0/.test(note201) && /flex:1 1 /.test(note201));
+  }
+  console.log('== 202. 页头常驻日进度线：卡片顶的进度条滚出屏幕，页头不会（v0.9.137）==');
+  {
+    const html202 = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    const css202 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const app202 = fs.readFileSync(path.join(__dirname, 'js/app.js'), 'utf8');
+    const head202 = (html202.match(/<header>[\s\S]*?<\/header>/) || [''])[0];
+    check('202 进度线在 sticky 页头内', /class="daybar"/.test(head202) && /id="daybar-fill"/.test(head202));
+    check('202 进度线 aria-hidden（数字已在状态行）', /class="daybar"[^>]*aria-hidden="true"/.test(head202));
+    check('202 填充用绿色', /\.daybar-fill\{[^}]*var\(--green\)/.test(css202));
+    check('202 卡片顶旧条已删除', !/fs-progress/.test(css202) && !/fs-progress/.test(app202));
+
+    const sess202 = T.state.sessions.A, draft202 = T.state.drafts.A, prog202 = T.state.program.A;
+    T.state.sessions.A = { startedAt: Date.now(), items: [
+      { exerciseId: 'goblet_squat', note: '', sets: [{ weight: 10, reps: 10, done: true }, { weight: 10, reps: 10, done: false }] },
+      { exerciseId: 'wall_angel', note: '', sets: [{ reps: 10, done: false }] }
+    ], condition: null };
+    T.switchDay('A'); T.switchView('today'); T.render();
+    check('202 页头条宽度 = 1/3 完成', document.getElementById('daybar-fill').style.width === '33%');
+    check('202 有组时条显示', document.getElementById('daybar').style.display === '');
+    T.state.sessions.A = sess202; T.state.drafts.A = draft202;
+    T.state.program.A = [];
+    T.render();
+    check('202 没有组时条隐藏', document.getElementById('daybar').style.display === 'none');
+    T.state.program.A = prog202;
+    T.render();
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
