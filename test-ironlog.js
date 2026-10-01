@@ -3841,7 +3841,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     if(nav161prev) Object.defineProperty(globalThis, 'navigator', nav161prev); else delete globalThis.navigator;
   }
 
-  console.log(`\n${pass} passed, ${fail} failed`);
+  console.log('== 162. SHELL 里没有幽灵路径（测试加固，无应用改动）==');
+  // sw.js install 用 caches.addAll(SHELL)：任何一条 404 都会让 install 直接失败、新版本永远装不上。
+  // 已有断言保证 SHELL ⊇ 页面/manifest 引用，这里反向钉 SHELL ⊆ 磁盘上真实存在的文件。
+  {
+    const sw162 = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
+    const entries = [...sw162.matchAll(/'(\.\/[^']*)'/g)].map(m => m[1]);
+    check('162 能解析出 SHELL 清单', entries.length >= 9);
+    check('162 SHELL 每一条都存在于磁盘', entries.every(p => {
+      const rel = p === './' ? '.' : p.slice(2);
+      return fs.existsSync(path.join(__dirname, rel));
+    }));
+    check('162 离线回退依赖的 ./index.html 在 SHELL 里', entries.includes('./index.html'));
+  }
   __finished = true;
   process.exit(fail ? 1 : 0);
 })();
