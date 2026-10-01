@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 178);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 179);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4093,6 +4093,28 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('178 次数/时长框共 3 处 enterkeyhint=done（Enter=完成这一组）', (script.match(/enterkeyhint="done"/g) || []).length === 3);
     check('178 不引入其它 enterkeyhint 值', (script.match(/enterkeyhint="([a-z]+)"/g) || []).every(s => s === 'enterkeyhint="next"' || s === 'enterkeyhint="done"'));
     check('178 每个动态输入仍带 inputmode', (script.match(/class="fs-input"[^>]*inputmode=/g) || []).length === 4);
+  }
+  console.log('== 179. 导入确认文案如实说明个人备注的合并规则（v0.9.128）==');
+  // applyPlan js/app.js:1901 是「非空优先」：计划带了 personal 会替换本地（§122 钉过 500 封顶路径）；
+  // 但确认框曾写「个人注意不会被覆盖」——与行为相反，用户点确认时会被误导。
+  {
+    const saveEx179 = T.state.exercises, saveProg179 = T.state.program, saveSess179 = T.state.sessions;
+    T.state.exercises = { e179: { name: '动作179', mode: 'weight', unit: 'kg', personal: '用户备注' } };
+    T.state.program = { A: [], B: [] };
+    T.state.sessions = { A: null, B: null };
+    const plan179 = {
+      exercises: { e179: { name: '动作179', mode: 'weight', unit: 'kg', personal: '计划里的新备注' } },
+      program: { A: [{ exerciseId: 'e179', sets: [{ reps: 8, weight: 10 }] }] }
+    };
+    const diff179 = T.planDiffText({ program: plan179.program, exercises: plan179.exercises });
+    check('179 确认文案说明「写了会替换、留空保留本地」，不再虚假承诺不覆盖', diff179.includes('写了会替换') && diff179.includes('留空则保留本地') && !diff179.includes('不会被覆盖'));
+    const r179 = T.importPlan(JSON.stringify(plan179));
+    check('179 行为与文案一致：计划 personal 非空时替换本地', r179.ok && T.state.exercises.e179.personal === '计划里的新备注');
+    T.state.exercises.e179.personal = '本地备注';
+    const r179b = T.importPlan(JSON.stringify({ exercises: { e179: { name: '动作179', mode: 'weight', unit: 'kg' } }, program: { A: [{ exerciseId: 'e179', sets: [{ reps: 8, weight: 10 }] }] } }));
+    check('179 计划不带 personal 时保留本地值', r179b.ok && T.state.exercises.e179.personal === '本地备注');
+    T.state.exercises = saveEx179; T.state.program = saveProg179; T.state.sessions = saveSess179;
+    delete T.state.exercises.e179;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

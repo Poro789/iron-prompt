@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.127';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.128';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -1775,7 +1775,7 @@ function renderHistory(){
 /* ---------------- P0-4 导入 AI 方案 ----------------
  * 容错：markdown 代码块包裹、多余尾逗号。
  * 校验：逐字段检查，错误信息带具体路径。
- * 合并：exercises 按 id 合并（personal 保留本地值）；program 按日整体替换；
+ * 合并：exercises 按 id 合并（personal 按「非空优先」：计划里写了会替换，留空则保留本地值）；program 按日整体替换；
  *       日志不动；有进行中记录的日禁止导入。
  * ------------------------------------------------------------------ */
 function stripFences(t){
@@ -2044,7 +2044,7 @@ function planDiffText(d){
     if(parts.length) line += '：' + parts.join('；');
     lines.push(line);
   }
-  lines.push(`动作库共 ${Object.keys(d.exercises || {}).length} 项（已有动作的个人注意不会被覆盖）`);
+  lines.push(`动作库共 ${Object.keys(d.exercises || {}).length} 项（已有动作的个人注意：新计划里写了会替换，留空则保留本地）`);
   lines.push('日志不会改动。');
   return lines.join('\n');
 }
