@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 195);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 196);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4519,6 +4519,16 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const r6 = await callFetch195({ method: 'GET', url: 'https://example.test/icon.svg' });
     check('195 资源未命中走网络，非 200 不写入缓存',
       r6.handled && r6.res && r6.res.status === 404 && !store195.has('https://example.test/icon.svg'));
+  }
+  console.log('== 196. CSS 自定义属性：用到的每个 var(--x) 都有定义（测试加固，无应用改动）==');
+  // 拼错一个 var(--x) 是静默失效：样式无声无息地不生效，肉眼很难发现。与 §188 类名扫描同类。
+  {
+    const css196 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const defs196 = new Set([...css196.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m => m[1]));
+    const uses196 = new Set([...(css196 + html + script).matchAll(/var\((--[a-z0-9-]+)/g)].map(m => m[1]));
+    check('196 变量定义扫描非空（防恒真）', defs196.size >= 8 && uses196.size >= 8);
+    const undef196 = [...uses196].filter(u => !defs196.has(u));
+    check('196 所有 var() 引用的变量都在 style.css 定义' + (undef196.length ? '（未定义：' + undef196.join(', ') + '）' : ''), undef196.length === 0);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
