@@ -137,6 +137,7 @@ const testScript = script + `
   importPlan, validatePlan, normalizeItem, lastValues, getItems,
   doImport, undoImport, planDiffText, parsePlanInput, planSessionConflict, clearAll,
   startSessionIfNeeded, endSession, switchDay, switchView, targetLabel,
+  insertLog,
   reeditSession, closeSummary, showSummary, discardSession, get lastEnded(){ return lastEnded; },
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
@@ -3710,6 +3711,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     for(const id of inputs152){
       check(`152 设置输入 #${id} 在渲染时被回填`, syncSrc.includes(`$('${id}')`));
     }
+  }
+
+  // §153：insertLog 必须保持 startedAt 升序——PR 判定、趋势、历史渲染都建立在
+  // 「logs 按时间有序」上；补录旧日期若乱序插入，后续比较与排序全都会错位。
+  {
+    const logs153 = T.state.logs;
+    const saved153 = logs153.slice();
+    T.insertLog({ startedAt: 1000, day: 'A', date: '2020-01-01', duration: 1, exercises: [] });
+    T.insertLog({ startedAt: 9e12, day: 'A', date: '2099-01-01', duration: 1, exercises: [] });
+    T.insertLog({ startedAt: 5000, day: 'A', date: '2020-01-01', duration: 1, exercises: [] });
+    let asc153 = logs153.length === saved153.length + 3;
+    for(let i = 1; i < logs153.length && asc153; i++){
+      if((logs153[i].startedAt ?? 0) < (logs153[i - 1].startedAt ?? 0)) asc153 = false;
+    }
+    check('153 乱序插入后仍整体升序且齐全', asc153);
+    logs153.length = 0; saved153.forEach(e => logs153.push(e));   // 精确还原
+    check('153 还原后与原来一致', logs153.length === saved153.length && logs153.every((e, i) => e === saved153[i]));
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
