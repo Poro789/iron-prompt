@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.133';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.134';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -875,8 +875,8 @@ function fullScreenHTML(day){
         ? fmtDuration((restEndsAt - Date.now()) / 1000)
         : '超时 ' + fmtDuration((Date.now() - restEndsAt) / 1000))
     : '';
-  /* 组点二态说明：done=false 只是「还没记」，不是「没做到」——未确认的组保持中性灰点，
-   * 只有确认过的组变绿（三态时代的红点分支会让整列还没开始的组全是红的）。
+  /* 组进度（v0.9.134）：原来的一排 9px 小圆环存在感太低，且与「第 N/M 组」文字重复。
+   * 现在换成文字行下的 2px 细进度条：宽度 = 该动作已完成组数/总组数。
    * 注意这段必须在 return 的模板字符串外面：写在模板里的 // 注释会被原样渲染到卡片上。 */
   return `
     <div class="fs-card">
@@ -900,7 +900,7 @@ function fullScreenHTML(day){
       ${notes ? `<details class="ex-notes" data-notes="${pos.exIdx}" ${openNotes[day + ':' + pos.exIdx] ? 'open' : ''}><summary>要点 / 避坑 / 节奏</summary>${notes}</details>` : ''}
       <div class="fs-set">
         <div class="fs-sub">第 ${pos.setIdx + 1} / ${item.sets.length} 组 · ${esc(targetLabel(item))}${unitTag}${set.isPR ? ' <span class="pr-badge">🔥 PR</span>' : ''}</div>
-        <div class="fs-dots" aria-hidden="true">${item.sets.map((st, si) => `<span class="fs-dot${si === pos.setIdx ? ' cur' : ''}${st.done === true ? ' ok' : ''}"></span>`).join('')}</div>
+        <div class="fs-setbar" aria-hidden="true"><div class="fs-setbar-fill" style="width:${Math.round(item.sets.filter(st => st.done === true).length / Math.max(1, item.sets.length) * 100)}%"></div></div>
         ${lastHintHTML(pos.exIdx, pos.setIdx, item.exerciseId, ex, set)}
         <div class="fs-values">${setInputsHTML(pos.exIdx, pos.setIdx, set, ex)}</div>
         <div class="rpe-row">

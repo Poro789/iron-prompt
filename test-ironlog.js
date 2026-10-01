@@ -553,19 +553,14 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('无步进按钮（除 RPE）', !/step-btn/.test(fsA));
   check('完成按钮带 aria-pressed', /aria-pressed="(true|false)"/.test(fsA));
   check('进度条存在', /fs-progress/.test(fsA));
-  // 组点指示器：当前组带 cur，已完成带 ok，未完成带 no。
-  // 只统计渲染位置（完成按钮的 data-ex）所指动作的组点。
+  // 组进度细条（v0.9.134 替代小圆环）：宽度 = 渲染动作的已完成组数/总组数。
   const renderEx = +fsA.match(/class="fs-done[^"]*" data-ex="(\d+)"/)[1];
-  const dotsSlice = (() => {
-    const i = fsA.indexOf('fs-dots');
-    if(i === -1) return '';
-    const j = fsA.indexOf('</div>', i);
-    return fsA.slice(i, j);
-  })();
-  const dotMatches = [...dotsSlice.matchAll(/class="fs-dot([^"]*)"/g)].map(m => m[1].trim());
+  const barM = fsA.match(/class="fs-setbar"[^>]*>\s*<div class="fs-setbar-fill" style="width:(\d+)%"/);
   const dotsItem = T.getItems('A')[renderEx];
-  check('组点数量与渲染动作组数一致（' + dotsItem.exerciseId + '：' + dotMatches.length + '/' + dotsItem.sets.length + '）', dotMatches.length === dotsItem.sets.length);
-  check('组点标记当前组', dotMatches.filter(d => /\bcur\b/.test(d)).length === 1);
+  const doneCnt = dotsItem.sets.filter(st => st.done === true).length;
+  check('组进度细条存在（' + dotsItem.exerciseId + '）', !!barM);
+  check('细条宽度与已完成组数一致（' + doneCnt + '/' + dotsItem.sets.length + '）',
+    barM && +barM[1] === Math.round(doneCnt / dotsItem.sets.length * 100));
   T.switchDay('A');
   check('休息窄条不替换内容', !/fs-rest-bar/.test(fsA)); // 无休息时不显示
   T.switchDay('B');
@@ -1368,18 +1363,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   T.switchView('today');
   check('恢复后仍能安全渲染', String(document.getElementById('today-view').innerHTML).indexOf('undefined') < 0);
 
-  console.log('== 38. 组点：未确认的组保持中性，不再全红（二态遗留，v0.9.14）==');
+  console.log('== 38. 组进度条：未开始 0%，确认后按完成数前进（二态遗留 v0.9.14 → 细条 v0.9.134）==');
   T.importPlan(planText);   // 37 节把状态换成了空计划的极简备份，先恢复真实计划
   Object.keys(T.draft).forEach(k => delete T.draft[k]);
   T.resetRest(); T.clearTimer();
   T.switchView('today'); T.switchDay('A');
+  const it38 = T.getItems('A')[0];
+  const pctOf38 = () => Math.round(it38.sets.filter(s => s.done === true).length / it38.sets.length * 100);
   const h38a = T.fullScreenHTML('A');
-  check('未开始的卡片上没有红点', !/fs-dot[^"]* no/.test(h38a));
-  check('当前组仍有 cur 标记', /fs-dot cur|cur[^"]*"/.test(h38a));
+  check('未开始的卡片进度条为 ' + pctOf38() + '%（没有红色，红色留给破坏性操作）',
+    h38a.includes('style="width:' + pctOf38() + '%"') && !/fs-setbar[^>]*--red/.test(h38a));
   T.cycleDone('A', 0, 0);
   const h38b = T.fullScreenHTML('A');
-  check('确认过的组出现 ok 绿点', (h38b.match(/fs-dot[^"]*\bok\b/g) || []).length === 1);
-  check('其余组仍为中性', !/fs-dot[^"]* no/.test(h38b));
+  check('确认一组后进度条前进到 ' + pctOf38() + '%', h38b.includes('style="width:' + pctOf38() + '%"'));
   T.state.sessions = {};
   Object.keys(T.draft).forEach(k => delete T.draft[k]);
   T.resetRest();
@@ -1575,7 +1571,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   console.log('== 50. 卡片不渲染源码注释（v0.9.27）==');
   T.switchView('today'); T.render();
   const card50 = String(htmlTouchedHTML('ex-list'));
-  check('卡片里有正常的组点结构', card50.includes('fs-dots'));
+  check('卡片里有正常的组进度条结构', card50.includes('fs-setbar'));
   check('写在模板字符串里的 // 注释不再原样显示在卡片上', !card50.includes('二态模型') && !/\/\/\s/.test(card50));
 
   console.log('== 51. 可输入控件 ≥16px（iOS 聚焦不放大页面，v0.9.28）==');
@@ -3989,7 +3985,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 198);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 199);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4585,8 +4581,9 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const done198 = (css198.match(/\.fs-done\.done\{([^}]*)\}/) || ['', ''])[1];
     check('198 未完成按钮不用红色（红色只留给破坏性操作）', !!undone198 && !/var\(--red\)/.test(undone198));
     check('198 完成态是绿色实底', !!done198 && /background:var\(--green\)/.test(done198));
-    const saveProg198 = T.state.program, saveEx198 = T.state.exercises, saveDay198 = T.state.settings.lastDay, savePos198 = T.curPos;
+    const saveProg198 = T.state.program, saveEx198 = T.state.exercises, saveDay198 = T.state.settings.lastDay, savePos198 = T.curPos, saveSess198 = T.state.sessions;
     T.state.settings.lastDay = 'A'; T.curPos = 0;
+    T.state.sessions = {};
     T.state.logs = []; delete T.state.drafts.A;
     T.state.program = { A: [
       { section: '', exerciseId: 'e198b', sets: [
@@ -4604,7 +4601,34 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('198 确认后：绿实底类 + 文字「✓ 已完成」', /class="fs-done done"[^>]*>✓ 已完成<\/button>/.test(card198b));
     check('198 确认后 aria-pressed true', /aria-pressed="true"/.test(card198b));
     T.state.program = saveProg198; T.state.exercises = saveEx198; T.state.settings.lastDay = saveDay198; T.curPos = savePos198;
+    T.state.sessions = saveSess198;
     delete T.state.exercises.e198b;
+  }
+  console.log('== 199. 组进度细条：替代小圆环、绿色无红、纯装饰 aria-hidden（v0.9.134）==');
+  {
+    const css199 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    check('199 细条样式已定义且绿色填充', /\.fs-setbar\{[^}]*height:2px/.test(css199) && /\.fs-setbar-fill\{[^}]*background:var\(--green\)/.test(css199));
+    check('199 旧小圆环在样式与应用里都已移除', !/fs-dot/.test(css199) && !/fs-dot/.test(script));
+    const saveProg199 = T.state.program, saveEx199 = T.state.exercises, saveDay199 = T.state.settings.lastDay, savePos199 = T.curPos, saveSess199 = T.state.sessions;
+    T.state.settings.lastDay = 'A'; T.curPos = 0;
+    T.state.sessions = {};   // 198 节的确认把草稿升格成了进行中记录——不清掉 getItems 会返回旧动作的 items
+    T.state.logs = []; delete T.state.drafts.A;
+    T.state.program = { A: [
+      { section: '', exerciseId: 'e199b', sets: [
+        { type: 'work', weight: null, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null },
+        { type: 'work', weight: null, reps: 10, duration: null, rpe: null, rpeLabel: '', side: null }
+      ] }
+    ], B: [] };
+    T.state.exercises = Object.assign({}, T.state.exercises, { e199b: { name: '俯卧撑199', mode: 'bodyweight', unit: null } });
+    const card199a = T.fullScreenHTML('A');
+    check('199 未开始：进度条 0% 且 aria-hidden（纯装饰，读屏只听「第 N/M 组」文字）',
+      /class="fs-setbar" aria-hidden="true"><div class="fs-setbar-fill" style="width:0%"/.test(card199a));
+    clickExList(btnOf({ act: 'confirm', ex: '0', set: '0' }));
+    const card199b = T.fullScreenHTML('A');
+    check('199 确认 1/2 组：进度条 50%', card199b.includes('style="width:50%"'));
+    T.state.program = saveProg199; T.state.exercises = saveEx199; T.state.settings.lastDay = saveDay199; T.curPos = savePos199;
+    T.state.sessions = saveSess199;
+    delete T.state.exercises.e199b;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

@@ -132,11 +132,9 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-set{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:18px 0}
 .fs-sub{color:var(--muted);font-size:13px;text-align:center}
 /* 组点指示器：同动作逐组切换时给出「换组了」的视觉锚点 */
-.fs-dots{display:flex;justify-content:center;gap:8px}
-.fs-dot{width:9px;height:9px;border-radius:50%;background:var(--panel2);border:1px solid var(--border)}
-.fs-dot.ok{background:var(--green);border-color:var(--green)}
-.fs-dot.no{background:var(--red);border-color:var(--red)}
-.fs-dot.cur{outline:2px solid var(--accent);outline-offset:2px}
+/* 组内进度细条（v0.9.134）：替代原来的 9px 小圆环——信息与「第 N/M 组」文字重复，视觉噪音减一 */
+.fs-setbar{height:2px;border-radius:2px;background:var(--panel2);margin:8px auto 2px;max-width:200px}
+.fs-setbar-fill{height:100%;border-radius:2px;background:var(--green);transition:width .2s}
 .fs-last{display:flex;align-items:center;gap:6px;width:100%;padding:8px 10px;background:transparent;
          border:1px dashed var(--border);border-radius:9px;color:var(--muted);font-size:13px}
 .fs-last-date{color:var(--text);opacity:.55;font-size:12px}
