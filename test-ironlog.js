@@ -3983,7 +3983,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 184);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 185);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4215,6 +4215,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.settings.weightStep = saveStep184;
     T.clearingAll = saveClear184;
     runTimers();
+  }
+  console.log('== 185. 点抽屉外关闭的兜底监听（测试加固，无行为改动）==');
+  // js/app.js:484-489：遮罩 .drawer-overlay 的 onclick 是主路径（§181 已钉），
+  // 文档级监听是遮罩失效时的兜底——此前没有任何测试直接调用过它。
+  {
+    const drawerEl185 = document.getElementById('drawer');
+    const onClickDoc185 = docHandlers.get('click');
+    check('185 注册了文档级 click 兜底', typeof onClickDoc185 === 'function');
+    drawerEl185.classList.add('open');
+    onClickDoc185({ target: { closest: () => null } });   // 抽屉与 header 之外
+    check('185 点抽屉外会关闭抽屉', !drawerEl185.classList.contains('open'));
+    drawerEl185.classList.add('open');
+    onClickDoc185({ target: { closest: sel => sel === '.drawer' ? drawerEl185 : null } });
+    check('185 点抽屉内不会关闭抽屉', drawerEl185.classList.contains('open'));
+    onClickDoc185({ target: null });                       // 无 closest 的异常目标也按外部处理
+    check('185 异常目标按外部处理并关闭', !drawerEl185.classList.contains('open'));
+    drawerEl185.classList.remove('open');
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

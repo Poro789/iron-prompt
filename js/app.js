@@ -479,8 +479,8 @@ document.addEventListener('keydown', e => {
   // 关闭路径复用 closeDrawer（清 overlay、复位 aria-expanded、焦点还给汉堡按钮）。
   else if($('drawer').classList.contains('open')) closeDrawer();
 });
-/* 侧边抽屉没有全屏遮罩，但 main 已 inert——点抽屉外会变成死区。
- * 补标准交互：点抽屉与 header 之外的任何地方（含 inert 后穿透到 body 的点击）即关抽屉。 */
+/* 抽屉有 .drawer-overlay 遮罩（点击即 closeDrawer），但遮罩被移除/失效时 inert 后的页面会成死区。
+ * 兜底：点抽屉与 header 之外的任何地方（含穿透 inert 到 body 的点击）即关抽屉；与遮罩的 onclick 幂等共存。 */
 document.addEventListener('click', e => {
   if(!$('drawer').classList.contains('open')) return;
   const t = e.target;
