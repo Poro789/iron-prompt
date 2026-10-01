@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.123';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.124';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -455,9 +455,16 @@ function answerConfirm(ok){
  * 能在背后凭空开一次「进行中」；确认框开着时能触发背景按钮，甚至嵌套两个确认
  * 让第一个 Promise 永不 resolve。 */
 function setBackdropInert(on){
-  [document.querySelector('header'), $('drawer'), document.querySelector('main')].forEach(el => {
+  /* 状态复算：模态打开时背景全部（含抽屉）inert；只有抽屉打开时仅 main inert——
+   * 被遮罩盖住的内容控件不该进 Tab 序列，但 header 保留可用，汉堡还能点回来关抽屉。 */
+  const modalOpen = $('confirm-overlay').classList.contains('show') || $('summary-overlay').classList.contains('show');
+  const drawerOpen = $('drawer').classList.contains('open');
+  const force = !!on || modalOpen;
+  const main = document.querySelector('main');
+  [document.querySelector('header'), $('drawer'), main].forEach(el => {
     if(!el || !el.setAttribute) return;
-    if(on) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+    const inert = force || (drawerOpen && el === main);
+    if(inert) el.setAttribute('inert', ''); else el.removeAttribute('inert');
   });
 }
 document.addEventListener('keydown', e => {
@@ -497,6 +504,7 @@ function toggleDrawer(){
   $('drawer-overlay').classList.toggle('show');
   const isOpen = $('drawer').classList.contains('open');
   $('hamburger-btn').setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  setBackdropInert(false); // 抽屉打开 → main 进 inert（Tab 不再逃进被遮罩盖住的控件）
   if(isOpen){ const c = document.querySelector('.drawer-close'); if(c) c.focus(); }
 }
 function closeDrawer(){
@@ -504,6 +512,7 @@ function closeDrawer(){
   $('drawer').classList.remove('open');
   $('drawer-overlay').classList.remove('show');
   $('hamburger-btn').setAttribute('aria-expanded', 'false');
+  setBackdropInert(false); // 抽屉关闭 → 解除 main 的 inert（若模态还开着则保持）
   if(wasOpen) $('hamburger-btn').focus();
 }
 

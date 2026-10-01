@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 173);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 174);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4005,6 +4005,24 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('173 空的 B 日不写进导出（粘回导入时不会被自己的空日拒掉）', !('B' in data173.program));
     T.state.logs = saveLogs173; T.state.program = saveProg173; T.state.exercises = saveEx173;
     if(nav173prev) Object.defineProperty(globalThis, 'navigator', nav173prev); else delete globalThis.navigator;
+  }
+  console.log('== 174. 抽屉打开时 main 进 inert，汉堡保持可用（v0.9.124）==');
+  {
+    const drawer174 = document.getElementById('drawer');
+    const main174 = makeEl('main174'), header174 = makeEl('header174');
+    let sel174 = null;
+    patchTarget = { matches(sel){ sel174 = sel; return sel === 'main' || sel === 'header'; }, get node(){ return sel174 === 'main' ? main174 : header174; } };
+    T.toggleDrawer();
+    check('174 抽屉打开：main 进 inert，抽屉自身不进', main174.attrs.inert === '' && drawer174.attrs.inert === undefined);
+    check('174 header（汉堡）不进 inert——还能点它关抽屉', header174.attrs.inert === undefined);
+    T.askConfirm('确认吗？'); // 确认框压在抽屉上：背景全部 inert
+    check('174 确认框压在抽屉上：main 与抽屉都 inert', drawer174.attrs.inert === '' && main174.attrs.inert === '');
+    const esc174 = docHandlers.get('keydown');
+    esc174({ key: 'Escape' }); // 关确认，抽屉还开着
+    check('174 ESC 关确认后抽屉仍开：main 保持 inert、抽屉可交互', main174.attrs.inert === '' && drawer174.attrs.inert === undefined);
+    esc174({ key: 'Escape' }); // 再按关抽屉
+    check('174 ESC 关抽屉：全部解除', main174.attrs.inert === undefined && drawer174.attrs.inert === undefined && header174.attrs.inert === undefined);
+    patchTarget = null;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

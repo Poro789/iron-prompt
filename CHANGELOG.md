@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.124]
+
+### 修复
+- 抽屉打开时背景主区现在进入 inert：键盘 Tab 不再逃进被遮罩盖住的页面控件；汉堡按钮保持可点，随时能再点一次关闭抽屉（确认框压在抽屉上时仍全部 inert，逐层 ESC 关闭的顺序不变）
+
 ## [0.9.123]
 
 ### 变更
