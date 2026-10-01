@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 180);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 181);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4135,6 +4135,15 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.answerConfirm(true); await p2;
     check('180 第二次确认关闭：焦点仍归还最初的触发者，链不断', opener180.focused === 2);
     document.activeElement = prev180;
+  }
+  console.log('== 181. 抽屉滚动不带动背景；遮罩点击关闭的真实机制（v0.9.129）==');
+  {
+    const css181 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const drawer181 = (css181.match(/\.drawer\{([^}]*)\}/) || ['', ''])[1];
+    check('181 .drawer 滚动到尽头不带动背景页面', /overscroll-behavior:contain/.test(drawer181));
+    // 抽屉遮罩的关闭机制是 index.html 的内联 onclick——不是文档级监听（v0.9.126 只是兜底）。
+    check('181 遮罩存在且点击即 closeDrawer', /class="drawer-overlay"[^>]*onclick="closeDrawer\(\)"/.test(html));
+    check('181 遮罩默认不接收点击（关闭状态不挡页面）', /\.drawer-overlay\{[^}]*pointer-events:none/.test(css181) && /\.drawer-overlay\.show\{[^}]*pointer-events:auto/.test(css181));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
