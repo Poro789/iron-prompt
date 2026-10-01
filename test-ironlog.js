@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 186);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 187);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4258,6 +4258,19 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('186 第二次返回无副作用', h186.stack.length === expect186 && !document.getElementById('drawer').classList.contains('open'));
     document.getElementById('drawer').classList.remove('open');
     h186.stack.length = depth0;                             // 还原栈深，不影响后续节
+  }
+  console.log('== 187. id 唯一且 $() 引用的 id 全部存在（测试加固，无应用改动）==');
+  // 重复 id 会让 getElementById 拿到错误的节点（$() 全部按 id 找元素）；拼错的 id 引用只会静默失败。
+  {
+    const seen187 = new Map();
+    for(const m of html.matchAll(/id="([^"]+)"/g)) seen187.set(m[1], (seen187.get(m[1]) || 0) + 1);
+    const dup187 = [...seen187].filter(([, n]) => n > 1).map(([id]) => id);
+    check('187 index.html 没有重复 id' + (dup187.length ? '（重复：' + dup187.join(', ') + '）' : ''), dup187.length === 0);
+    const defined187 = new Set();
+    for(const m of (html + script).matchAll(/id="([A-Za-z0-9-]+)"/g)) defined187.add(m[1]);
+    const missing187 = [];
+    for(const m of script.matchAll(/\$\('([^']+)'\)/g)) if(!defined187.has(m[1])) missing187.push(m[1]);
+    check('187 每个 $() 引用的 id 都在页面或生成的模板里存在' + (missing187.length ? '（缺：' + missing187.join(', ') + '）' : ''), missing187.length === 0 && defined187.size >= 40);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
