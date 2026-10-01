@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 191);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 192);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4349,6 +4349,31 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('191 计划引用的每个动作都在动作库里' + (miss191.length ? '（缺：' + miss191.join(', ') + '）' : ''), miss191.length === 0 && defSet191.size >= 20);
     check('191 动作库没有 A/B 日都用不到的孤儿' + (orphan191.length ? '（孤儿：' + orphan191.join(', ') + '）' : ''), orphan191.length === 0);
     check('191 动作库没有重复 id' + (dup191.length ? '（重复：' + dup191.join(', ') + '）' : ''), dup191.length === 0);
+  }
+  console.log('== 192. B 日夹具是承重资产：自洽 + 完整导入路径（测试加固，无应用改动）==');
+  // fixtures/plan-B.json 来自用户真实的 B 日打卡实录，但此前没有任何测试引用它：
+  // 夹具哪天被改坏（id 打错、结构漂移）只有人读文件才会发现。先钉夹具自洽，
+  // 再走完整导入路径（applyPlan 未导出，importPlan 是唯一入口）证明它真的能导入并落到 B 日。
+  {
+    const pbText192 = fs.readFileSync(path.join(__dirname, 'fixtures/plan-B.json'), 'utf8');
+    const pb192 = JSON.parse(pbText192);
+    const refs192 = [];
+    for(const day of Object.keys(pb192.program)) for(const e of pb192.program[day]) refs192.push(e.exerciseId);
+    const defs192 = new Set(Object.keys(pb192.exercises));
+    const miss192 = refs192.filter(r => !defs192.has(r));
+    check('192 B 日夹具计划引用的动作都在夹具定义里' + (miss192.length ? '（缺：' + miss192.join(', ') + '）' : ''), miss192.length === 0 && defs192.size >= 10);
+    check('192 B 日夹具 day 字段是 B', pb192.day === 'B');
+    const snapProg192 = JSON.parse(JSON.stringify(T.state.program));
+    const snapEx192 = JSON.parse(JSON.stringify(T.state.exercises));
+    const snapImp192 = T.state.lastImport;
+    const snapSess192 = JSON.parse(JSON.stringify(T.state.sessions));
+    const r192 = T.importPlan(pbText192);
+    check('192 B 日夹具能通过完整导入路径' + (r192 && r192.error ? '（' + r192.error + '）' : ''), r192 && r192.ok === true);
+    check('192 导入后 B 日计划非空且每个条目的动作都有定义', T.state.program.B.length > 0 && T.state.program.B.every(e => T.state.exercises[e.exerciseId]));
+    T.state.program = snapProg192;
+    T.state.exercises = snapEx192;
+    T.state.lastImport = snapImp192;
+    T.state.sessions = snapSess192;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
