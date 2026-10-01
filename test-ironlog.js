@@ -3982,7 +3982,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 174);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 175);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4023,6 +4023,27 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     esc174({ key: 'Escape' }); // 再按关抽屉
     check('174 ESC 关抽屉：全部解除', main174.attrs.inert === undefined && drawer174.attrs.inert === undefined && header174.attrs.inert === undefined);
     patchTarget = null;
+  }
+  console.log('== 175. 模态打开焦点进对话框，关闭归还触发者（v0.9.125）==');
+  {
+    const opener175 = makeEl('opener175');
+    opener175.focus = function(){ this.focused = (this.focused || 0) + 1; };
+    const ok175 = document.getElementById('confirm-ok-btn');
+    let okFocus175 = 0; ok175.focus = () => { okFocus175++; };
+    const prevActive175 = document.activeElement;
+    document.activeElement = opener175;
+    T.askConfirm('删掉它？');
+    check('175 确认框打开：焦点移到确定按钮', okFocus175 === 1);
+    T.answerConfirm(true);
+    check('175 确认框关闭：焦点归还触发者', opener175.focused === 1);
+    const sc175 = document.getElementById('summary-close');
+    let scFocus175 = 0; sc175.focus = () => { scFocus175++; };
+    document.activeElement = opener175; opener175.focused = 0;
+    T.showSummary({ day: 'A', exercises: [], durationSec: 60, condition: null });
+    check('175 小结打开：焦点移到「好的」按钮', scFocus175 === 1);
+    T.closeSummary();
+    check('175 小结关闭：焦点归还触发者', opener175.focused === 1);
+    document.activeElement = prevActive175;
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;

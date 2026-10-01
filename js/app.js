@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.124';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.125';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -435,17 +435,21 @@ function toast(msg, action){
  * 用法：askConfirm({title, desc, okLabel}).then(ok => ...)
  */
 let confirmResolve = null;
+let modalOpener = null; // 打开模态时的焦点来源，关闭后归还
 function askConfirm(opts){
   $('confirm-title').textContent = opts.title;
   $('confirm-desc').textContent = opts.desc || '';
   $('confirm-ok-btn').textContent = opts.okLabel || '确定';
+  modalOpener = document.activeElement || null;
   $('confirm-overlay').classList.add('show');
   setBackdropInert(true);
+  $('confirm-ok-btn').focus(); // 焦点进对话框：背景 inert 后焦点原本会掉到 body
   return new Promise(res => { confirmResolve = res; });
 }
 function answerConfirm(ok){
   $('confirm-overlay').classList.remove('show');
   setBackdropInert(false);
+  if(modalOpener){ modalOpener.focus(); modalOpener = null; }
   const r = confirmResolve;
   confirmResolve = null;
   if(r) r(ok);
@@ -1368,8 +1372,10 @@ function showSummary(entry){
   // 记错了不必重来：只要这条记录还在最末尾，就把它放回编辑态
   const re = $('summary-reedit');
   if(re) re.style.display = lastEnded ? '' : 'none';
+  modalOpener = document.activeElement || null; // inert 会先卸掉焦点，必须在设 inert 前捕获
   $('summary-overlay').classList.add('show');
   setBackdropInert(true);
+  const sc = $('summary-close'); if(sc) sc.focus();
 }
 function closeSummary(){
   lastEnded = null;
@@ -1377,6 +1383,7 @@ function closeSummary(){
   if(re) re.style.display = 'none';
   $('summary-overlay').classList.remove('show');
   setBackdropInert(false);
+  if(modalOpener){ modalOpener.focus(); modalOpener = null; }
 }
 
 /* 把刚结束的那次记录放回「进行中」，改完再点结束 */
