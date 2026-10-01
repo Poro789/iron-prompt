@@ -3989,7 +3989,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const self172 = fs.readFileSync(__filename, 'utf8');
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 193);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 194);
   }
   console.log('== 173. 空日志时导出提示如实说「暂无训练日志」（测试加固，无应用改动）==');
   // runExport js/app.js:2237-2239：recentLogs 为空时不得虚报「最近 N 次日志」。此前从未钉过。
@@ -4439,6 +4439,26 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     T.state.sessions = snap193.sessions;
     T.state.lastImport = snap193.lastImport;
     T.clearDraft('A'); T.clearDraft('B');
+  }
+  console.log('== 194. sw.js 必须能通过语法编译并注册三个生命周期监听（测试加固，无应用改动）==');
+  // 此前 sw.js 只被当作文本检查：语法错误会一路通过测试和 CI，只在真机注册 SW 时才炸。
+  // app.js 走 eval 天然做语法检查；index.html 由 §10 保证没有内联脚本，所以缺口只在 sw.js。
+  {
+    const vm194 = require('vm');
+    let compileErr194 = null;
+    try { new vm194.Script(sw, { filename: 'sw.js' }); }
+    catch (e) { compileErr194 = e.message; }
+    check('194 sw.js 语法可编译' + (compileErr194 ? '（' + compileErr194 + '）' : ''), compileErr194 === null);
+    // 再实际执行一遍顶层：用最小 self 桩接住生命周期注册（不调用处理器，不碰 caches/clients）。
+    const swEvents194 = {};
+    const sandbox194 = { self: { addEventListener: (t, fn) => { swEvents194[t] = fn; } } };
+    sandbox194.self.globalThis = sandbox194.self;
+    let runErr194 = null;
+    try { vm194.runInNewContext(sw, sandbox194, { filename: 'sw.js' }); }
+    catch (e) { runErr194 = e.message; }
+    check('194 sw.js 顶层可执行' + (runErr194 ? '（' + runErr194 + '）' : ''), runErr194 === null);
+    check('194 install/activate/fetch 监听在运行时确实注册',
+      ['install', 'activate', 'fetch'].every(k => typeof swEvents194[k] === 'function'));
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
