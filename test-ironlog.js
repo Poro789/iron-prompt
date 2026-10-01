@@ -3902,6 +3902,23 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('166 activate 删除非当前版本的旧缓存', /keys\.filter\(k => k !== CACHE\)/.test(sw166) && /caches\.delete\(k\)/.test(sw166));
     check('166 install 有 skipWaiting、activate 有 claim', /skipWaiting\(\)/.test(sw166) && /clients\.claim\(\)/.test(sw166));
   }
+  console.log('== 167. 导入空名称不抹掉旧名，无名新动作以 id 显示（测试加固，无应用改动）==');
+  // applyPlan:1875 的兜底链是 ex.name || old.name || id——AI 写了 name:"" 时
+  // 简单合并会把用户认识的动作名清空；这条回退此前只有实现、没有防线。
+  {
+    const exA167 = { name: '高脚杯深蹲', mode: 'weight', unit: 'kg', tips: '', personal: '膝盖注意' };
+    T.state.exercises = { goblet_squat: JSON.parse(JSON.stringify(exA167)) };
+    T.state.program = { A: [{ exerciseId: 'goblet_squat', sets: [{ reps: 5, weight: 10 }] }], B: [] };
+    T.state.sessions = { A: null, B: null };
+    const p167 = {
+      exercises: { goblet_squat: { name: '', tips: '新提示' }, ghost_ex167: { mode: 'bodyweight' } },
+      program: { A: [{ exerciseId: 'goblet_squat', sets: [{ reps: 5, weight: 10 }] }, { exerciseId: 'ghost_ex167', sets: [{ reps: 8 }] }] }
+    };
+    const r167 = T.importPlan(JSON.stringify(p167));
+    check('167 空名称保留旧名', r167.ok && T.state.exercises.goblet_squat.name === '高脚杯深蹲');
+    check('167 合并语义其余字段照常生效', T.state.exercises.goblet_squat.tips === '新提示' && T.state.exercises.goblet_squat.personal === '膝盖注意');
+    check('167 无名称的新动作以 id 兜底', T.state.exercises.ghost_ex167.name === 'ghost_ex167');
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
