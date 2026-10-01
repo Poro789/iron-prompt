@@ -3882,6 +3882,18 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('164 manifest background_color 与 --bg 一致', !!bg164 && String(man164.background_color).toLowerCase() === bg164.toLowerCase());
     check('164 manifest theme_color 与 --bg 一致', !!bg164 && String(man164.theme_color).toLowerCase() === bg164.toLowerCase());
   }
+  console.log('== 165. 训练背景未填写时提示词要求 AI 先问（测试加固，无应用改动）==');
+  // buildPrompt 对空背景输出「（未填写背景，请先问我）」（js/app.js:2214）——
+  // 这是让 AI 先问身高体重/器械范围而不是瞎猜的关键指令，此前没有防线。
+  {
+    const saveBg165 = T.state.profile.background;
+    T.state.profile.background = '';
+    check('165 背景为空时提示词明说未填写、请先问', T.buildPrompt(T.buildExport(4)).includes('未填写背景，请先问我'));
+    T.state.profile.background = '体态问题：圆肩';
+    check('165 背景已填写时原文进入提示词', T.buildPrompt(T.buildExport(4)).includes('体态问题：圆肩'));
+    T.state.profile.background = saveBg165;
+  }
+  console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
 })();
