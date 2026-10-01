@@ -643,7 +643,7 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
   check('CI 版本戳有 VER 非空守卫', /test -n "\$VER"/.test(ci));
   check('测试夹具在 fixtures/ 下', fs.existsSync(path.join(__dirname, 'fixtures/plan-A.json'))
     && !fs.existsSync(path.join(__dirname, 'plan-A.json')));
-  check('README 结构清单与实际文件一致', ['index.html','css/style.css','js/app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','apple-touch-icon.png','sw.js','fixtures/plan-A.json']
+  check('README 结构清单与实际文件一致', ['index.html','css/style.css','js/app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','apple-touch-icon.png','sw.js','fixtures/plan-A.json','fixtures/plan-B.json']
     .every(f => readme.includes(f) && fs.existsSync(path.join(__dirname, f))));
 
   console.log('== 19. P3 应用内确认弹层 ==');

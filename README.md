@@ -57,6 +57,7 @@ icon-512.png          安装图标 512（同时用作 maskable）
 apple-touch-icon.png  iOS 添加到主屏幕（iOS 不认 SVG，只认 PNG）
 sw.js                 离线缓存（缓存版本串由 CI 按 APP_VERSION 改写）
 fixtures/plan-A.json  测试夹具（一份真实 A 日计划）
+fixtures/plan-B.json  测试夹具（一份真实 B 日计划，AI 方案导入的实录）
 ```
 
 零构建：无打包器、无依赖，`css`/`js` 直接外链。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act）。
