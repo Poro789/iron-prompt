@@ -3925,6 +3925,22 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     const drawer = (css168.match(/\.drawer\{([^}]*)\}/) || ['', ''])[1];
     check('168 .drawer 声明了 overflow-y:auto', /overflow-y:auto/.test(drawer));
   }
+  console.log('== 169. 提示条只在带按钮时接收点击（测试加固，无应用改动）==');
+  // CSS：.toast 默认 pointer-events:none、.toast.with-act 才 auto（css/style.css:316/321）；
+  // JS 侧 add/remove('with-act') 与之配对（js/app.js:405/415/422/425）。
+  // 若失配：普通提示会挡住屏幕底部中央的按钮（那里正是 ± 步进区），或撤销按钮点不动。
+  {
+    const css169 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    check('169 .toast 默认 pointer-events:none', /\.toast\{[^}]*pointer-events:none/.test(css169));
+    check('169 .toast.with-act 恢复 pointer-events:auto', /\.toast\.with-act\{pointer-events:auto\}/.test(css169));
+    const t169 = document.getElementById('toast');
+    T.toast('带撤销169', () => {});
+    check('169 带操作的提示有 with-act 与撤销按钮', t169.classList.contains('with-act') && /data-act="undo"/.test(t169.innerHTML));
+    advanceClock(7000); runTimers();
+    check('169 过期后 with-act/show 一并清掉', !t169.classList.contains('with-act') && !t169.classList.contains('show'));
+    T.toast('普通提示169');
+    check('169 普通提示不带 with-act、只写文案', !t169.classList.contains('with-act') && t169.textContent === '普通提示169');
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);
