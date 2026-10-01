@@ -84,6 +84,11 @@
       <button class="import-btn" onclick="doBackup()">下载备份文件</button>
       <button class="discard-btn" style="margin-top:6px" onclick="pickBackup()">从备份文件恢复</button>
       <input type="file" id="restore-file" accept=".json,application/json" hidden>
+      <div id="bak-row" style="display:none">
+        <p id="bak-hint"></p>
+        <button class="import-btn" onclick="restoreBak()">恢复救援副本</button>
+        <button class="discard-btn" style="margin-top:6px" onclick="dropBak()">删除救援副本</button>
+      </div>
       <div id="restore-msg" class="import-msg" role="status"></div>
     </div>
   </section>

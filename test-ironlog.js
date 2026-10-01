@@ -141,6 +141,7 @@ const testScript = script + `
   buildExport, buildTrends, topSet, doExport, doExportData, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
   buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA, copyText,
+  renderBakRow, restoreBak, dropBak,
   buildTrendCharts, trendKind, sessionKind, normUnit, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },
   esc, APP_VERSION, TREND_WINDOW, toast, render, saveSoon, flushSave,
@@ -3512,6 +3513,39 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('139 .note 展示规则存在', !!noteRule);
     check('139 .note 保留换行', !!noteRule && /white-space:\s*pre-line/.test(noteRule[0]));
     check('139 不误伤单行截断规则', /\.fs-name\{[^}]*text-overflow:ellipsis/.test(css139) && /\.lg-name\{[^}]*text-overflow:ellipsis/.test(css139));
+  }
+
+  // §140（v0.9.115）：.bak 救援副本必须可见——备份卡片给出恢复/删除入口。
+  // 此前它是静默的：移动端没有 devtools，用户既不知道它在，也没有途径找回。
+  {
+    const bakKey = 'ironlog.v1.bak';
+    localStorage.removeItem(bakKey);
+    T.renderBakRow();
+    check('140 无副本时行隐藏', document.getElementById('bak-row').style.display === 'none');
+    localStorage.setItem(bakKey, '{oops');
+    T.renderBakRow();
+    check('140 有副本时行显示', document.getElementById('bak-row').style.display === '');
+    const hint = String(document.getElementById('bak-hint').textContent);
+    check('140 说明来源与大小', hint.includes('损坏') && hint.includes(String('{oops'.length)));
+    await T.restoreBak();   // 解析失败：不弹确认、不改数据
+    check('140 坏副本恢复失败', String(document.getElementById('restore-msg').textContent).includes('恢复失败'));
+    check('140 失败保留副本', localStorage.getItem(bakKey) === '{oops');
+    // 有效副本：确认后恢复 → 数据被应用、副本被删除、行隐藏
+    const b = JSON.parse(JSON.stringify(T.buildBackup())); // 备份对象的数据在 b.state 下，不在顶层
+    b.state.logs = (b.state.logs || []).concat([{ date: '2024-01-01', day: 'A', startedAt: 0, endedAt: 0, durationSec: 60, condition: null,
+      exercises: [{ exerciseId: 'goblet_squat', note: '', sets: [{ type: 'work', weight: 1, reps: 1, duration: null, rpe: null, done: true }] }] }]);
+    localStorage.setItem(bakKey, JSON.stringify(b));
+    const count0 = T.state.logs.length;
+    const p140 = T.restoreBak(); T.answerConfirm(true); await p140;
+    check('140 恢复被应用', T.state.logs.length === count0 + 1);
+    check('140 成功后删除副本', localStorage.getItem(bakKey) === null);
+    check('140 成功后行隐藏', document.getElementById('bak-row').style.display === 'none');
+    // 删除：取消保留、确认删除
+    localStorage.setItem(bakKey, '{oops');
+    let d140 = T.dropBak(); T.answerConfirm(false); await d140;
+    check('140 取消删除保留副本', localStorage.getItem(bakKey) === '{oops');
+    d140 = T.dropBak(); T.answerConfirm(true); await d140;
+    check('140 确认删除副本', localStorage.getItem(bakKey) === null);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -11,7 +11,7 @@
  * =================================================================== */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.114';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.115';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -2323,6 +2323,33 @@ $('restore-file').addEventListener('change', async e => {
   await restoreBackupText(text);
 });
 
+/* ---------------- 数据救援副本（.bak）的可见化 ----------------
+ * 数据损坏或来自更高版本时，load() 会先留一份 .bak 再写种子（v0.9.108）。
+ * 但移动端打不开 devtools：静默的副本等于不存在——用户既不知道它在，也没有途径找回。
+ * 在备份卡片里显形：恢复走和文件恢复同一套 parse→确认→应用流程，成功后删掉副本。 */
+function readBak(){ try{ return localStorage.getItem(LS_KEY + '.bak'); }catch(e){ return null; } }
+function renderBakRow(){
+  const row = $('bak-row'); if(!row) return;
+  const raw = readBak();
+  if(!raw){ row.style.display = 'none'; return; }
+  $('bak-hint').textContent = '发现一份数据救援副本（' + raw.length + ' 字符）：某次打开时本地数据损坏、或来自更高版本（读不懂），旧数据被留在这里，并未生效。恢复会用它的旧数据覆盖本机；不需要可以删除。';
+  row.style.display = '';
+}
+async function restoreBak(){
+  const raw = readBak();
+  if(!raw){ renderBakRow(); return; }
+  const ok = await restoreBackupText(raw);
+  if(ok){ try{ localStorage.removeItem(LS_KEY + '.bak'); }catch(e){} }
+  renderBakRow();
+}
+async function dropBak(){
+  const ok = await askConfirm({ title: '删除救援副本？', desc: '那是一份损坏或来自更高版本的数据副本，删除后不能再找回。当前数据不受影响。', okLabel: '删除' });
+  if(!ok) return;
+  try{ localStorage.removeItem(LS_KEY + '.bak'); }catch(e){}
+  renderBakRow();
+  toast('已删除救援副本');
+}
+
 /* ---------------- 设置（v0.9：备注融合） ---------------- */
 function renderSettings(){
   $('weight-step').value = state.settings.weightStep;
@@ -2334,6 +2361,7 @@ function renderSettings(){
   /* 只有存在快照时才显示「撤销上次导入」（只留最近一次） */
   const undoBtn = $('undo-import');
   if(undoBtn) undoBtn.style.display = state.lastImport ? '' : 'none';
+  renderBakRow();
 }
 /* 设置页「动作个人备注」：编辑 state.exercises[id].personal（卡片上显示，导入计划时保留本地值）。
  * 此前该字段只能靠 AI 计划写入，用户自己没有任何入口能记。 */
