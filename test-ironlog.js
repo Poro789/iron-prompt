@@ -3919,6 +3919,12 @@ check('导出 JSON 可被导入（格式兼容）', rt.ok === true);
     check('167 合并语义其余字段照常生效', T.state.exercises.goblet_squat.tips === '新提示' && T.state.exercises.goblet_squat.personal === '膝盖注意');
     check('167 无名称的新动作以 id 兜底', T.state.exercises.ghost_ex167.name === 'ghost_ex167');
   }
+  console.log('== 168. 抽屉内容超高时可滚动（v0.9.122）==');
+  {
+    const css168 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const drawer = (css168.match(/\.drawer\{([^}]*)\}/) || ['', ''])[1];
+    check('168 .drawer 声明了 overflow-y:auto', /overflow-y:auto/.test(drawer));
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   __finished = true;
   process.exit(fail ? 1 : 0);

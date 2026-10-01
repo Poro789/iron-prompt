@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.122]
+
+### 修复
+- 抽屉内容超高时现在可以滚动：横屏手机或系统字体放大后，「设置」等按钮不再被顶出屏幕够不着
+
 ## [0.9.121]
 
 ### 修复

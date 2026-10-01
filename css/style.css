@@ -41,6 +41,8 @@ header .ver{color:var(--muted);font-size:12px}
   /* visibility 参与过渡：关闭动画播完才隐藏；隐藏后控件不进 Tab 序列 */
   transform:translateX(100%);transition:transform .2s ease, visibility .2s;
   display:flex;flex-direction:column;padding:16px;visibility:hidden;
+  /* 横屏手机或系统字体放大时抽屉内容可能超过视口高度：必须能滚，否则「设置」按钮够不着 */
+  overflow-y:auto;
 }
 .drawer.open{transform:translateX(0);visibility:visible}
 .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
