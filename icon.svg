@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#0f1115"/><text x="256" y="392" font-size="300" text-anchor="middle">🏋️</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0F1115"/>
+  <!-- 杠铃：杆 + 左右内外两片杠片（几何按 icon-512.png 实测像素复刻，左右对称于 x=256） -->
+  <rect x="112" y="241" width="288" height="29" rx="14.5" fill="#E8EAF0"/>
+  <rect x="92" y="208" width="20" height="96" rx="10" fill="#4F8CFF"/>
+  <rect x="112" y="176" width="25" height="159" rx="12.5" fill="#4F8CFF"/>
+  <rect x="400" y="208" width="20" height="96" rx="10" fill="#4F8CFF"/>
+  <rect x="375" y="176" width="25" height="159" rx="12.5" fill="#4F8CFF"/>
+</svg>

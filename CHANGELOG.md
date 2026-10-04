@@ -2,6 +2,10 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.141]
+### 变更
+- 图标统一：`icon.svg` 从 emoji 🏋️ 重画为与安装图标（`icon-192/512.png`、`apple-touch-icon.png`）一致的扁平杠铃矢量图，几何与配色（底 `#0F1115`、杠片 `#4F8CFF`、杆 `#E8EAF0`）按 PNG 实测像素复刻；`index.html` 的 favicon 也从内联 emoji data-URI 改为直接引用 `icon.svg`。此前浏览器标签显示 emoji、手机安装显示杠铃，两套图标不一致。
+
 ## [0.9.140]
 ### 变更
 - 动作标题去掉了「N.」编号前缀：标题前的编号和分区行（如「2. 主课段」）是两套编号，放在一起容易误读；动作位置本来就由 ← → 导航和「第 N/M 组」表达。分区行照常显示。
