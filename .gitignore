@@ -1,3 +1,7 @@
+# 依赖与类型检查产物（运行时零依赖，node_modules 仅 dev）
+node_modules/
+tsconfig.tsbuildinfo
+
 # OS 垃圾
 .DS_Store
 Thumbs.db

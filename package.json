@@ -1,0 +1,13 @@
+{
+  "name": "iron-log",
+  "private": true,
+  "version": "0.9.141",
+  "description": "Iron Log —— 力量训练记录（纯前端，运行时零依赖；devDependencies 仅用于类型检查）",
+  "scripts": {
+    "test": "node test-ironlog.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

@@ -10,8 +10,109 @@
  * 导出快照（Export）为 P0-3：由 logs 即时打包生成，不单独存储。
  * =================================================================== */
 
+/* =====================================================================
+ * 类型形状（JSDoc typedef：仅供 npx tsc --noEmit 检查，运行时零影响）
+ * 边界原则：外部数据（localStorage / AI 导入 / DOM）进来时是 any，
+ * 过 migrate() / normalize*() 之后保证符合下面的形状（parse, don't validate）。
+ * 改数据结构时：先改这里，让 tsc 找出所有串线的地方。
+ * =================================================================== */
+
+/**
+ * 单组数值。计划规格、会话进行组、日志落盘组共用骨架，
+ * 差别在可选字段：done/restAfter/isPR 只存在于会话与日志的组。
+ * @typedef {Object} SetEntry
+ * @property {'warmup'|'work'} type
+ * @property {number|null} weight kg；null=无负重
+ * @property {number|null} reps
+ * @property {number|null} duration 秒（时长类动作）
+ * @property {number|null} rpe
+ * @property {string} rpeLabel
+ * @property {'L'|'R'|null} side 单侧动作侧别
+ * @property {boolean} [done] 是否完成（会话/日志组）
+ * @property {number|null} [restAfter] 该组之后实际休息秒数（结算时写入）
+ * @property {boolean} [isPR] 日志组仅在真破纪录时写，普通组不增加体积
+ */
+
+/**
+ * 计划项 / 会话项 / 草稿项 / 日志动作条目（四层同构，差别在可选字段）。
+ * @typedef {Object} TrainItem
+ * @property {string} exerciseId 动作库 key
+ * @property {string} [section] 计划项的分区标题
+ * @property {string} [repsRange] 计划项目标次数区间（"8-12"）
+ * @property {string} [note] 动作级备注（会话为空串，日志序列化时空→null）
+ * @property {SetEntry[]} sets
+ */
+
+/**
+ * 进行中的训练会话（state.sessions[day]；null=无会话）。
+ * @typedef {Object} Session
+ * @property {number} startedAt epoch ms
+ * @property {TrainItem[]} items
+ * @property {string|null} condition 当日状态（佳/一般/差）
+ * @property {LogEntry} [originalEntry] re-edit 流程：正在编辑的原日志条目
+ * @property {{date:string,startedAt:number|null,endedAt?:number|null,durationSec?:number|null}} [keepMeta] 编辑旧记录时保留的原元数据
+ */
+
+/**
+ * 日志里的组：结算只落这些字段（type/rpeLabel 是训练中的工作形状，结算会剥掉）。
+ * @typedef {Object} LogSet
+ * @property {number|null} weight
+ * @property {number|null} reps
+ * @property {number|null} duration
+ * @property {number|null} rpe
+ * @property {'L'|'R'|null} side
+ * @property {number|null} [restAfter]
+ * @property {boolean} done
+ * @property {boolean} [isPR]
+ * @property {string} [type] 旧版本日志的遗留字段，读取处不依赖
+ * @property {string} [rpeLabel] 同上
+ */
+/**
+ * 已结算的训练日志（state.logs 的元素，按 startedAt 时间序）。
+ * @typedef {Object} LogEntry
+ * @property {string} date YYYY-MM-DD
+ * @property {'A'|'B'} [day] 归属日（结算时写入；旧日志可能缺，读取处默认 A）
+ * @property {number|null} startedAt epoch ms
+ * @property {number} [endedAt]
+ * @property {number|null} [durationSec] 手工编辑/旧版可能缺
+ * @property {string|null} [condition]
+ * @property {{exerciseId:string,note:string|null,sets:LogSet[]}[]} exercises
+ */
+
+/**
+ * 动作库条目（state.exercises 的值）。
+ * @typedef {Object} ExerciseDef
+ * @property {string} name
+ * @property {string} [muscles]
+ * @property {'weight'|'bodyweight'|'band'|'time'} mode
+ * @property {'kg'|'lb'|null} [unit]
+ * @property {string} [tips]
+ * @property {string} [pitfalls]
+ * @property {string} [tempo]
+ * @property {string} [alternatives]
+ * @property {string} [personal]
+ */
+
+/**
+ * 持久化整体状态（localStorage LS_KEY 下的对象；migrate() 后字段必然齐全）。
+ * @typedef {Object} AppState
+ * @property {number} version
+ * @property {{lastDay:'A'|'B',weightStep:number,restSec:number,restNote:string,warmupRestSec:number}} settings
+ * @property {{background:string}} profile
+ * @property {{A:TrainItem[],B:TrainItem[]}} program
+ * @property {{[id:string]:ExerciseDef}} exercises
+ * @property {LogEntry[]} logs
+ * @property {{A:Session|null,B:Session|null}} sessions
+ * @property {{A:TrainItem[],B:TrainItem[]}} drafts
+ * @property {{A:string|null,B:string|null}} condDraft
+ * @property {{curPos:{[day:string]:number}}} ui
+ * @property {{at:number,program:{A:TrainItem[],B:TrainItem[]},exercises:{[id:string]:ExerciseDef}}|null} lastImport 见 snapshotPlan：撤销导入的快照（只留一层）
+ * @property {{startsAt:number,endsAt:number,day?:'A'|'B',exIdx?:number|null,setIdx?:number|null}|null} rest 休息计时器（时间戳持久化）
+ * @property {{startsAt:number,day?:'A'|'B',exIdx?:number,setIdx?:number}|null} timer 秒表（时间戳持久化）
+ */
+
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.141';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.142';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
@@ -201,6 +302,7 @@ function coerceSetNums(sets){
     }
   }
 }
+/** @param {any} d 外部读入的原始对象；返回保证符合 AppState 形状 */
 function migrate(d){
   if(!d.settings) d.settings = {};
   if(d.settings.restNote === undefined) d.settings.restNote = '';
@@ -281,10 +383,12 @@ function migrate(d){
 /* ---------------- 状态加载 / 保存（P0-2 自动保存） ---------------- */
 let state = load();
 
+/** @returns {AppState} */
 function load(){
   try{
     const raw = localStorage.getItem(LS_KEY);
     if(raw){
+      /** @type {any} */
       let d = null;
       try{ d = JSON.parse(raw); }
       catch(e){ console.warn('Iron Log: 读取本地数据失败', e); }
@@ -308,11 +412,11 @@ function save(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
   // 原始 DOMException 是英文的，用户看完不知道能做什么：说清楚可行的出路。
   // 配额满与不可用（Safari 无痕）共用这条路径；不静默吞掉——最近改动可能没落盘。
-  catch(e){ toast('保存失败：本地存储已满或不可用。可到历史页删除旧记录，或到设置页导出备份后清理数据（' + e.message + '）'); }
+  catch(e){ toast('保存失败：本地存储已满或不可用。可到历史页删除旧记录，或到设置页导出备份后清理数据（' + /** @type {Error} */ (e).message + '）'); }
 }
 
 /* 防抖写入：连点步进时合并为一次全量序列化；隐藏/卸载前强制落盘，不丢数据 */
-let saveTimer = null;
+/** @type {number|null} */ let saveTimer = null;
 function saveSoon(){
   if(saveTimer) return;
   saveTimer = setTimeout(() => { saveTimer = null; save(); }, 250);
@@ -340,6 +444,9 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', flushSave);
 
 /* ---------------- 通用工具 ---------------- */
+/* $ 返回 any：调用点按用法取用具体元素属性（.value/.checked/files…），
+   类型检查靠数据模型 typedef 兜形状，不靠 DOM 元素类型。 */
+/** @type {(id: string) => any} */
 const $ = id => document.getElementById(id);
 const round1 = v => Math.round(v * 10) / 10;
 const round2 = v => Math.round(v * 100) / 100;   // 重量用 0.01：AI 计划/种子常有 11.35（=25lb）这种半档精度，round1 会把它显示成 11.3/11.4，和存的数据对不上
@@ -397,8 +504,8 @@ function sessionAvgRest(entry){
   return rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) / rs.length) : null;
 }
 
-let toastTimer = null;
-let toastAction = null;   // 提示条上的按钮（目前只有「撤销删除」）
+/** @type {number|null} */ let toastTimer = null;
+/** @type {(() => void)|null} */ let toastAction = null;   // 提示条上的按钮（目前只有「撤销删除」）
 function hideToast(){
   const t = $('toast');
   t.classList.remove('show');
@@ -414,7 +521,7 @@ function toast(msg, action){
     t.innerHTML = esc(msg) + '<button class="toast-act" data-act="undo">撤销</button>';
     t.classList.add('with-act');
     t.classList.add('show');
-    clearTimeout(toastTimer);
+    clearTimeout(/** @type {number} */ (toastTimer));
     toastTimer = setTimeout(hideToast, 6000);
     return;
   }
@@ -427,20 +534,20 @@ function toast(msg, action){
     t.textContent = msg;
   }
   t.classList.add('show');
-  clearTimeout(toastTimer);
+  clearTimeout(/** @type {number} */ (toastTimer));
   toastTimer = setTimeout(hideToast, toastAction ? 6000 : 2200);
 }
 
 /* 应用内确认弹层：替换浏览器原生确认框（iOS 上样式与行为不一致，且无法本地化）
  * 用法：askConfirm({title, desc, okLabel}).then(ok => ...)
  */
-let confirmResolve = null;
-let modalOpener = null; // 打开模态时的焦点来源，关闭后归还
+/** @type {((value: boolean) => void)|null} */ let confirmResolve = null;
+/** @type {HTMLElement|null} */ let modalOpener = null; // 打开模态时的焦点来源，关闭后归还
 function askConfirm(opts){
   $('confirm-title').textContent = opts.title;
   $('confirm-desc').textContent = opts.desc || '';
   $('confirm-ok-btn').textContent = opts.okLabel || '确定';
-  modalOpener = document.activeElement || null;
+  modalOpener = /** @type {HTMLElement|null} */ (document.activeElement || null);
   $('confirm-overlay').classList.add('show');
   setBackdropInert(true);
   $('confirm-ok-btn').focus(); // 焦点进对话框：背景 inert 后焦点原本会掉到 body
@@ -483,7 +590,7 @@ document.addEventListener('keydown', e => {
  * 兜底：点抽屉与 header 之外的任何地方（含穿透 inert 到 body 的点击）即关抽屉；与遮罩的 onclick 幂等共存。 */
 document.addEventListener('click', e => {
   if(!$('drawer').classList.contains('open')) return;
-  const t = e.target;
+  const t = /** @type {Element|null} */ (e.target);
   if(t && t.closest && (t.closest('.drawer') || t.closest('header'))) return;
   closeDrawer();
 });
@@ -517,7 +624,7 @@ function toggleDrawer(){
   const isOpen = $('drawer').classList.contains('open');
   $('hamburger-btn').setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   setBackdropInert(false); // 抽屉打开 → main 进 inert（Tab 不再逃进被遮罩盖住的控件）
-  if(isOpen){ const c = document.querySelector('.drawer-close'); if(c) c.focus(); }
+  if(isOpen){ const c = /** @type {HTMLElement|null} */ (document.querySelector('.drawer-close')); if(c) c.focus(); }
   if(isOpen) drawerLayerPush(); else drawerLayerPop();
 }
 function closeDrawer(){
@@ -620,7 +727,7 @@ function detectPR(day, exIdx, setIdx, exerciseId){
   const f = mode === 'time' ? 'duration' : (mode === 'bodyweight' ? 'reps' : 'weight');
   const cur = getItems(day)[exIdx].sets[setIdx][f];
   if(cur == null) return false;
-  let best = null;
+  /** @type {number|null} */ let best = null;
   for(const log of state.logs){
     const le = log.exercises.find(e => e.exerciseId === exerciseId);
     if(!le) continue;
@@ -882,9 +989,9 @@ function fullScreenHTML(day){
   // 跳过此动作：当前动作所有组都是 ✗
   const allUndone = item.sets.every(st => st.done === false);
   const restClock = restActive
-    ? (restEndsAt - Date.now() > 0
-        ? fmtDuration((restEndsAt - Date.now()) / 1000)
-        : '超时 ' + fmtDuration((Date.now() - restEndsAt) / 1000))
+    ? (/** @type {number} */ (restEndsAt) - Date.now() > 0
+        ? fmtDuration((/** @type {number} */ (restEndsAt) - Date.now()) / 1000)
+        : '超时 ' + fmtDuration((Date.now() - /** @type {number} */ (restEndsAt)) / 1000))
     : '';
   /* 组进度（v0.9.134）：原来的一排 9px 小圆环存在感太低，且与「第 N/M 组」文字重复。
    * 现在换成文字行下的 2px 细进度条：宽度 = 该动作已完成组数/总组数。
@@ -976,7 +1083,7 @@ function renderToday(){
 
 /* 组内局部更新：只改一个输入框的值（保留焦点，不重建整屏） */
 function patchValue(exIdx, setIdx, f, val){
-  const inp = document.querySelector(`#ex-list input[data-f="${f}"][data-ex="${exIdx}"][data-set="${setIdx}"]`);
+  const inp = /** @type {HTMLInputElement|null} */ (document.querySelector(`#ex-list input[data-f="${f}"][data-ex="${exIdx}"][data-set="${setIdx}"]`));
   if(!inp) return false;
   inp.value = val;
   return true;
@@ -999,7 +1106,7 @@ function patchRpe(exIdx, setIdx){
  * 按住 0.4 秒后开始连发：首个间隔 200ms，每步缩短 20ms、下限 100ms；抬手即停。
  * 抬手后跟随的那次 click 属于同一手势——连发已经步进过就吞掉它（holdFires）；
  * 轻点（没触发连发）仍走原 click 路径，行为与旧版完全一致。 */
-let holdTimer = null, holdFires = 0, holdSeq = 0;
+/** @type {number|null} */ let holdTimer = null, holdFires = 0, holdSeq = 0;
 function endHold(){ holdSeq++; if(holdTimer !== null){ clearTimeout(holdTimer); holdTimer = null; } }
 function exClick(e){
   if(!e.holdStep && holdFires){ holdFires = 0; return; }
@@ -1259,10 +1366,10 @@ $('ex-list').addEventListener('keydown', e => {
   inp.dispatchEvent(new Event('change', { bubbles:true }));
   const ex = inp.dataset.ex, set = inp.dataset.set;
   const next = inp.dataset.f === 'weight'
-    ? document.querySelector(`#ex-list .fs-input[data-ex="${ex}"][data-set="${set}"][data-f="reps"]`)
+    ? /** @type {HTMLElement|null} */ (document.querySelector(`#ex-list .fs-input[data-ex="${ex}"][data-set="${set}"][data-f="reps"]`))
     : null;
   if(next){ next.focus(); return; }
-  const done = document.querySelector(`#ex-list .fs-done[data-ex="${ex}"][data-set="${set}"]`);
+  const done = /** @type {HTMLElement|null} */ (document.querySelector(`#ex-list .fs-done[data-ex="${ex}"][data-set="${set}"]`));
   if(done) done.click();
 });
 
@@ -1308,7 +1415,8 @@ $('hist-list').addEventListener('click', async e => {
     // 覆盖成旧记录的状态会在结束/放弃后把它悄悄吞掉（小结里的「改一下」另有恢复逻辑）。
     state.sessions[day] = {
       startedAt: Date.now(),   // 时钟从本次编辑起算；原时间戳存在 keepMeta 里
-      items: entry.exercises.map(it => ({ exerciseId: it.exerciseId, note: it.note ?? '', sets: it.sets.map(s => ({ ...s })) })),
+      // LogSet→SetEntry：旧日志缺 type/rpeLabel，运行时按 falsy 走 work 分支；类型在此显式放行（见 LogSet 注释）
+      items: entry.exercises.map(it => ({ exerciseId: it.exerciseId, note: it.note ?? '', sets: /** @type {SetEntry[]} */ (it.sets.map(s => ({ ...s }))) })),
       condition: entry.condition ?? null,
       keepMeta: { date: entry.date, startedAt: entry.startedAt ?? null, endedAt: entry.endedAt ?? null, durationSec: entry.durationSec ?? null },
       originalEntry: entry   // 放弃这次编辑时原记录要能原样放回
@@ -1349,7 +1457,7 @@ $('toast').addEventListener('click', e => {
 /* 结束训练：写入 logs（P0 闭环的落盘点） */
 /* 刚结束的那次记录：summary 里的「改一下」用它把记录放回编辑态，
  * 关掉小结或另开一次记录后就失效（不留悬挂引用）。 */
-let lastEnded = null;
+/** @type {{day:'A'|'B',entry:LogEntry,items:TrainItem[],startedAt:number,condition:string|null}|null} */ let lastEnded = null;
 
 /* 日志按 startedAt 保持时间序：正常结束插在末尾；「改一下」的旧记录按原时间戳回到原位 */
 function insertLog(entry){
@@ -1466,7 +1574,7 @@ function showSummary(entry){
   // 记错了不必重来：只要这条记录还在最末尾，就把它放回编辑态
   const re = $('summary-reedit');
   if(re) re.style.display = lastEnded ? '' : 'none';
-  modalOpener = document.activeElement || null; // inert 会先卸掉焦点，必须在设 inert 前捕获
+  modalOpener = /** @type {HTMLElement|null} */ (document.activeElement || null); // inert 会先卸掉焦点，必须在设 inert 前捕获
   $('summary-overlay').classList.add('show');
   setBackdropInert(true);
   const sc = $('summary-close'); if(sc) sc.focus();
@@ -1502,7 +1610,7 @@ function reeditSession(){
 }
 
 /* 进行中计时（只更新时钟，不重渲染） */
-let clockTimer = null;
+/** @type {number|null} */ let clockTimer = null;
 function startClock(){
   if(clockTimer) clearInterval(clockTimer);
   clockTimer = setInterval(() => {
@@ -1517,12 +1625,12 @@ function startClock(){
  * 用户点「下一组」或「跳过」时记录实际休息时长到 set.restAfter。
  * 基于 restStartsAt 时间戳，切后台/休眠后回来仍显示真实值。
  * ------------------------------------------------ */
-let restEndsAt = null;
-let restStartsAt = null;
-let restTimer = null;
+/** @type {number|null} */ let restEndsAt = null;
+/** @type {number|null} */ let restStartsAt = null;
+/** @type {number|null} */ let restTimer = null;
 let restDone = false;
-let restForPos = null;  // {exIdx, setIdx} 触发休息的组
-let restForDay = null;  // 触发休息的日：换日后结算也要写回原来那一日的 items
+/** @type {{exIdx:number,setIdx:number}|null} */ let restForPos = null;  // {exIdx, setIdx} 触发休息的组
+/** @type {'A'|'B'|null} */ let restForDay = null;  // 触发休息的日：换日后结算也要写回原来那一日的 items
 
 function startRestTimer(atPos){
   // 热身组用更短的休息时长（拉伸等动作本身有时长，计时器照常走完即可）
@@ -1607,9 +1715,9 @@ function resetRest(){
  * 调用 resume() 无效——休息结束提示音会永远静音。第一次点训练卡片任意按钮时解锁。 */
 function unlockAudio(){
   try{
-    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const Ctx = /** @type {any} */ (window).AudioContext || /** @type {any} */ (window).webkitAudioContext;
     if(!Ctx) return;
-    const ctx = beep._ctx || (beep._ctx = new Ctx());
+    const ctx = /** @type {any} */ (beep)._ctx || (/** @type {any} */ (beep)._ctx = new Ctx());
     if(ctx.state === 'suspended') ctx.resume();
   }catch(e){}
 }
@@ -1617,9 +1725,9 @@ function unlockAudio(){
 /* 休息结束提示音（WebAudio，无外部资源；失败静默） */
 function beep(){
   try{
-    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const Ctx = /** @type {any} */ (window).AudioContext || /** @type {any} */ (window).webkitAudioContext;
     if(!Ctx) return;
-    const ctx = beep._ctx || (beep._ctx = new Ctx());
+    const ctx = /** @type {any} */ (beep)._ctx || (/** @type {any} */ (beep)._ctx = new Ctx());
     if(ctx.state === 'suspended') ctx.resume();
     const osc = ctx.createOscillator(), gain = ctx.createGain();
     osc.type = 'sine'; osc.frequency.value = 880;
@@ -1635,11 +1743,12 @@ function beep(){
 /* ---------------- 计时动作的秒表 ----------------
  * A 日有 9 个计时动作（平板、各类拉伸、呼吸），原来要自己看表、再打字填秒数。
  * 按时间戳计算，切后台回来也不会少算；确认这一组时会自动停表填入。 */
-let timerFor = null;         // {exIdx, setIdx} 正在计时的组
-let timerForDay = null;      // 正在计时的日：导入方案换日后停表也要写回原来那一日的组
-let timerStartsAt = null;
-let timerTicker = null;
+/** @type {{exIdx:number,setIdx:number}|null} */ let timerFor = null;         // {exIdx, setIdx} 正在计时的组
+/** @type {'A'|'B'|null} */ let timerForDay = null;      // 正在计时的日：导入方案换日后停表也要写回原来那一日的组
+/** @type {number|null} */ let timerStartsAt = null;
+/** @type {number|null} */ let timerTicker = null;
 function timerElapsedSec(){ return timerStartsAt === null ? 0 : Math.round((Date.now() - timerStartsAt) / 1000); }
+/** @returns {any} 与 $() 同政策：DOM 元素一律 any，值写入（el.value = 数字）不报形状错 */
 function timerInputEl(){
   if(!timerFor || curDay() !== timerForDay) return null;   // 显示中的卡片不是计时归属日：别把秒数打进别人家
   return document.querySelector('#ex-list .fs-input[data-ex="' + timerFor.exIdx + '"][data-set="' + timerFor.setIdx + '"][data-f="duration"]');
@@ -1679,14 +1788,14 @@ function resumeTimers(){
   resetRest(); clearTimer();
   if(r && (r.day === 'A' || r.day === 'B') && (state.sessions[r.day] || (draft[r.day] && draft[r.day].length))){
     restStartsAt = r.startsAt; restEndsAt = r.endsAt; restForDay = r.day;
-    restForPos = (Number.isFinite(r.exIdx) && Number.isFinite(r.setIdx)) ? { exIdx: r.exIdx, setIdx: r.setIdx } : null;
+    restForPos = (Number.isFinite(r.exIdx) && Number.isFinite(r.setIdx)) ? { exIdx: /** @type {number} */ (r.exIdx), setIdx: /** @type {number} */ (r.setIdx) } : null;
     restDone = Date.now() >= restEndsAt;   // 离开期间已经到点：回来不补响铃，直接显示超时
     state.rest = r;                        // 接上了就要重新可持久化：否则第二次刷新会把它丢掉
     startRestTick();
   } else if(r) state.rest = null;
   if(t && (t.day === 'A' || t.day === 'B') && (state.sessions[t.day] || (draft[t.day] && draft[t.day].length))){
     // 秒表和休息同一口径：还没确认任何一组的草稿日也接得上（计时动作先按表后确认是常态）
-    timerFor = { exIdx: t.exIdx, setIdx: t.setIdx };
+    timerFor = { exIdx: /** @type {number} */ (t.exIdx), setIdx: /** @type {number} */ (t.setIdx) };
     timerForDay = t.day;
     timerStartsAt = t.startsAt;
     state.timer = t;                      // 同上：接上后保持可持久化
@@ -1789,10 +1898,10 @@ function trendLegend(entries, conv){
 function buildTrendCharts(trends, maxLines){
   /* 先按「当前类型」过滤掉改类型之前的旧指标记录（秒画进重量轴会画出假飙升），
    * 过滤后不足 2 点的线不画（单点没有趋势可言）。 */
-  const usable = Object.entries(trends).map(([id, t]) => {
+  const usable = /** @type {Array<[string, any]>} */ (Object.entries(trends).map(([id, t]) => {
     const sessions = t.sessions.filter(s => sessionKind(s) === trendKind(t));
     return sessions.length >= 2 ? [id, { ...t, sessions }] : null;
-  }).filter(Boolean);
+  }).filter(Boolean));
   if(!usable.length){
     return '<div class="trend-empty">趋势要同一个动作至少记录 2 次。<br>再练两次，这里就会出现折线。</div>';
   }
@@ -2066,7 +2175,7 @@ function undoImport(){
   }
   // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组。
   // 按表的归属日判断（不是当前查看的日）：归属日有进行中记录时表还有可写的地方，不该误清。
-  if(timerFor && !state.sessions[timerForDay]) clearTimer();
+  if(timerFor && !state.sessions[/** @type {'A'|'B'} */ (timerForDay)]) clearTimer();
   state.program = snap.program;
   /* 与 applyPlan 同政策：草稿里用户真实产生过的内容（确认过的组、手写备注）随撤销丢弃时
    * 要在结果里说一声——撤销按钮常驻，导入后填了东西再撤销完全在预期路径上。 */

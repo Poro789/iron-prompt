@@ -2,6 +2,10 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.142]
+### 变更
+- 接入 TypeScript 类型闸门（不改产物）：`js/app.js` 头部新增 JSDoc typedef（AppState/Session/LogEntry/TrainItem/SetEntry 等数据形状），tsconfig 以 `checkJs + strict` 检查、`noEmit` 不产出文件；CI test 作业在测试前跑 `npx tsc --noEmit`，类型错误即失败。运行时行为零改动，部署的仍是不经构建的 `js/app.js`。
+
 ## [0.9.141]
 ### 变更
 - 图标统一：`icon.svg` 从 emoji 🏋️ 重画为与安装图标（`icon-192/512.png`、`apple-touch-icon.png`）一致的扁平杠铃矢量图，几何与配色（底 `#0F1115`、杠片 `#4F8CFF`、杆 `#E8EAF0`）按 PNG 实测像素复刻；`index.html` 的 favicon 也从内联 emoji data-URI 改为直接引用 `icon.svg`。此前浏览器标签显示 emoji、手机安装显示杠铃，两套图标不一致。

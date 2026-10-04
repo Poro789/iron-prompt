@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    // 渐进收紧：隐式 any（事件回调参数、局部变量）暂不报错——存量约 368 处。
+    // 数据模型形状靠上面的 typedef + strict 的显式类型错误兜住；
+    // 后续补 JSDoc 时把这一项删掉即可全面收紧。
+    "noImplicitAny": false,
+    "skipLibCheck": true
+  },
+  "include": ["js/**/*.js"]
+}

@@ -56,15 +56,20 @@ icon-192.png          安装图标 192
 icon-512.png          安装图标 512（同时用作 maskable）
 apple-touch-icon.png  iOS 添加到主屏幕（iOS 不认 SVG，只认 PNG）
 sw.js                 离线缓存（缓存版本串由 CI 按 APP_VERSION 改写）
+package.json          devDependencies 仅 typescript（只跑类型检查，产物不依赖任何运行时包）
+package-lock.json     锁定 typescript 版本（CI 用 npm ci）
+tsconfig.json         类型检查配置：checkJs + strict，noEmit，不产出任何文件
 fixtures/plan-A.json  测试夹具（一份真实 A 日计划）
 fixtures/plan-B.json  测试夹具（一份真实 B 日计划，AI 方案导入的实录）
 ```
 
-零构建：无打包器、无依赖，`css`/`js` 直接外链。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act）。
+运行时零构建零依赖：无打包器，`css`/`js` 直接外链，部署的就是仓库里的 `js/app.js`。类型检查用 JSDoc 注释 + `tsc --noEmit`（devDependency 只有 typescript，不产出文件），CI 在测试前把类型错误当失败拦下。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act）。
 
 ## 开发
 
 ```bash
+npm ci                 # 只装 typescript（类型检查用）
+npm run typecheck      # tsc --noEmit：JSDoc 类型闸门，不产出文件
 node test-ironlog.js   # DOM 桩逻辑测试（零依赖）
 npx serve .            # 本地预览（SW 需要 http，file:// 下不注册）
 ```
