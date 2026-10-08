@@ -246,6 +246,6 @@ const { manifest, sw, p, card, mk } = H.C;   // 上段产生的共享变量
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
     // 加新小节时这一行也要改：它钉的是「已知最大编号」，漏改说明新小节加在了没人看见的地方。
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 206);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 207);
   }
 };

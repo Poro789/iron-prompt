@@ -454,4 +454,58 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
     try{ clickAction206('no_such_action'); }catch(e){ threw206 = true; }
     check('206 未登记的动作不抛异常（表里没有就什么都不做）', !threw206);
   }
+
+  /* ============================================================
+   * 207. exClick 的三层 act 表（v0.9.147 拆分）
+   * v0.9.147 把 exClick 里 172 行的 if(act===…) 链拆成 EX_NAV_ACTS / EX_ITEM_ACTS /
+   * EX_SET_ACTS 三张表 + 具名处理器。拆完有两个只有新结构才会有的坑：
+   * ① 同一个 act 出现在两张表里时，前一层会永久挡住后一层——§131 看不出，因为名字确实
+   *    「被接住了」，但点了没反应；
+   * ② 逐层守卫（拿不到 item/set 就静默返回）原本是那串 if 的语义，漏掉就会在越界组上崩。
+   * ============================================================ */
+  console.log('== 207. exClick 三层 act 表：不重名、缺上下文时静默返回（v0.9.147）==');
+  {
+    const keys207 = { nav: Object.keys(T.EX_NAV_ACTS), item: Object.keys(T.EX_ITEM_ACTS), set: Object.keys(T.EX_SET_ACTS) };
+    const dup207 = keys207.nav.filter(k => keys207.item.includes(k) || keys207.set.includes(k))
+      .concat(keys207.item.filter(k => keys207.set.includes(k)));
+    check('207 三张 act 表之间没有重名（重名=前一层永久挡住后一层）', dup207.length === 0);
+    const notFn207 = [];
+    for(const m of [T.EX_NAV_ACTS, T.EX_ITEM_ACTS, T.EX_SET_ACTS])
+      for(const k of Object.keys(m)) if(typeof m[k] !== 'function') notFn207.push(k);
+    check('207 表里每一项都是函数', notFn207.length === 0);
+
+    let threw207 = null;
+    const tap207 = ds => { try{ clickExList(btnOf(ds)); }catch(err){ threw207 = String(err && err.message); } };
+    tap207({ act: 'no_such_act', ex: '0', set: '0' });
+    check('207 未登记的 act 不抛异常', threw207 === null);
+    tap207({ act: 'confirm', ex: '0', set: '999' });
+    check('207 data-set 越界时静默返回（原 if(!set) return 的语义）', threw207 === null);
+    tap207({ act: 'addset', ex: '0' });
+    check('207 动作级 act 不因缺 data-set 而崩', threw207 === null);
+
+    // 非空跑一遍：表里的处理器必须真能被派发到（否则整张表都是死表，§131 却看不出来）。
+    // 到本节末尾时 program 已被前面的小节清空（实测 items=0），所以这里自带一个最小计划。
+    const day207 = T.state.settings.lastDay;
+    const prog207 = JSON.parse(JSON.stringify(T.state.program));
+    T.state.drafts[day207] = null; T.state.sessions[day207] = null;
+    T.state.program[day207] = [
+      { exerciseId: 'e207', sets: [{ type: 'work', weight: 10, reps: 8, rpe: null }, { type: 'work', weight: 10, reps: 8, rpe: null }] },
+      { exerciseId: 'e207', sets: [{ type: 'work', weight: 12, reps: 5, rpe: null }] }
+    ];
+    const item207 = T.getItems(day207)[0];
+    const reps207 = item207 && item207.sets[0] ? Number(item207.sets[0].reps) || 0 : null;
+    tap207({ act: 'step', ex: '0', set: '0', f: 'reps', dir: '1' });
+    check('207 组级 step 能走通（reps +1）',
+      threw207 === null && reps207 !== null && item207.sets[0].reps === reps207 + 1);
+    const n207 = item207.sets.length;
+    tap207({ act: 'addset', ex: '0' });
+    check('207 addset 真补了一组，并沿用最后一组的重量',
+      threw207 === null && item207.sets.length === n207 + 1 && item207.sets[n207].weight === 10);
+    tap207({ act: 'delset', ex: '0' });
+    check('207 delset 真删掉刚补的那组', threw207 === null && item207.sets.length === n207);
+    const pos207 = T.curPos;
+    tap207({ act: 'next' });
+    check('207 导航层仍能走通（next 让位置前进一格）', threw207 === null && T.curPos === pos207 + 1);
+    T.state.program = prog207; T.curPos = pos207; T.render();
+  }
 };

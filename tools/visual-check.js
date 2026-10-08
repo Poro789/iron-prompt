@@ -208,6 +208,43 @@ const check = (name, ok, detail) => {
   const condAfter = await evaljs(`(document.querySelector(${JSON.stringify(condSel)}) || {}).textContent || ''`);
   check('C 点状态按钮：文案跟着变（' + String(condBefore).trim() + ' → ' + String(condAfter).trim() + '）', condAfter !== condBefore && /状态：/.test(condAfter));
 
+  /* 训练卡片上的按钮（data-act → exClick 的三层 act 表）。
+   * v0.9.147 把那条 172 行的 if(act===…) 链拆成 EX_NAV_ACTS / EX_ITEM_ACTS / EX_SET_ACTS。
+   * 逻辑测试（§207）在 DOM 桩里测过派发，但桩里的 closest 是假的；这里真点一次，
+   * 三层各挑一个：± 步进（set 层）、加一组（item 层）、完成这组（set 层）。
+   * 拆处理器时接错一层、少传一个 data-* ——在这里会直接表现为「按了没用」。 */
+  const posC = await evaljs(`(() => {
+    // 卡片只渲染当前那一组，所以先把游标挪到一个「力量模式」的位置——
+    // 时长类动作的卡片上没有 ±reps，拿它测步进会假失败。
+    const d = state.settings.lastDay, ps = flatPos(d);
+    for(let i = 0; i < ps.length; i++){
+      const it = getItems(d)[ps[i].exIdx];
+      if(((state.exercises[it.exerciseId] || {}).mode || 'weight') === 'weight'){ curPos = i; render(); return { ex: ps[i].exIdx, set: ps[i].setIdx }; }
+    }
+    return null;
+  })()`);
+  await sleep(250);
+  check('C 今日视图渲染出可操作的训练卡片', !!posC);
+  if (posC) {
+    const repsSel = `#ex-list .fs-input[data-f="reps"][data-ex="${posC.ex}"][data-set="${posC.set}"]`;
+    const repsBefore = await evaljs(`(document.querySelector(${JSON.stringify(repsSel)}) || {}).value`);
+    await click(`#ex-list button.fs-step[data-act="step"][data-f="reps"][data-dir="1"][data-ex="${posC.ex}"][data-set="${posC.set}"]`);
+    const repsAfter = await evaljs(`(document.querySelector(${JSON.stringify(repsSel)}) || {}).value`);
+    check(`C 卡片上点「+」：reps ${repsBefore} → ${repsAfter}`, Number(repsAfter) === Number(repsBefore) + 1);
+
+    const setsBefore = await evaljs(`getItems(state.settings.lastDay)[${posC.ex}].sets.length`);
+    await click(`#ex-list button.add-set[data-act="addset"][data-ex="${posC.ex}"]`);
+    const setsAfter = await evaljs(`getItems(state.settings.lastDay)[${posC.ex}].sets.length`);
+    check(`C 点「加一组」：组数 ${setsBefore} → ${setsAfter}`, setsAfter === setsBefore + 1);
+
+    const doneBefore = await evaljs(`getItems(state.settings.lastDay)[${posC.ex}].sets[${posC.set}].done === true`);
+    await click(`#ex-list .fs-done[data-ex="${posC.ex}"][data-set="${posC.set}"]`);
+    const doneAfter = await evaljs(`getItems(state.settings.lastDay)[${posC.ex}].sets[${posC.set}].done === true`);
+    check(`C 点「完成这组」：该组的完成状态翻转（${doneBefore} → ${doneAfter}）`, doneAfter !== doneBefore);
+    // 休息计时会被「完成这组」起起来：停掉它，免得后面的截图里挂着倒计时
+    await evaljs(`if(restEndsAt !== null) finishRest(); true`);
+  }
+
   // 导出：真点一次，核对回执出现且没有未捕获异常
   await click('#hamburger-btn');
   await click('#tab-history');

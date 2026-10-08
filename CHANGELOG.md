@@ -2,7 +2,14 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.9.146]
+## [0.9.147]
+### 变更
+- 拆掉 `exClick()` 里那条 172 行的 `if(act === '…')` 链（技术债清掉的一项）。`exClick` 现在只做四件事：吞掉按住连发的重复 click、找出按钮、按「需要多少上下文」逐层补齐、把 act 交给具名处理器。三张表按层分开：`EX_NAV_ACTS`（prev/next/skipex/nextex，只要 day）、`EX_ITEM_ACTS`（addset/delset，要动作项）、`EX_SET_ACTS`（step/timer/uselast/confirm/dec/inc，要某一组）。分层是有意的：后两层带「拿不到 item/set 就静默返回」的守卫，而导航类按钮不带 `data-ex`/`data-set`，绝不能走进去。加新按钮 = 写一个具名处理器 + 在对应表里加一行。
+- 抽出三个共用小函数：`navDone()`（四个导航动作原本各写一遍「存盘+重画+回顶」）、`setOffsetBefore(items, exIdx)`（skipex/nextex 里两处相同的「前面占了几个组」计数）、`timerOn(exIdx, setIdx)`（「秒表是否挂在当前日这一组上」原本在 delset/timer/confirm 三处各写一遍，口径必须一致，v0.9.70 就为此改过渲染守卫）。顺手删掉 `curPos = 0` 一处死赋值（下一行立刻被覆盖）。
+- 新增 `Day` typedef（`'A'|'B'`）：原先 13 处 `@param {'A'|'B'}` 散在各函数上；`curDay()` 也补上 `@returns {Day}`。事件上下文三个形状（`ExNavCtx`/`ExItemCtx`/`ExSetCtx`）跟着处理器放，不放顶部数据 typedef 块——它们不落盘、只在一次派发里活着。
+- 测试：§131 原来靠正则 `act === 'x'` 认「哪些 act 被接住」，拆表后会误报死按钮；改成从 `__T` 桥接读三张表的键（比正则准）。§149 的「`scrollToTop()` ≥7 处」改为「剩余各处仍直接调用 + `navDone` 里有且只有一处」——那 3 处差值正是被收进 `navDone` 的四个导航动作。新增 **§207**：三张表之间不得重名（重名 = 前一层永久挡住后一层，§131 看不出）、表里每项都是函数、缺 `data-set`/越界时静默返回不崩，并且**真跑** step/addset/delset/next 四个动作并核对状态变化（否则整张表可以是死表而没人发现）。
+- `tools/visual-check.js` 的 C 项扩展到训练卡片：真浏览器里点 `+`（reps 10 → 11）、「加一组」（组数 1 → 2）、「完成这组」（done false → true），三层各验一次。DOM 桩里的 `closest` 是假的，这类断链只有真浏览器接得住。
+- 验证：`npm run typecheck` 0 错误；`node tests/run.js` **1062 通过 / 0 失败**（上版 1053，+9 全来自 §207）；`node tools/visual-check.js 390` **42 项通过 / 0 失败**。行为未变：所有处理器都是原分支逐字搬过去的，只有上述三处去重与一处死赋值。
 ### 变更
 - `tools/visual-check.js` 从「布局快照」升级为真实浏览器闸门，三类检查：A 水平溢出（原有）、B 可点目标触达尺寸（新增，高度 ≥44px、宽度 ≥24px，嵌套在另一个可点元素里的内层不重复计）、C 点击链路（新增：用真 `click` 事件驱动抽屉/视图/日期/状态/导出，并核对结果与「无未捕获异常」）。检查项统一成 `ok/FAIL` 计数，退出码 0/1/2（2 = 浏览器或 CDP 没跑成，不算通过）。
 - 能在 CI 跑：浏览器查找补上 Linux（`/usr/bin/google-chrome-stable`、`google-chrome`、`chromium*`）与 macOS，并支持 `CHROME_PATH` 覆盖；非 Windows 加 `--no-sandbox --disable-dev-shm-usage`。`.github/workflows/deploy.yml` 的 test 作业新增「Browser gate」步骤，Node 20 → 22（工具用 Node 的全局 `WebSocket`/`fetch`，20 上没有），失败时把 `.visual/` 截图作为 artifact 上传。

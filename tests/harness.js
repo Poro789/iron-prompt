@@ -161,6 +161,11 @@ const testScript = script + `
   toggleDrawer, closeDrawer,
   // §143/§206：点击动作表。页面里的按钮只写 data-action="名字"，测试要能核对名字是否真在表里。
   get ACTIONS(){ return ACTIONS; },
+  // §131/§207：训练卡片按钮的 act 表（exClick 的三层派发）。测试要能核对
+  // 「页面发射的 act」与「表里接住的 act」互相覆盖，且三层之间没有重名（重名=前一层永远挡住后一层）。
+  get EX_NAV_ACTS(){ return EX_NAV_ACTS; },
+  get EX_ITEM_ACTS(){ return EX_ITEM_ACTS; },
+  get EX_SET_ACTS(){ return EX_SET_ACTS; },
   cycleDone, setDoneState: (day, exIdx, setIdx, val) => { const st = getItems(day)[exIdx].sets[setIdx]; if(st) st.done = val; }, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
   localDateStr, fmtDate, trimSet, migrate, bindDrafts, clampPos, load,

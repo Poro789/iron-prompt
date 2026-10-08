@@ -18,6 +18,13 @@
  * =================================================================== */
 
 /**
+ * 两日制的唯一取值。所有 day 参数、DAYS 常量、事件上下文里的 day 都用它——
+ * 散着的 'A'|'B' 字面量会把 day 摊成 string，`state.sessions[day]` 这类下标就落到类型之外
+ * （v0.9.144 补标注时踩过）。
+ * @typedef {'A'|'B'} Day
+ */
+
+/**
  * 单组数值。计划规格、会话进行组、日志落盘组共用骨架，
  * 差别在可选字段：done/restAfter/isPR 只存在于会话与日志的组。
  * @typedef {Object} SetEntry
@@ -135,9 +142,9 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.146';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.147';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
-/** @type {('A'|'B')[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
+/** @type {Day[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
 const SEED = {
@@ -741,7 +748,7 @@ bindDrafts();
 const COND_ORDER = [null, '佳', '一般', '差'];
 /** @type {{[k:string]:string}} */
 const COND_LABEL = { '佳': '佳', '一般': '一般', '差': '差' };
-/** @param {'A'|'B'} day 循环「未填→佳→一般→差→未填」 */
+/** @param {Day} day 循环「未填→佳→一般→差→未填」 */
 function cycleCondition(day){
   const cur = state.sessions[day] ? state.sessions[day].condition : condDraft[day];
   const next = COND_ORDER[(COND_ORDER.indexOf(cur) + 1) % COND_ORDER.length];
@@ -751,9 +758,10 @@ function cycleCondition(day){
   renderToday();
 }
 
+/** @returns {Day} 当前选中的训练日。取 day 只走这里，不要各处直接读 settings.lastDay */
 function curDay(){ return state.settings.lastDay; }
 
-/** @param {'A'|'B'} d 切换 A/B 日 */
+/** @param {Day} d 切换 A/B 日 */
 function switchDay(d){
   state.settings.lastDay = d;
   curPos = state.ui.curPos[d] || 0;   // A/B 各记各的位置，切回来不用重找
@@ -799,7 +807,7 @@ function lastValues(exerciseId){
  *    会把远离纪录的数值误标成 PR（历史 100、上次 50、这次 60 不是纪录）。
  * 2) 本次会话里同动作的其他已完成正式组——刚确认过 85，再确认 52 不算破纪录。
  * 没有任何历史记录时不算 PR（与「上次」显示一致，不给第一组刷徽章）。 */
-/** @param {'A'|'B'} day @param {number} exIdx @param {number} setIdx @param {string} exerciseId @returns {boolean} */
+/** @param {Day} day @param {number} exIdx @param {number} setIdx @param {string} exerciseId @returns {boolean} */
 function detectPR(day, exIdx, setIdx, exerciseId){
   const ex = state.exercises[exerciseId];
   const mode = (ex && ex.mode) || 'weight';
@@ -851,7 +859,7 @@ function lastHintHTML(exIdx, setIdx, exId, ex, set){
 }
 
 /* 当前日期的可编辑 items：有进行中记录用记录，否则用草稿（计划规格优先，上次数值兜底） */
-/** @param {'A'|'B'} day @returns {TrainItem[]} 可编辑的当前 items（进行中记录 > 草稿 > 计划+上次） */
+/** @param {Day} day @returns {TrainItem[]} 可编辑的当前 items（进行中记录 > 草稿 > 计划+上次） */
 function getItems(day){
   if(state.sessions[day]) return state.sessions[day].items;
   /* 草稿现在会存盘，所以要先确认它和当前计划还对得上：动作序列不一致（计划被改过、
@@ -887,7 +895,7 @@ function getItems(day){
 }
 
 /* 首次确认一组时，把草稿提升为正式的进行中记录 */
-/** @param {'A'|'B'} day */
+/** @param {Day} day */
 function startSessionIfNeeded(day){
   if(!state.sessions[day]){
     state.sessions[day] = { startedAt: Date.now(), items: getItems(day), condition: condDraft[day] || null };
@@ -930,21 +938,21 @@ function targetLabel(item){
 let curPos = state.ui.curPos[curDay()] || 0;  // 当前 (exIdx, setIdx) 扁平化位置，从上次停下的地方继续
 /** @type {{[k:string]:boolean}} */ let openNotes = {};  // 已展开的"要点/避坑"详情，key = day:exIdx
 
-/** @param {'A'|'B'} day @returns {{exIdx:number,setIdx:number}[]} 当前 items 的扁平组位置表 */
+/** @param {Day} day @returns {{exIdx:number,setIdx:number}[]} 当前 items 的扁平组位置表 */
 function flatPos(day){
   const items = getItems(day);
   /** @type {{exIdx:number,setIdx:number}[]} */ const pos = [];
   items.forEach((it, exIdx) => it.sets.forEach((s, setIdx) => pos.push({ exIdx, setIdx })));
   return pos;
 }
-/** @param {'A'|'B'} day @param {{exIdx:number,setIdx:number}} p @returns {{ex:ExerciseDef|null,item:TrainItem|null,set:SetEntry|null}} */
+/** @param {Day} day @param {{exIdx:number,setIdx:number}} p @returns {{ex:ExerciseDef|null,item:TrainItem|null,set:SetEntry|null}} */
 function posLabel(day, p){
   const items = getItems(day);
   const it = items[p.exIdx];
   if(!it) return { ex: null, item: null, set: null };
   return { ex: state.exercises[it.exerciseId], item: it, set: it.sets[p.setIdx] };
 }
-/** @param {'A'|'B'} day @returns {number} 夹到合法范围内的 curPos */
+/** @param {Day} day @returns {number} 夹到合法范围内的 curPos */
 function clampPos(day){
   const n = flatPos(day).length;
   if(!n) return 0;
@@ -953,19 +961,19 @@ function clampPos(day){
   if(state.ui.curPos[day] !== curPos){ state.ui.curPos[day] = curPos; saveSoon(); }
   return curPos;
 }
-/** @param {'A'|'B'} day */
+/** @param {Day} day */
 function nextPos(day){
   const n = flatPos(day).length;
   if(!n) return;
   curPos = (curPos + 1) % n;
 }
-/** @param {'A'|'B'} day */
+/** @param {Day} day */
 function prevPos(day){
   const n = flatPos(day).length;
   if(!n) return;
   curPos = (curPos - 1 + n) % n;
 }
-/** @param {'A'|'B'} day @param {number} exIdx @param {number} setIdx ○↔✓ 二态切换 */
+/** @param {Day} day @param {number} exIdx @param {number} setIdx ○↔✓ 二态切换 */
 function cycleDone(day, exIdx, setIdx){
   const set = getItems(day)[exIdx].sets[setIdx];
   if(!set) return;
@@ -986,7 +994,7 @@ function cycleDone(day, exIdx, setIdx){
 /* 已确认的组改了数字：PR 徽章必须跟着重算。
  * 确认 105 拿到 🔥 后改成 90，🔥 还挂着；确认 90 后 ± 加到 105 却没有 🔥——
  * 两个方向都会让徽章和真实表现脱钩。未确认的组不重算（确认时才判定）。 */
-/** @param {'A'|'B'} day @param {number} exIdx @param {number} setIdx */
+/** @param {Day} day @param {number} exIdx @param {number} setIdx */
 function refreshPR(day, exIdx, setIdx){
   const item = getItems(day)[exIdx];
   const set = item && item.sets[setIdx];
@@ -1016,7 +1024,7 @@ function setInputsHTML(exIdx, setIdx, st, ex){
   return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' ' + unitLbl)}<input class="fs-input" ${d('weight')} inputmode="decimal" enterkeyhint="next" value="${fmtW(st.weight)}" aria-label="重量（${unitLbl}）"><span class="fs-unit">${unitLbl}</span>${step('weight', 1, '重量增加 ' + ws + ' ' + unitLbl)}</span>
     <span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" enterkeyhint="done" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
 }
-/** @param {'A'|'B'} day @returns {string} 全屏「一次一组」卡片的 HTML */
+/** @param {Day} day @returns {string} 全屏「一次一组」卡片的 HTML */
 function fullScreenHTML(day){
   const program = state.program[day] || [];
   if(!program.length) return '<div class="empty-hint">该日暂无动作，等待导入训练计划。</div>';
@@ -1203,6 +1211,41 @@ function patchRpe(exIdx, setIdx){
 /** @type {number|null} */ let holdTimer = null, holdFires = 0, holdSeq = 0;
 function endHold(){ holdSeq++; if(holdTimer !== null){ clearTimeout(holdTimer); holdTimer = null; } }
 /** @param {any} e click 事件（仓库不建模 DOM 事件类型；e.holdStep 是连发手势自己加的标记） */
+/* ── 训练卡片上的按钮派发（#ex-list 的 click 委托）─────────────────────────
+ * exClick 只做四件事：吞掉按住连发的重复 click、找出按钮、按「需要多少上下文」
+ * 分层派发、把 act 交给具名处理器。分层是有意的：item/set 两层带「找不到就静默
+ * 返回」的守卫，而导航类按钮不带 data-ex/data-set，绝不能走进去。
+ * 加新按钮 = 写一个具名处理器 + 在对应表里登记一行；不要把 if(act===…) 塞回 exClick。
+ * 三张表之间不允许出现同名 act：前一层接住的 act 永远到不了后一层（§131/§207 拦这个）。 */
+/* 下面三个是「一次派发里活着」的上下文形状，不落盘、不进 state，
+ * 所以放在处理器旁边，不放顶部的数据 typedef 块（那里只放持久化形状）。 */
+/**
+ * 只需要当前日与按钮（导航类动作）。
+ * @typedef {Object} ExNavCtx
+ * @property {Day} day
+ * @property {any} btn 委托命中的按钮；测试桩里是 {dataset:{…}}，按仓库约定不建模 DOM
+ */
+/**
+ * 需要整个动作项。
+ * @typedef {Object} ExItemCtx
+ * @property {Day} day
+ * @property {any} btn
+ * @property {number} exIdx
+ * @property {TrainItem} item
+ */
+/**
+ * 需要具体某一组。
+ * @typedef {Object} ExSetCtx
+ * @property {Day} day
+ * @property {any} btn
+ * @property {number} exIdx
+ * @property {TrainItem} item
+ * @property {number} setIdx
+ * @property {SetEntry} set
+ */
+
+/** 训练卡片上的按钮派发：按 act 查表，逐层补齐上下文。
+ * @param {any} e */
 function exClick(e){
   if(!e.holdStep && holdFires){ holdFires = 0; return; }
   const btn = e.target.closest('button[data-act]');
@@ -1211,169 +1254,196 @@ function exClick(e){
   const day = curDay();
   const act = btn.dataset.act;
 
-  if(act === 'prev'){
-    prevPos(day); saveSoon(); renderToday();
-    scrollToTop();
-    return;
-  }
-  if(act === 'next'){
-    nextPos(day); saveSoon(); renderToday();
-    scrollToTop();
-    return;
-  }
-  if(act === 'skipex'){
-    if(restEndsAt !== null) finishRest();
-    // 跳到下一个还没做完的动作的第一组（整组做完的动作跳过没有意义）
-    const pos = flatPos(day)[curPos];
-    if(pos){
-      const items = getItems(day);
-      let nextEx = pos.exIdx + 1;
-      while(nextEx < items.length && items[nextEx].sets.every(s => s.done === true)) nextEx++;
-      if(nextEx < items.length){
-        curPos = 0;
-        // 找到 nextEx 的第一组在 flatPos 中的位置
-        let count = 0;
-        for(let i = 0; i < nextEx; i++) count += items[i].sets.length;
-        curPos = count;
-      } else {
-        nextPos(day);
-      }
-    }
-    saveSoon(); renderToday();
-    scrollToTop();
-    return;
-  }
-
-  if(act === 'nextex'){
-    // 跳到下一个动作的第一组（预览行点击）：与 skipex 不同，不看完成状态，纯导航。
-    const pos = flatPos(day)[curPos];
-    if(pos){
-      const items = getItems(day);
-      let nextEx = pos.exIdx + 1;
-      while(nextEx < items.length && items[nextEx].sets.length === 0) nextEx++;
-      if(nextEx < items.length){
-        let count = 0;
-        for(let i = 0; i < nextEx; i++) count += items[i].sets.length;
-        curPos = count;
-      }
-    }
-    saveSoon(); renderToday();
-    scrollToTop();
-    return;
-  }
+  const nav = EX_NAV_ACTS[act];
+  if(nav){ nav({ day, btn }); return; }
 
   const exIdx = +btn.dataset.ex;
   const item = getItems(day)[exIdx];
   if(!item) return;
 
-  if(act === 'addset'){
-    const last = item.sets[item.sets.length - 1];
-    item.sets.push({
-      type: last ? last.type : 'work',
-      weight: last ? last.weight : null,
-      reps: last ? last.reps : null,
-      duration: last ? last.duration : null,
-      rpe: null,
-      side: last ? (last.side ?? null) : null,   // 单侧动作补组：沿用最后一组的左/右（界面上没有改 side 的入口，不继承就丢）
-      targetRpe: last ? last.targetRpe : null,
-      targetRpeLabel: last ? (last.targetRpeLabel || '') : '',
-      restAfter: null,
-      done: false
-    });
-    saveSoon(); renderToday();
-    return;
-  }
-
-  if(act === 'delset'){
-    // 删组：只允许删最后一组，且未确认的组（已确认的组不会被误删）
-    if(item.sets.length <= 1) return;
-    const lastIdx = item.sets.length - 1;
-    const removed = item.sets[lastIdx];
-    if(removed.done === true) return;
-    /* 秒表归属另一日时别连带清掉它（与渲染守卫 v0.9.70 同一口径） */
-    if(timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === lastIdx) clearTimer();
-    item.sets.pop();
-    saveSoon(); renderToday();
-    toast('已删掉最后一组', () => {
-      const it = getItems(day)[exIdx];
-      if(it && it.sets.length === lastIdx){ it.sets.push(removed); flushSave(); renderToday(); }
-      else toast('这个动作已经有新的组了');
-    });
-    return;
-  }
+  const onItem = EX_ITEM_ACTS[act];
+  if(onItem){ onItem({ day, btn, exIdx, item }); return; }
 
   const setIdx = +btn.dataset.set;
   const set = item.sets[setIdx];
   if(!set) return;
 
-  if(act === 'step'){
-    // ± 步进：重量按设置里的步进，次数 ±1，时长 ±5 秒；下限 0（次数下限 1），上限与手输同规矩 1e6
-    const f = /** @type {'weight'|'reps'|'duration'} */ (btn.dataset.f);
-    const dir = +btn.dataset.dir;
-    const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
-    const next = Math.min(1e6, Math.max(f === 'reps' ? 1 : 0, f === 'weight' ? round2((Number(set[f]) || 0) + dir * inc) : Math.round((Number(set[f]) || 0) + dir * inc)));
-    const wasPR = set.isPR === true;
-    set[f] = next;
+  const onSet = EX_SET_ACTS[act];
+  if(onSet) onSet({ day, btn, exIdx, item, setIdx, set });
+}
+
+/** 不带 data-ex/data-set 的动作：只做导航。 */
+/** @type {{[act: string]: (c: ExNavCtx) => void}} */
+const EX_NAV_ACTS = { prev: exNavPrev, next: exNavNext, skipex: exNavSkipEx, nextex: exNavNextEx };
+/** 需要整个动作项的动作。 */
+/** @type {{[act: string]: (c: ExItemCtx) => void}} */
+const EX_ITEM_ACTS = { addset: exAddSet, delset: exDelSet };
+/** 需要具体某一组的动作（dec/inc 共用一个处理器，方向从 btn 上读）。 */
+/** @type {{[act: string]: (c: ExSetCtx) => void}} */
+const EX_SET_ACTS = { step: exStep, timer: exTimer, uselast: exUseLast, confirm: exConfirm, dec: exRpe, inc: exRpe };
+
+/** 导航类动作的收尾：存盘 + 重画 + 回到顶部（四个导航动作原本都是这三行）。 */
+function navDone(){ saveSoon(); renderToday(); scrollToTop(); }
+
+/** 前 exIdx 个动作一共占多少组——也就是该动作第一组在 flatPos 里的下标。
+ * @param {TrainItem[]} items @param {number} exIdx @returns {number} */
+function setOffsetBefore(items, exIdx){ let n = 0; for(let i = 0; i < exIdx; i++) n += items[i].sets.length; return n; }
+
+/** 秒表是否就挂在当前日的这一组上（与渲染守卫 v0.9.70 同一口径）。
+ * 归属别的日时不算：那种情况下按按钮是新起一张表，不是停掉别人的表。
+ * @param {number} exIdx @param {number} setIdx @returns {boolean} */
+function timerOn(exIdx, setIdx){ return !!timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx; }
+
+/** @param {ExNavCtx} c */
+function exNavPrev(c){ prevPos(c.day); navDone(); }
+
+/** @param {ExNavCtx} c */
+function exNavNext(c){ nextPos(c.day); navDone(); }
+
+/** 跳到下一个还没做完的动作的第一组（整组做完的动作跳过没有意义）。
+ * @param {ExNavCtx} c */
+function exNavSkipEx(c){
+  if(restEndsAt !== null) finishRest();
+  const pos = flatPos(c.day)[curPos];
+  if(pos){
+    const items = getItems(c.day);
+    let nextEx = pos.exIdx + 1;
+    while(nextEx < items.length && items[nextEx].sets.every(s => s.done === true)) nextEx++;
+    if(nextEx < items.length) curPos = setOffsetBefore(items, nextEx);
+    else nextPos(c.day);
+  }
+  navDone();
+}
+
+/** 跳到下一个动作的第一组（预览行点击）：与 skipex 不同，不看完成状态，纯导航。
+ * @param {ExNavCtx} c */
+function exNavNextEx(c){
+  const pos = flatPos(c.day)[curPos];
+  if(pos){
+    const items = getItems(c.day);
+    let nextEx = pos.exIdx + 1;
+    while(nextEx < items.length && items[nextEx].sets.length === 0) nextEx++;
+    if(nextEx < items.length) curPos = setOffsetBefore(items, nextEx);
+  }
+  navDone();
+}
+
+/** 补一组：规格沿用最后一组。
+ * @param {ExItemCtx} c */
+function exAddSet(c){
+  const item = c.item;
+  const last = item.sets[item.sets.length - 1];
+  item.sets.push({
+    type: last ? last.type : 'work',
+    weight: last ? last.weight : null,
+    reps: last ? last.reps : null,
+    duration: last ? last.duration : null,
+    rpe: null,
+    side: last ? (last.side ?? null) : null,   // 单侧动作补组：沿用最后一组的左/右（界面上没有改 side 的入口，不继承就丢）
+    targetRpe: last ? last.targetRpe : null,
+    targetRpeLabel: last ? (last.targetRpeLabel || '') : '',
+    restAfter: null,
+    done: false
+  });
+  saveSoon(); renderToday();
+}
+
+/** 删组：只允许删最后一组，且未确认的组（已确认的组不会被误删）。
+ * @param {ExItemCtx} c */
+function exDelSet(c){
+  const day = c.day, exIdx = c.exIdx, item = c.item;
+  if(item.sets.length <= 1) return;
+  const lastIdx = item.sets.length - 1;
+  const removed = item.sets[lastIdx];
+  if(removed.done === true) return;
+  /* 秒表归属另一日时别连带清掉它（与渲染守卫 v0.9.70 同一口径） */
+  if(timerOn(exIdx, lastIdx)) clearTimer();
+  item.sets.pop();
+  saveSoon(); renderToday();
+  toast('已删掉最后一组', () => {
+    const it = getItems(day)[exIdx];
+    if(it && it.sets.length === lastIdx){ it.sets.push(removed); flushSave(); renderToday(); }
+    else toast('这个动作已经有新的组了');
+  });
+}
+
+/** ± 步进：重量按设置里的步进，次数 ±1，时长 ±5 秒；下限 0（次数下限 1），上限与手输同规矩 1e6。
+ * @param {ExSetCtx} c */
+function exStep(c){
+  const day = c.day, btn = c.btn, exIdx = c.exIdx, setIdx = c.setIdx, set = c.set;
+  const f = /** @type {'weight'|'reps'|'duration'} */ (btn.dataset.f);
+  const dir = +btn.dataset.dir;
+  const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
+  const next = Math.min(1e6, Math.max(f === 'reps' ? 1 : 0, f === 'weight' ? round2((Number(set[f]) || 0) + dir * inc) : Math.round((Number(set[f]) || 0) + dir * inc)));
+  const wasPR = set.isPR === true;
+  set[f] = next;
+  refreshPR(day, exIdx, setIdx);
+  saveSoon();
+  // PR 状态变了：🔥 徽章在 .fs-sub 里，patchValue 只改输入框，必须整卡重画才看得见变化
+  if(set.done === true && (set.isPR === true) !== wasPR){ renderToday(); return; }
+  if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : String(next))) renderToday();
+}
+
+/** 计时动作（平板/拉伸/呼吸）：按一下开始，再按一下把经过的秒数填进这一组。
+ * @param {ExSetCtx} c */
+function exTimer(c){
+  const exIdx = c.exIdx, setIdx = c.setIdx;
+  /* 只有表就挂在当前日时才按「按一下停」处理；归属别的日时这一下是新起一张表 */
+  if(timerOn(exIdx, setIdx)) stopTimer();
+  else { stopTimer(); startTimer(exIdx, setIdx); }
+  renderToday();
+}
+
+/** 沿用上次：只填上次真记录过的字段（没记录的不动），填完重画卡片让人看见变化。
+ * 这是「比上次加一点」的第一步——先拿到上次的数，再用 ± 往上加。
+ * @param {ExSetCtx} c */
+function exUseLast(c){
+  const day = c.day, item = c.item, set = c.set, exIdx = c.exIdx, setIdx = c.setIdx;
+  const lv = lastValues(item.exerciseId);
+  /* 只填当前模式会显示的字段（与预填同规矩）：改过模式的动作不带上看不见旧指标 */
+  const keep = modeFields((state.exercises[item.exerciseId] || {}).mode || 'weight');
+  let used = false;
+  if(lv.weight != null && keep.includes('weight')){ set.weight = lv.weight; used = true; }
+  if(lv.reps != null && keep.includes('reps')){ set.reps = lv.reps; used = true; }
+  if(lv.duration != null && keep.includes('duration')){ set.duration = lv.duration; used = true; }
+  if(used){
+    // 沿用上次改了已确认组的数字：🔥 必须跟着重算（与 step/change 同一规矩）
     refreshPR(day, exIdx, setIdx);
     saveSoon();
-    // PR 状态变了：🔥 徽章在 .fs-sub 里，patchValue 只改输入框，必须整卡重画才看得见变化
-    if(set.done === true && (set.isPR === true) !== wasPR){ renderToday(); return; }
-    if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : String(next))) renderToday();
-    return;
+  }else{
+    // 没历史、或历史里没有当前模式的字段时，按钮原本静默无反应——
+    // 用户会以为按钮坏了。说明原因，别让人猜。
+    toast('没有可沿用的上次记录（该动作还没有当前模式的历史数据）');
   }
+  renderToday();
+}
 
-  if(act === 'timer'){
-    // 计时动作（平板/拉伸/呼吸）：按一下开始，再按一下把经过的秒数填进这一组
-    /* 只有表就挂在当前日时才按「按一下停」处理；归属别的日时这一下是新起一张表 */
-    if(timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
-    else { stopTimer(); startTimer(exIdx, setIdx); }
-    renderToday();
-    return;
-  }
+/** 确认这一组。
+ * @param {ExSetCtx} c */
+function exConfirm(c){
+  const day = c.day, exIdx = c.exIdx, setIdx = c.setIdx;
+  if(restEndsAt !== null) finishRest();
+  // 确认时秒表还在跑（且就挂在当前日）：先停表填入时长，再记这一组，省掉「看表→打字」
+  if(timerOn(exIdx, setIdx)) stopTimer();
+  // 不做「幽灵点击抑制」：CSS 已对所有 button 设 touch-action:manipulation
+  // （见 css/style.css:13），双击缩放不会发生；再加时间窗只会吞掉用户故意的快速撤销。
+  cycleDone(day, exIdx, setIdx);
+  if(navigator.vibrate) navigator.vibrate(50);
+  saveSoon(); renderToday();
+}
 
-  if(act === 'uselast'){
-    /* 沿用上次：只填上次真记录过的字段（没记录的不动），填完重画卡片让人看见变化。
-     * 这是「比上次加一点」的第一步——先拿到上次的数，再用 ± 往上加。 */
-    const lv = lastValues(item.exerciseId);
-    /* 只填当前模式会显示的字段（与预填同规矩）：改过模式的动作不带上看不见旧指标 */
-    const keep = modeFields((state.exercises[item.exerciseId] || {}).mode || 'weight');
-    let used = false;
-    if(lv.weight != null && keep.includes('weight')){ set.weight = lv.weight; used = true; }
-    if(lv.reps != null && keep.includes('reps')){ set.reps = lv.reps; used = true; }
-    if(lv.duration != null && keep.includes('duration')){ set.duration = lv.duration; used = true; }
-    if(used){
-      // 沿用上次改了已确认组的数字：🔥 必须跟着重算（与 step/change 同一规矩）
-      refreshPR(day, exIdx, setIdx);
-      saveSoon();
-    }else{
-      // 没历史、或历史里没有当前模式的字段时，按钮原本静默无反应——
-      // 用户会以为按钮坏了。说明原因，别让人猜。
-      toast('没有可沿用的上次记录（该动作还没有当前模式的历史数据）');
-    }
-    renderToday();
-    return;
-  }
-
-  if(act === 'confirm'){
-    if(restEndsAt !== null) finishRest();
-    // 确认时秒表还在跑（且就挂在当前日）：先停表填入时长，再记这一组，省掉「看表→打字」
-    if(timerFor && timerForDay === curDay() && timerFor.exIdx === exIdx && timerFor.setIdx === setIdx) stopTimer();
-    // 不做「幽灵点击抑制」：CSS 已对所有 button 设 touch-action:manipulation
-    // （见 css/style.css:13），双击缩放不会发生；再加时间窗只会吞掉用户故意的快速撤销。
-    cycleDone(day, exIdx, setIdx);
-    if(navigator.vibrate) navigator.vibrate(50);
-    saveSoon(); renderToday();
-    return;
-  }
-  if(act === 'dec' || act === 'inc'){
-    /* 从目标 RPE 起步（计划里写了 targetRpe 就用它），范围 1–10：
-     * 拉伸/呼吸的目标只有 RPE 2–4，旧代码下限卡在 5，记不了真实强度。 */
-    const base = set.rpe ?? set.targetRpe ?? (act === 'inc' ? 7.5 : 8.5);
-    set.rpe = act === 'inc' ? Math.min(10, round1(base + 0.5))
-                            : Math.max(1,  round1(base - 0.5));
-    saveSoon();
-    if(!patchRpe(exIdx, setIdx)) renderToday();
-  }
+/** RPE ±0.5，dec/inc 共用（方向从按钮上读，与原来同一处取值）。
+ * 从目标 RPE 起步（计划里写了 targetRpe 就用它），范围 1–10：
+ * 拉伸/呼吸的目标只有 RPE 2–4，旧代码下限卡在 5，记不了真实强度。
+ * @param {ExSetCtx} c */
+function exRpe(c){
+  const btn = c.btn, set = c.set, exIdx = c.exIdx, setIdx = c.setIdx;
+  const act = btn.dataset.act;
+  const base = set.rpe ?? set.targetRpe ?? (act === 'inc' ? 7.5 : 8.5);
+  set.rpe = act === 'inc' ? Math.min(10, round1(base + 0.5))
+                          : Math.max(1,  round1(base - 0.5));
+  saveSoon();
+  if(!patchRpe(exIdx, setIdx)) renderToday();
 }
 $('ex-list').addEventListener('click', exClick);
 /* 按住连发的触发端：只认 ± 步进和 RPE 步进按钮；多指触摸只认主指针。
@@ -2296,7 +2366,7 @@ function undoImport(){
   }
   // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组。
   // 按表的归属日判断（不是当前查看的日）：归属日有进行中记录时表还有可写的地方，不该误清。
-  if(timerFor && !state.sessions[/** @type {'A'|'B'} */ (timerForDay)]) clearTimer();
+  if(timerFor && !state.sessions[/** @type {Day} */ (timerForDay)]) clearTimer();
   state.program = snap.program;
   /* 与 applyPlan 同政策：草稿里用户真实产生过的内容（确认过的组、手写备注）随撤销丢弃时
    * 要在结果里说一声——撤销按钮常驻，导入后填了东西再撤销完全在预期路径上。 */

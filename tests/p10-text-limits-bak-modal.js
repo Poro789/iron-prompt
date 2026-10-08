@@ -74,8 +74,10 @@ const { sw, p, card, mk, tset } = H.C;   // 上段产生的共享变量
   /* ============================================================
    * 131. data-act 覆盖静态扫描（v0.9.107 测试加固）
    * 所有模板里发出的 data-act 必须被某个委托处理器接住：
-   * 要么有 act === 'x' 字符串比较，要么出现在 closest/matches 选择器里
-   * （dellog/undo 就是走选择器分支的）。反向也查：接了但没人发射=死代码。
+   * 要么在 exClick 的三张 act 表里（v0.9.147 起，走 __T 桥接直接读表），
+   * 要么有 act === 'x' 字符串比较（history/toast 那条路仍用选择器分支），
+   * 要么出现在 closest/matches 选择器里（dellog/undo 就是走选择器分支的）。
+   * 反向也查：接了但没人发射=死代码。
    * 防止将来改按钮名时留下点了没反应的死按钮。
    * ============================================================ */
   console.log('== 131. data-act 发射/处理集合互相覆盖（静态）==');
@@ -85,6 +87,8 @@ const { sw, p, card, mk, tset } = H.C;   // 上段产生的共享变量
   for(const m of script.matchAll(/act === '([a-z]+)'/g)) handled131.add(m[1]);
   for(const m of script.matchAll(/(?:closest|matches)\('([^']*)'/g))
     for(const a of m[1].matchAll(/data-act="([a-z]+)"/g)) handled131.add(a[1]);
+  for(const t of [T.EX_NAV_ACTS, T.EX_ITEM_ACTS, T.EX_SET_ACTS])
+    for(const k of Object.keys(t)) handled131.add(k);
   const dead131 = [...emitActs131].filter(a => !handled131.has(a));
   const orphan131 = [...handled131].filter(a => !emitActs131.has(a));
   check('131 没有发了没人接的按钮（死按钮）', emitActs131.size >= 12 && dead131.length === 0);
@@ -380,7 +384,12 @@ const { sw, p, card, mk, tset } = H.C;   // 上段产生的共享变量
     check('149 CSS 有 reduced-motion 兜底', css149.includes('prefers-reduced-motion:reduce'));
     check('149 平滑滚动只存在于 scrollToTop 一处',
       (script.match(/behavior:/g) || []).length === 1 && script.includes("behavior: rm ? 'auto' : 'smooth'"));
-    check('149 回顶调用全部走 scrollToTop', (script.match(/scrollToTop\(\)/g) || []).length >= 7);
+    // 原本要求 ≥7 处调用：四个导航动作各写一遍 scrollToTop()。
+    // v0.9.147 把那段收进 navDone()（同一套收尾：存盘+重画+回顶），所以这里改成
+    // 「剩下各处仍直接调用 + navDone 里必须有且只有这一处」，而不是守一个会随重构漂移的计数。
+    check('149 回顶调用全部走 scrollToTop',
+      (script.match(/scrollToTop\(\)/g) || []).length >= 4 &&
+      /function navDone\(\)\{[^}]*scrollToTop\(\);?\s*\}/.test(script));
     const prevScroll149 = global.window.scrollTo, prevMM149 = global.window.matchMedia;
     let opts149 = null;
     global.window.scrollTo = o => { opts149 = o; };
