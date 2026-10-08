@@ -61,6 +61,9 @@ package-lock.json     锁定 typescript 版本（CI 用 npm ci）
 tsconfig.json         类型检查配置：checkJs + strict，noEmit，不产出任何文件
 fixtures/plan-A.json  测试夹具（一份真实 A 日计划）
 fixtures/plan-B.json  测试夹具（一份真实 B 日计划，AI 方案导入的实录）
+tests/harness.js      测试骨架：DOM 桩 + 虚拟时钟 + 用 (0,eval) 加载 js/app.js + __T 桥接
+tests/p01…p13-*.js    逻辑测试按主题分 13 段（编号小节连续跨段递增）
+tests/run.js          测试入口：按文件名顺序执行全部段（= npm test）
 ```
 
 运行时零构建零依赖：无打包器，`css`/`js` 直接外链，部署的就是仓库里的 `js/app.js`。类型检查用 JSDoc 注释 + `tsc --noEmit`（devDependency 只有 typescript，不产出文件），CI 在测试前把类型错误当失败拦下。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act）。
@@ -70,7 +73,7 @@ fixtures/plan-B.json  测试夹具（一份真实 B 日计划，AI 方案导入�
 ```bash
 npm ci                 # 只装 typescript（类型检查用）
 npm run typecheck      # tsc --noEmit：JSDoc 类型闸门，不产出文件
-node test-ironlog.js   # DOM 桩逻辑测试（零依赖）
+npm test               # DOM 桩逻辑测试（零依赖）：tests/run.js 按序执行 tests/p01…p13-*.js
 npx serve .            # 本地预览（SW 需要 http，file:// 下不注册）
 ```
 

@@ -8,7 +8,7 @@
 
 ```bash
 npm run typecheck        # tsc --noEmit：JSDoc 类型闸门，不产出文件
-node test-ironlog.js     # 逻辑测试（= npm test）：自建 DOM 桩直接加载 js/app.js
+npm test                 # 逻辑测试：tests/run.js 按序执行 tests/p01…p13-*.js（自建 DOM 桩直接加载 js/app.js）
 node tools/visual-check.js 390   # 改样式/布局时跑：无头浏览器审计水平溢出，退出码 1 = 有溢出
 ```
 
@@ -23,8 +23,9 @@ node tools/visual-check.js 390   # 改样式/布局时跑：无头浏览器审�
 ## 不能破坏的约定（违反了会被测试或 CI 拦下）
 
 - `index.html` 不得内联 `<script>` / `<style>`；样式在 `css/style.css`，逻辑在 `js/app.js`。
-- **`js/app.js` 必须保持单个经典脚本**（不能用 `import`/`export`）。测试是用 `(0, eval)(源码)` 加载它的（`test-ironlog.js:170`），改成 ES 模块会让整套测试失效。要拆文件，先改测试的加载方式，再拆。
-- 测试通过 `globalThis.__T`（`test-ironlog.js:132-169`）访问 app 内部函数。新增/改名内部函数时，同步维护这个桥接。
+- **`js/app.js` 必须保持单个经典脚本**（不能用 `import`/`export`）。测试是用 `(0, eval)(源码)` 加载它的（`tests/harness.js:171`），改成 ES 模块会让整套测试失效。要拆文件，先改测试的加载方式，再拆。
+- 测试通过 `globalThis.__T`（`tests/harness.js:132-169`）访问 app 内部函数。新增/改名内部函数时，同步维护这个桥接。
+- 测试分段是**顺序执行、共享同一个 app 实例**的：`tests/run.js` 按文件名顺序跑，段与段之间状态连续（后面很多段依赖前面导入的计划与日志）。所以不能只跑某一段，也不能打乱顺序；跨段复用的变量走 `H.C`（在出生段末尾发布、使用段开头取用）。
 - 外部数据（localStorage、AI 导入的 JSON、DOM 取值）进来是 `any`，必须经 `migrate()` / `normalizeItem()` / `normalizeSet()` / `coerceSetNums()` 归一化后才进 `state`（parse, don't validate）。
 - 数据四层不混存：`logs` / `exercises` / `program` / `sessions`（另有 `drafts`/`rest`/`timer`）。**改数据结构时先改 `js/app.js:13-113` 的 JSDoc typedef**，让 tsc 把所有串线的地方找出来。
 - 导出给 AI 的 prompt 与 `PLAN_SCHEMA` 是单一来源（`js/app.js:2385`，由 `buildPrompt()` 插值）。不要在别处复制 schema 文本——两处不一致会让"导出的东西导不回来"。
@@ -39,7 +40,7 @@ node tools/visual-check.js 390   # 改样式/布局时跑：无头浏览器审�
 
 ## 测试的写法
 
-`test-ironlog.js` 按编号分段（`== 104. …`）。加新用例：追加到文件末尾，带新编号，并在注释里写清**为什么**要测（防的是哪一次真实回归），断言用 `check('中文描述', 条件)`。不要重排已有用例。
+逻辑测试按主题分在 `tests/p01…p13-*.js`，小节编号全局递增（`== 104. …`）；`tests/p11-*.js` 里的 §172 会检查编号不重复、不倒退。加新用例：在**主题相符那一段的末尾**追加，用比现有最大编号更大的新编号，并在注释里写清**为什么**要测（防的是哪一次真实回归），断言用 `check('中文描述', 条件)`。不要重排已有用例，也不要往 `tests/harness.js` 里加断言（它只放桩与桥接）。新用例若要用别的段产生的变量，走 `H.C`。
 
 ## 已知技术债（有意分批处理，不是遗漏）
 

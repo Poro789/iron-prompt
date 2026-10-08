@@ -2,7 +2,9 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.9.142]
+## [0.9.143]
+### 变更
+- 逻辑测试从单文件 `test-ironlog.js`（4754 行）按主题拆成 `tests/p01…p13-*.js` 十三段 + `tests/run.js` 入口（`npm test`）。断言与夹具逐字未改：拆分前后 `check()` 调用点都是 983 处、小节标题都是 187 个、通过用例都是 1015 条 / 0 失败，并逐行对账确认十三段正文与原文一致（只加了加载壳与跨段共享变量 `H.C`）。动机不是仓库形态好看，而是定位与审阅：改导入逻辑时能直接定位到那一段，diff 也只落在一个文件里。运行时产物零变化，`js/app.js` 仍是单个经典脚本。
 ### 变更
 - 接入 TypeScript 类型闸门（不改产物）：`js/app.js` 头部新增 JSDoc typedef（AppState/Session/LogEntry/TrainItem/SetEntry 等数据形状），tsconfig 以 `checkJs + strict` 检查、`noEmit` 不产出文件；CI test 作业在测试前跑 `npx tsc --noEmit`，类型错误即失败。运行时行为零改动，部署的仍是不经构建的 `js/app.js`。
 

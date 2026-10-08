@@ -40,7 +40,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Run tests
-        run: node test-ironlog.js
+        run: node tests/run.js
 
   build:
     runs-on: ubuntu-latest
