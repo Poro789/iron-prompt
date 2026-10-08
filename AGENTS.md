@@ -9,16 +9,17 @@
 ```bash
 npm run typecheck        # tsc --noEmit：JSDoc 类型闸门，不产出文件
 npm test                 # 逻辑测试：tests/run.js 按序执行 tests/p01…p13-*.js（自建 DOM 桩直接加载 js/app.js）
-node tools/visual-check.js 390   # 改样式/布局时跑：无头浏览器审计水平溢出，退出码 1 = 有溢出
+node tools/visual-check.js 390   # 真实浏览器闸门：A 水平溢出 + B 可点目标 ≥44px + C data-action 点击链路
 ```
 
 三条都通过再报告"改好了"。测试失败要贴出失败行，不要口头保证。
+`visual-check` 的退出码：**0** 全过；**1** 任一检查失败（逐条列出状态与元素，截图在 `.visual/`）；**2** 浏览器或 CDP 不可用——那是工具没跑成，不能算通过。它找的是本机 Edge/Chrome，找不到时设 `CHROME_PATH`（CI 用 ubuntu 镜像自带的 Chrome，无需设）。改布局、改控件、改点击接线都要跑它。
 
 ## 版本与部署（只有一个版本源）
 
 - `js/app.js:138` 的 `APP_VERSION` 是唯一来源（页头徽章、「关于」卡片都从它渲染）。改版本只改这里，并同步 `package.json` 的 `version`。
 - `sw.js:5` 的 `CACHE` 版本串由 CI 用 `APP_VERSION` 自动改写（见 `.github/workflows/deploy.yml` 的 "Stamp service worker version"）。**不要手改**；测试会校验两者一致。
-- 推送 `main` → CI 依次跑 `npm ci` → typecheck → 测试 → 复制静态文件上 Pages。PR 只跑测试，不部署。
+- 推送 `main` → CI（Node 22，`visual-check` 要用 Node 的全局 `WebSocket`/`fetch`，别退回 20）依次跑 `npm ci` → typecheck → 测试 → **真实浏览器闸门** → 复制静态文件上 Pages。PR 跑前三项加浏览器闸门，不部署；浏览器闸门失败时会把 `.visual/` 截图作为 artifact 留下。
 
 ## 不能破坏的约定（违反了会被测试或 CI 拦下）
 
@@ -32,7 +33,7 @@ node tools/visual-check.js 390   # 改样式/布局时跑：无头浏览器审�
 - 类型闸门已开满（`tsconfig.json` 里不再有 `noImplicitAny: false`，v0.9.144 起）：新写的函数与回调必须自带 JSDoc 参数类型，别把开关改回去。数据形状一律用顶部 typedef；DOM 事件对象按仓库约定标 `any`（不建模 DOM 类型，见 `js/app.js:449` 的注释）。A/B 两日的循环一律用 `DAYS` 常量（`js/app.js:140`），不要写 `['A','B']` 字面量——那会把 `day` 摊成 `string`，`state.sessions[day]` 一类下标就落到类型之外。
 - 导出给 AI 的 prompt 与 `PLAN_SCHEMA` 是单一来源（`js/app.js:2514`，由 `buildPrompt()` 插值）。不要在别处复制 schema 文本——两处不一致会让"导出的东西导不回来"。
 - 导入 AI 方案时必须保留 `exercises[].personal`（用户手写的个人注意）。这条有测试守着。
-- 移动端优先：可点元素触达高度 ≥44px；390px 视口不得出现水平溢出。这两类问题**逻辑测试测不出来**，历史上真出过三次（v0.9.134/135/136）。改布局后跑 `visual-check`。
+- 移动端优先：可点元素触达高度 ≥44px；390px 视口不得出现水平溢出。这两类问题**逻辑测试测不出来**，历史上真出过三次（v0.9.134/135/136）。v0.9.146 起由 `visual-check` 的 A/B 项逐状态审计并进 CI；触达下限写在 `css/style.css:21` 的基础规则上（`button,input,select,textarea,summary{min-height:44px}`），图标按钮另设 44×44（`.hamburger`、`.drawer-close`）——**别再往单个控件上补 `min-height`**，那会让规则两处不一致。
 
 ## 不要读、不要改
 
@@ -49,5 +50,5 @@ node tools/visual-check.js 390   # 改样式/布局时跑：无头浏览器审�
 - ~~`noImplicitAny: false` 的历史豁免~~ 已于 v0.9.144 关闭（316 处隐式 any 全部补上标注）。别把它重新打开。
 - ~~`index.html` 里 23 处内联 `onclick`~~ 已于 v0.9.145 收进 `ACTIONS` 表 + 单一 document 级委托（含渲染出来的两个）。做法与守它的测试见上文「不能破坏的约定」。
 - `js/app.js` 里的 `exClick()`（`js/app.js:1206`，约 350 行）是一个大事件处理器，拆成命名小函数前不动其它结构。
-- `tools/visual-check.js` 目前只审计布局（水平溢出），不验证交互。真实浏览器里的点击链路（`data-action` 派发）现在靠一次性脚本抽查，应当并进这个工具，并补 ≥44px 触达规则与 Linux 上的 Chrome 支持，让它能进 CI（P3）。
+- ~~`tools/visual-check.js` 只审计布局、不进 CI~~ 已于 v0.9.146 升级：A 溢出 + B 触达 ≥44px + C 真实 click 链路，支持 Linux Chrome / `CHROME_PATH`，已作为 CI 步骤（失败留 `.visual/` artifact）。它第一次跑就把当时**并不合规**的现实抓了出来：11 类控件的触达高度只有 27–40px（汉堡 40×40、`.cond-btn` 27、各处按钮 36–40），已按基础规则补齐。
 - 数据只存本机 localStorage，换设备靠手动备份导出。这是产品层面的风险，不是代码问题。

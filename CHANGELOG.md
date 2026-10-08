@@ -2,6 +2,14 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.146]
+### 变更
+- `tools/visual-check.js` 从「布局快照」升级为真实浏览器闸门，三类检查：A 水平溢出（原有）、B 可点目标触达尺寸（新增，高度 ≥44px、宽度 ≥24px，嵌套在另一个可点元素里的内层不重复计）、C 点击链路（新增：用真 `click` 事件驱动抽屉/视图/日期/状态/导出，并核对结果与「无未捕获异常」）。检查项统一成 `ok/FAIL` 计数，退出码 0/1/2（2 = 浏览器或 CDP 没跑成，不算通过）。
+- 能在 CI 跑：浏览器查找补上 Linux（`/usr/bin/google-chrome-stable`、`google-chrome`、`chromium*`）与 macOS，并支持 `CHROME_PATH` 覆盖；非 Windows 加 `--no-sandbox --disable-dev-shm-usage`。`.github/workflows/deploy.yml` 的 test 作业新增「Browser gate」步骤，Node 20 → 22（工具用 Node 的全局 `WebSocket`/`fetch`，20 上没有），失败时把 `.visual/` 截图作为 artifact 上传。
+- **闸门第一次跑就抓到：AGENTS.md 承诺的 ≥44px 触达，代码里从来没做到过。** 11 类控件的实际高度是 27–40px：`.hamburger` 40×40、`.drawer-close` 32×32、`.cond-btn` 27、`.add-set`/`.skip-ex`/`.fs-exnote` 40、`.fs-last`/`.h-edit`/`.h-del`/`.discard-btn` 36、设置里的 `input`/`select` 38。
+- 修法是一条基础规则 `css/style.css:21`：`button,input,select,textarea,summary{min-height:44px}`（不往每个控件重复写，新控件自动合规），图标按钮显式 44×44（`.hamburger`、`.drawer-close`——宽度不在 B 项的 24px 下限里，靠这里保证）。
+- 验证：`node tools/visual-check.js 390` 35 项通过 / 0 失败（六个状态各做 A+B，外加 C 的 12 项真点击断言）；`npm run typecheck` 0 错误；`node tests/run.js` 1053 通过 / 0 失败（改 CSS 前后不变，§200 对 `.ex-notes summary` 的断言未受影响）。改完的截图已复核：首屏、抽屉、设置各状态没有因控件变高而错位或溢出。
+
 ## [0.9.145]
 ### 变更
 - `index.html` 的 23 处内联 `onclick="fn()"` 全部去掉，改为 `data-action="名字"`；渲染出来的两处内联处理器（组间休息的「跳过」、状态切换按钮）同样改成 `data-action`（后者带 `data-day`）。

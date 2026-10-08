@@ -64,6 +64,7 @@ fixtures/plan-B.json  测试夹具（一份真实 B 日计划，AI 方案导入�
 tests/harness.js      测试骨架：DOM 桩 + 虚拟时钟 + 用 (0,eval) 加载 js/app.js + __T 桥接
 tests/p01…p13-*.js    逻辑测试按主题分 13 段（编号小节连续跨段递增）
 tests/run.js          测试入口：按文件名顺序执行全部段（= npm test）
+tools/visual-check.js 真实浏览器闸门（零依赖 CDP）：水平溢出 + 可点目标 ≥44px + data-action 点击链路
 ```
 
 运行时零构建零依赖：无打包器，`css`/`js` 直接外链，部署的就是仓库里的 `js/app.js`。类型检查用 JSDoc 注释 + `tsc --noEmit`（devDependency 只有 typescript，不产出文件），CI 在测试前把类型错误当失败拦下。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act/data-action）。
@@ -74,10 +75,11 @@ tests/run.js          测试入口：按文件名顺序执行全部段（= npm t
 npm ci                 # 只装 typescript（类型检查用）
 npm run typecheck      # tsc --noEmit：JSDoc 类型闸门，不产出文件
 npm test               # DOM 桩逻辑测试（零依赖）：tests/run.js 按序执行 tests/p01…p13-*.js
+node tools/visual-check.js 390   # 真实浏览器闸门（需要本机 Edge/Chrome，或设 CHROME_PATH）
 npx serve .            # 本地预览（SW 需要 http，file:// 下不注册）
 ```
 
-推送 main 自动部署 GitHub Pages。`sw.js` 的缓存版本串由 CI 用 `APP_VERSION` 自动改写；本地改版本后无需手动同步（测试会校验两者一致）。
+推送 main 自动部署 GitHub Pages。CI（Node 22）依次跑类型检查、逻辑测试、真实浏览器闸门（用 ubuntu 镜像自带的 Chrome，失败时把 `.visual/` 截图作为 artifact 留下），再把静态文件复制上 Pages；PR 跑前三项不部署。`sw.js` 的缓存版本串由 CI 用 `APP_VERSION` 自动改写；本地改版本后无需手动同步（测试会校验两者一致）。
 
 ## 版本
 

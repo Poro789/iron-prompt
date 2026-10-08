@@ -1,11 +1,11 @@
-// tools/visual-check.js — 真实浏览器视觉冒烟（手动工具，不属于单测；需要本机 Edge/Chrome）
-// 目的：单测的 DOM 桩看不到真实布局。这里用无头 Chromium 内核（Edge）+ CDP 程序化审计：
-//   1) 空状态首屏；2) 填充真实形态数据（历史日志→「点按沿用」等行会出现）后的首屏；
-//   3) 趋势/历史/设置各视图；4) 抽屉。
-// 每个状态：扫描所有元素是否超出视口（水平溢出），并截图保存到 .visual/ 供人眼复核。
+// tools/visual-check.js — 真实浏览器闸门（本地与 CI 共用；需要本机 Edge/Chrome，或设 CHROME_PATH）
+// 目的：单测的 DOM 桩看不到真实布局，也接不住真实事件。这里用无头 Chromium 内核 + CDP 做三类检查：
+//   A) 每个状态在指定视口下有没有水平溢出；
+//   B) 可点元素的触达尺寸（AGENTS.md：≥44px 高）——这类问题逻辑测试测不出来，历史上真出过三次；
+//   C) 点击链路：用真 click 事件驱动抽屉/视图/日期切换并核对结果（data-action 委托是否真的接住）。
 // 用法：node tools/visual-check.js [视口宽] [调试端口]   例：node tools/visual-check.js 390
-// 退出码：0=无溢出；1=任一状态出现水平溢出（列出越界元素）。
-// 零依赖：Node ≥22 全局 fetch/WebSocket + CDP。
+// 退出码：0=全部通过；1=任一检查失败（逐条列出状态与元素）；2=浏览器或 CDP 不可用（工具没跑成，不算通过）。
+// 零依赖：Node ≥22 的全局 fetch/WebSocket + CDP。CI 里用 ubuntu 镜像自带的 google-chrome。
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -14,24 +14,43 @@ const { spawn } = require('child_process');
 const W = Number(process.argv[2] || 390);
 const PORT = Number(process.argv[3] || 9323);
 const ROOT = path.join(__dirname, '..');
+const TOUCH_MIN = 44;   // 触达高度下限（px），与 AGENTS.md「可点元素触达高度 ≥44px」一致
+const TOUCH_MIN_W = 24; // 触达宽度下限：细长的可点条同样按不准（比如 44×8）
 const BROWSERS = [
+  ...(process.env.CHROME_PATH ? [process.env.CHROME_PATH] : []),
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 ];
 const browser = BROWSERS.find(p => fs.existsSync(p));
-if (!browser) { console.error('未找到 Edge/Chrome，无法做真实布局审计'); process.exit(2); }
+if (!browser) {
+  console.error('未找到 Edge/Chrome（可设 CHROME_PATH 指定），无法做真实浏览器审计');
+  process.exit(2);
+}
 
 const outDir = path.join(ROOT, '.visual');
 fs.mkdirSync(outDir, { recursive: true });
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'iron-vc-'));
 const url = 'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/');
-const child = spawn(browser, [
-  '--headless=new', `--remote-debugging-port=${PORT}`, '--remote-allow-origins=*',
-  '--disable-gpu', '--no-first-run', `--user-data-dir=${profile}`,
-  `--window-size=${W},844`, '--hide-scrollbars', url,
-], { stdio: 'ignore' });
+// Linux（CI 容器）里 Chrome 的 setuid sandbox 常不可用；Windows 不需要这两个开关。
+const flags = ['--headless=new', `--remote-debugging-port=${PORT}`, '--remote-allow-origins=*',
+  '--disable-gpu', '--no-first-run', `--user-data-dir=${profile}`, `--window-size=${W},844`, '--hide-scrollbars'];
+if (process.platform !== 'win32') flags.push('--no-sandbox', '--disable-dev-shm-usage');
+const child = spawn(browser, [...flags, url], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+let pass = 0, fail = 0;
+const problems = [];
+// 与逻辑测试同一套读法：ok / FAIL 逐行打，末尾给计数；失败的具体元素另存一份供 CI 汇总。
+const check = (name, ok, detail) => {
+  if (ok) { pass++; console.log('  ok   ' + name); }
+  else { fail++; problems.push(name + (detail ? ' —— ' + detail : '')); console.log('  FAIL ' + name + (detail ? ' ' + detail : '')); }
+};
 
 (async () => {
   let target = null;
@@ -42,7 +61,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     } catch (e) { /* 浏览器还在启动 */ }
     if (!target) await sleep(250);
   }
-  if (!target) { console.error('CDP 目标未出现（Edge 可能被沙箱拦截）'); child.kill(); process.exit(2); }
+  if (!target) { console.error('CDP 目标未出现（浏览器可能被沙箱拦截）'); child.kill(); process.exit(2); }
 
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws 连接失败')); });
@@ -55,14 +74,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (m.result.exceptionDetails) throw new Error('页面求值失败: ' + JSON.stringify(m.result.exceptionDetails.exception && m.result.exceptionDetails.exception.description || m.result.exceptionDetails.text));
     return m.result.result.value;
   };
+
   const waitReady = async () => { for (let i = 0; i < 60; i++) { if (await evaljs('document.readyState') === 'complete') { await sleep(300); return; } await sleep(200); } throw new Error('页面未就绪'); };
 
+  let stateLabel = '空状态首屏';
   let overflow = false;
   const applyMetrics = () => send('Emulation.setDeviceMetricsOverride', { width: W, height: 844, deviceScaleFactor: 2, mobile: true });
+  // 页面上「独立的可点目标」：嵌套在另一个可点元素里的（按钮里的 span）由外层负责，不重复计。
+  const TARGETS = 'a[href], button, summary, [role="tab"], [role="button"], [data-action], [data-act], input, select, textarea';
   const audit = async label => {
     await applyMetrics();   // 覆盖可能被导航/时序悄悄清掉——每次测量前重下发，视口读数才可信
     const r = await evaljs(`(() => {
-      const vw = innerWidth, bad = [];
+      const vw = innerWidth, bad = [], tiny = [];
+      const SEL = ${JSON.stringify(TARGETS)};
       for (const el of document.querySelectorAll('body *')) {
         const r = el.getBoundingClientRect();
         if (!r.width && !r.height) continue;
@@ -73,12 +97,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
           bad.push(el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cls ? '.' + cls : '') + ' [' + Math.round(r.left) + '..' + Math.round(r.right) + ']');
         }
       }
-      return { vw, scrollW: document.documentElement.scrollWidth, bad: bad.slice(0, 12) };
+      for (const el of document.querySelectorAll(SEL)) {
+        const r = el.getBoundingClientRect();
+        if (!r.width && !r.height) continue;
+        const st = getComputedStyle(el);
+        if (st.visibility === 'hidden' || st.display === 'none' || st.pointerEvents === 'none') continue;
+        if (el.parentElement && el.parentElement.closest(SEL)) continue;   // 内层不算独立触达目标
+        if (r.height < ${TOUCH_MIN} || r.width < ${TOUCH_MIN_W}) {
+          const cls = (el.className && el.className.toString ? el.className.toString() : '').split(/\\s+/).filter(Boolean).join('.');
+          tiny.push(el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cls ? '.' + cls : '') + ' ' + Math.round(r.width) + '×' + Math.round(r.height));
+        }
+      }
+      return { vw, scrollW: document.documentElement.scrollWidth, bad: bad.slice(0, 12), tiny: tiny.slice(0, 12) };
     })()`);
     const hit = r.scrollW > W + 1 || r.bad.length > 0 || r.vw !== W;
     if (hit) overflow = true;
-    console.log(`[${label}] viewport=${r.vw} scrollWidth=${r.scrollW} 溢出=${hit ? '有' : '无'}` + (r.vw !== W ? '（视口被内容撑开——内容宽超过目标宽）' : ''));
+    console.log(`[${label}] viewport=${r.vw} scrollWidth=${r.scrollW} 溢出=${hit ? '有' : '无'} 触达不足=${r.tiny.length}`);
     if (r.bad.length) console.log('  越界元素:\n  ' + r.bad.join('\n  '));
+    if (r.tiny.length) console.log('  触达不足元素:\n  ' + r.tiny.join('\n  '));
+    check(`A ${label}：无水平溢出`, !hit, r.bad.join(' | '));
+    check(`B ${label}：可点目标触达 ≥${TOUCH_MIN}px`, r.tiny.length === 0, r.tiny.join(' | '));
     return r;
   };
   const shot = async name => {
@@ -86,7 +124,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const m = await send('Page.captureScreenshot', { format: 'png' });
     const f = path.join(outDir, `vc-${W}-${name}.png`);
     fs.writeFileSync(f, Buffer.from(m.result.data, 'base64'));
-    console.log(`  截图 -> .visual/${path.basename(f)}`);
+    console.log('  截图 -> .visual/' + path.basename(f));
+  };
+  // 真 click：element.click() 会完整走完 target→bubble→document，与手指点屏幕等价。
+  const click = async sel => {
+    const ok = await evaljs(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if(!el) return false; el.click(); return true; })()`);
+    check(`C ${stateLabel}：找到并点击 ${sel}`, ok);
+    await sleep(250);
   };
 
   await applyMetrics();
@@ -122,11 +166,63 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await audit('视图:' + v); await shot(v);
   }
   await evaljs("switchView('today')"); await sleep(200);
-  await evaljs('toggleDrawer()'); await sleep(350);
+
+  /* ---------------- C) 点击链路：真 click 驱动状态，再核对结果 ----------------
+   * 页面上的可点动作全部走 data-action + app.js 的 ACTIONS 表（v0.9.145）。
+   * 逻辑测试在 DOM 桩里派发假事件，接不住「真实浏览器里 closest 选不中 / 监听器没注册」这类断链；
+   * 这里用真 click，断链会直接表现为下面的断言失败。 */
+  stateLabel = '点击链路';
+  console.log('\n[点击链路] 真实 click 事件走 data-action 委托');
+  let pageErrors = 0;
+  await evaljs(`window.addEventListener('error', () => window.__vcErr = (window.__vcErr||0)+1); true`);
+
+  await click('#hamburger-btn');
+  check('C 点汉堡按钮：抽屉打开', await evaljs(`document.getElementById('drawer').classList.contains('open')`));
   await audit('抽屉打开'); await shot('drawer');
+
+  // 抽屉里的日期按钮：复合动作（切日 + 关抽屉）。兜底对 .drawer 内的点击会直接返回，
+  // 所以「抽屉关了」只能来自 ACTIONS 里的动作。
+  const dayBefore = await evaljs(`state.settings.lastDay`);
+  await click('#day-btn-B');
+  check('C 点 B 日按钮：切到 B 日', await evaljs(`state.settings.lastDay === 'B'`));
+  check('C 点 B 日按钮：同一个动作关掉抽屉', await evaljs(`!document.getElementById('drawer').classList.contains('open')`));
+
+  // 视图标签：切视图 + 关抽屉
+  await click('#hamburger-btn');
+  await click('#tab-settings');
+  check('C 点「设置」标签：设置视图激活', await evaljs(`document.getElementById('view-settings').classList.contains('active')`));
+  check('C 点「设置」标签：抽屉关闭', await evaljs(`!document.getElementById('drawer').classList.contains('open')`));
+
+  // 遮罩：点遮罩关抽屉
+  await click('#hamburger-btn');
+  await click('.drawer-overlay');
+  check('C 点遮罩：抽屉关闭', await evaljs(`!document.getElementById('drawer').classList.contains('open')`));
+
+  // 回今日视图，真点渲染出来的「状态」按钮（带参数的动作：data-day 要先收窄类型）
+  await click('#hamburger-btn');
+  await click('#tab-today');
+  const condSel = '[data-action="cycleCondition"]';
+  check('C 今日视图渲染出带 data-day 的状态按钮', await evaljs(`/data-action="cycleCondition" data-day="[AB]"/.test(document.getElementById('session-status').innerHTML)`));
+  const condBefore = await evaljs(`(document.querySelector(${JSON.stringify(condSel)}) || {}).textContent || ''`);
+  await click(condSel);
+  const condAfter = await evaljs(`(document.querySelector(${JSON.stringify(condSel)}) || {}).textContent || ''`);
+  check('C 点状态按钮：文案跟着变（' + String(condBefore).trim() + ' → ' + String(condAfter).trim() + '）', condAfter !== condBefore && /状态：/.test(condAfter));
+
+  // 导出：真点一次，核对回执出现且没有未捕获异常
+  await click('#hamburger-btn');
+  await click('#tab-history');
+  await click('[data-action="doExport"]');
+  await sleep(400);
+  check('C 点导出不产生未捕获异常', await evaljs(`(window.__vcErr || 0) === 0`));
+  check('C 点导出后有回执文案', await evaljs(`document.getElementById('export-msg').textContent.length > 0`));
+  check('C 点导出后文本框里有内容', await evaljs(`document.getElementById('export-text').value.length > 100`));
+
+  // 还原日期，免得工具跑完把用户的本机数据停在 B 日
+  await evaljs(`switchDay(${JSON.stringify(dayBefore)}); true`);
 
   ws.close();
   child.kill();
-  console.log(overflow ? '\n结论：存在水平溢出' : '\n结论：所有状态无水平溢出');
-  process.exit(overflow ? 1 : 0);
+  console.log(`\n结论：${pass} 项通过，${fail} 项失败` + (overflow ? '（其中含水平溢出）' : ''));
+  if (problems.length) console.log('失败明细:\n  ' + problems.join('\n  '));
+  process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('运行失败:', e.message); try { child.kill(); } catch (x) {} process.exit(2); });

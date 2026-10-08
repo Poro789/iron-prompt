@@ -15,6 +15,10 @@ body{
   padding-bottom:env(safe-area-inset-bottom);
 }
 button{font-family:inherit;touch-action:manipulation;cursor:pointer}
+/* 触达尺寸下限（v0.9.146）：AGENTS.md 承诺可点元素 ≥44px 高，tools/visual-check.js 的 B 项逐状态审计。
+ * 写在这一条基础规则上，而不是往每个控件补一遍：新加的控件自动合规，本来就更高的（.day-btn 44px）不受影响。
+ * 不参与渲染的控件（如恢复备份用的 input[type=file] 是 display:none）审计会跳过。 */
+button,input,select,textarea,summary{min-height:44px}
 input,textarea{font-family:inherit}
 .wrap{max-width:640px;margin:0 auto;padding:0 12px}
 
@@ -24,7 +28,8 @@ header .wrap{display:flex;align-items:center;justify-content:center;position:rel
 header .ver{color:var(--muted);font-size:12px}
 .hamburger{
   position:absolute;right:0;top:50%;transform:translateY(-50%);
-  width:40px;height:40px;border-radius:10px;border:1px solid var(--border);
+  /* 44×44：图标按钮两个方向都要够得着（宽度不在 B 项的 24px 下限里，靠这里显式保证） */
+  width:44px;height:44px;border-radius:10px;border:1px solid var(--border);
   background:var(--panel);color:var(--text);font-size:20px;line-height:1;
 }
 .hamburger:active{background:var(--panel2)}
@@ -50,7 +55,7 @@ header .ver{color:var(--muted);font-size:12px}
 .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .drawer-header h1{font-size:18px;margin:0;font-weight:700}
 .drawer-close{
-  width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+  width:44px;height:44px;border-radius:10px;border:1px solid var(--border);
   background:none;color:var(--muted);font-size:16px;
 }
 .drawer-day{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}

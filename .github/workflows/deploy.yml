@@ -1,4 +1,4 @@
-# GitHub Actions: 类型检查 + 测试 + 自动部署 GitHub Pages
+# GitHub Actions: 类型检查 + 测试 + 真实浏览器闸门 + 自动部署 GitHub Pages
 # 纯静态站点：产物不经构建直接部署；test 作业里 tsc --noEmit 只做类型闸门，不产出文件
 name: Deploy static content to Pages
 
@@ -30,7 +30,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # tools/visual-check.js 用 Node 的全局 fetch/WebSocket（≥21 才默认可用），别退回 20
+          node-version: 22
 
       # 类型闸门：JSDoc + tsc --noEmit，不产出任何文件，产物仍是不经构建的 js/app.js
       - name: Install dev deps (typecheck)
@@ -41,6 +42,20 @@ jobs:
 
       - name: Run tests
         run: node tests/run.js
+
+      # 真实浏览器闸门：水平溢出 + 可点目标 ≥44px + data-action 点击链路。
+      # 用 ubuntu 镜像自带的 Chrome（工具也会读 CHROME_PATH）；失败时退出码 1，逐条列出状态与元素。
+      - name: Browser gate (layout / touch targets / click path)
+        run: node tools/visual-check.js 390
+
+      # 失败时把截图带出来，人眼能立刻看出是哪个状态坏了
+      - name: Upload browser-gate screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-check
+          path: .visual/
+          retention-days: 7
 
   build:
     runs-on: ubuntu-latest

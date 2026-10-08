@@ -135,7 +135,7 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.145';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.146';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 /** @type {('A'|'B')[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
