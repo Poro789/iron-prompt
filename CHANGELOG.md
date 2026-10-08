@@ -2,7 +2,13 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.9.147]
+## [0.9.148]
+### 新增
+- 备份提醒：数据只存在这台设备的浏览器里，换设备的唯一路径是手动导出——真正的风险不是代码坏，而是「换了新手机才想起来没备份」，那时历史已经没了。现在超过 `BACKUP_NAG_DAYS = 14` 天没导出，今日页顶部会出现一条提醒（复用既有的 `.warn-inline` 样式，没有新增 CSS），带两个按钮：「现在导出备份」（走同一个 `doBackup`，另补一句 toast，因为设置页里的回执在别的视图看不见）与「7 天后再提醒」。不自动上传、不自动写文件——导出仍是一次明确的点击。
+- 备份卡片里新增一行「上次导出备份：YYYY-MM-DD（N 天前）」，没导出过就直说「这台设备还没有导出过备份文件」。横幅与这行共用 `backupDue()` 一个口径，不会出现一边催一边不催。
+- 状态里多两个时间戳：`settings.lastBackupAt`（0 = 从没导出过）、`settings.backupSnoozeUntil`。`migrate()` 把它们归一化：非数字或负数一律归 0——手改成字符串会让 `backupDue()` 的减法算出 NaN、比较恒为 false，提醒就永远不出现（这类「提醒静默失效」正是最难发现的一类）。
+- 测试 **§208**（14 条）：天数边界（13 天不催 / 超 14 天催）、从没导出过必须催、推迟期内不催、推迟到期后恢复、`migrate` 归 0、横幅随状态显示与隐藏、真跑一次 `doBackup` 会被记账（不记账提醒会永远挂着，等于没有）、一键推迟 7 天。`tools/visual-check.js` 的 C 项加 3 条真实浏览器检查：全新档案今日页出现提醒 → 真点「现在导出备份」→ 提醒收起且 `lastBackupAt > 0` → 全程无未捕获异常。
+- 验证：`npm run typecheck` 0 错误；`node tests/run.js` **1080 通过 / 0 失败**（上版 1062）；`node tools/visual-check.js 390` **48 项通过 / 0 失败**。
 ### 变更
 - 拆掉 `exClick()` 里那条 172 行的 `if(act === '…')` 链（技术债清掉的一项）。`exClick` 现在只做四件事：吞掉按住连发的重复 click、找出按钮、按「需要多少上下文」逐层补齐、把 act 交给具名处理器。三张表按层分开：`EX_NAV_ACTS`（prev/next/skipex/nextex，只要 day）、`EX_ITEM_ACTS`（addset/delset，要动作项）、`EX_SET_ACTS`（step/timer/uselast/confirm/dec/inc，要某一组）。分层是有意的：后两层带「拿不到 item/set 就静默返回」的守卫，而导航类按钮不带 `data-ex`/`data-set`，绝不能走进去。加新按钮 = 写一个具名处理器 + 在对应表里加一行。
 - 抽出三个共用小函数：`navDone()`（四个导航动作原本各写一遍「存盘+重画+回顶」）、`setOffsetBefore(items, exIdx)`（skipex/nextex 里两处相同的「前面占了几个组」计数）、`timerOn(exIdx, setIdx)`（「秒表是否挂在当前日这一组上」原本在 delset/timer/confirm 三处各写一遍，口径必须一致，v0.9.70 就为此改过渲染守卫）。顺手删掉 `curPos = 0` 一处死赋值（下一行立刻被覆盖）。

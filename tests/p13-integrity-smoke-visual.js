@@ -1,4 +1,4 @@
-// Iron Log 逻辑测试 · 第 13 段（共 13 段）：§191–§205 SEED 动作无孤儿 / plan-B 夹具 / 产品闭环冒烟 / sw.js 可编译与生命周期 / fetch 策略钉测 / CSS 变量有定义 / ± 长按连发 / 完成按钮语义色 / 组进度细条 / 折叠行 ≥44px / 卡片底部可换行 / 页头进度线 / 下一动作预览 / RPE 占位 / 标题去编号 / §206 data-action 点击派发
+// Iron Log 逻辑测试 · 第 13 段（共 13 段）：§191–§205 SEED 动作无孤儿 / plan-B 夹具 / 产品闭环冒烟 / sw.js 可编译与生命周期 / fetch 策略钉测 / CSS 变量有定义 / ± 长按连发 / 完成按钮语义色 / 组进度细条 / 折叠行 ≥44px / 卡片底部可换行 / 页头进度线 / 下一动作预览 / RPE 占位 / 标题去编号 / §206 data-action 点击派发 / §207 exClick 三层 act 表 / §208 备份提醒
 // 本段由一次性脚本从 test-ironlog.js 机械拆出：断言与夹具逐字未改，只加了下面的壳。
 // 跑法：npm test（= node tests/run.js）。各段共用同一个 app 实例、状态连续流动，必须按序跑，不能单独跑某一段。
 const H = require('./harness.js');
@@ -507,5 +507,60 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
     tap207({ act: 'next' });
     check('207 导航层仍能走通（next 让位置前进一格）', threw207 === null && T.curPos === pos207 + 1);
     T.state.program = prog207; T.curPos = pos207; T.render();
+  }
+
+  /* ============================================================
+   * 208. 备份提醒（v0.9.148，P6）
+   * 数据只存在本机 localStorage，换设备的唯一路径是手动导出。风险不是代码坏，而是
+   * 「换了手机才想起没备份」——那时历史已经没了。这一节钉三件容易改错的事：
+   * ① 提醒口径（backupDue）是纯函数：天数边界、推迟期内不催、从没导出过必须催；
+   * ② 横幅的显示/隐藏跟着口径走（不是只在某一次渲染里顺手写死）；
+   * ③ 真跑一次 doBackup 会把时间记下来——不记的话提醒会永远出现，等于没有。
+   * ============================================================ */
+  console.log('== 208. 备份提醒：天数口径 + 横幅随状态 + 导出真的被记账（v0.9.148）==');
+  {
+    const DAY208 = 864e5;
+    const s208 = T.state.settings;
+    const saved208 = { lastBackupAt: s208.lastBackupAt, backupSnoozeUntil: s208.backupSnoozeUntil };
+    const now208 = Date.now();
+
+    s208.lastBackupAt = 0; s208.backupSnoozeUntil = 0;
+    check('208 从没导出过备份 → 该提醒', T.backupDue(now208) === true);
+    s208.lastBackupAt = now208 - 13 * DAY208;
+    check('208 13 天前导出过 → 不提醒', T.backupDue(now208) === false);
+    s208.lastBackupAt = now208 - 15 * DAY208;
+    check('208 超过 14 天 → 提醒', T.backupDue(now208) === true);
+    s208.backupSnoozeUntil = now208 + DAY208;
+    check('208 推迟期内不催（即使从没导出过）', T.backupDue(now208) === false);
+    s208.backupSnoozeUntil = now208 - 1;
+    check('208 推迟到期后恢复提醒', T.backupDue(now208) === true);
+    // 手改过的备份把时间戳写成字符串：migrate 必须归 0，否则减法出 NaN、比较恒 false，提醒永远不出现
+    const mig208 = T.migrate({ settings: { lastBackupAt: '昨天', backupSnoozeUntil: -5 } });
+    check('208 migrate 把非数字/负数的备份时间戳归 0', mig208.settings.lastBackupAt === 0 && mig208.settings.backupSnoozeUntil === 0);
+
+    s208.lastBackupAt = 0; s208.backupSnoozeUntil = 0;
+    T.renderBackupNag();
+    check('208 该提醒时横幅可见，文案说明这台设备没备份过',
+      elsById.get('backup-nag').style.display === '' && /还没有导出过备份/.test(textOf('backup-nag-text') || ''));
+    check('208 备份卡片里那行也说明没导出过', /还没有导出过备份文件/.test(textOf('backup-last') || ''));
+    s208.lastBackupAt = now208 - 3 * DAY208;
+    T.renderBackupNag();
+    check('208 不该提醒时横幅隐藏', elsById.get('backup-nag').style.display === 'none');
+    check('208 备份卡片显示上次导出时间', /上次导出备份：\d{4}-\d{2}-\d{2}（3 天前）/.test(textOf('backup-last') || ''));
+
+    // 真跑一次导出：提醒必须被记账，否则它会永远挂着
+    s208.lastBackupAt = 0; s208.backupSnoozeUntil = 0;
+    T.doBackup();
+    check('208 导出后 lastBackupAt 被写入', typeof s208.lastBackupAt === 'number' && s208.lastBackupAt >= now208);
+    check('208 导出后横幅收起', elsById.get('backup-nag').style.display === 'none');
+    // 一键推迟：7 天后才再提醒
+    s208.lastBackupAt = 0;
+    T.snoozeBackup();
+    check('208 「7 天后再提醒」把下次提醒推到 7 天后',
+      s208.backupSnoozeUntil >= now208 + 7 * DAY208 - 5000 && elsById.get('backup-nag').style.display === 'none');
+    check('208 推迟到期后横幅会重新出现', T.backupDue(now208 + 8 * DAY208) === true);
+
+    s208.lastBackupAt = saved208.lastBackupAt; s208.backupSnoozeUntil = saved208.backupSnoozeUntil;
+    T.renderBackupNag();
   }
 };

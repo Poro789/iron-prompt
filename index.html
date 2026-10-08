@@ -46,6 +46,12 @@
   <!-- ============ 今日训练 ============ -->
   <section id="view-today" class="view active" role="tabpanel" aria-labelledby="tab-today">
     <div class="session-status" id="session-status" aria-live="polite"></div>
+    <!-- 备份提醒：只在超过 BACKUP_NAG_DAYS 没导出时出现，由 renderBackupNag 决定显示与文案 -->
+    <div class="warn-inline" id="backup-nag" style="display:none">
+      <div id="backup-nag-text"></div>
+      <button class="import-btn" data-action="backupNow">现在导出备份</button>
+      <button class="discard-btn" data-action="snoozeBackup">7 天后再提醒</button>
+    </div>
     <div id="ex-list"></div>
     <button class="end-btn" id="end-btn" style="display:none" data-action="endSession">结束训练</button>
     <button class="discard-btn" id="discard-btn" style="display:none" data-action="discardSession">放弃本次记录</button>
@@ -83,6 +89,7 @@
     <div class="set-card">
       <h3>备份与恢复</h3>
       <p>换设备、或清浏览器缓存之前：先「下载备份文件」。在新设备上打开本页面，用同一个文件恢复——日志、计划、动作库、进行中的记录、设置全部原样回来。上面「导出给 AI」只含最近 N 次，不能当备份用。</p>
+      <p id="backup-last"></p>
       <button class="import-btn" data-action="doBackup">下载备份文件</button>
       <button class="discard-btn" style="margin-top:6px" data-action="pickBackup">从备份文件恢复</button>
       <input type="file" id="restore-file" accept=".json,application/json" hidden>

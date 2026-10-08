@@ -152,6 +152,8 @@ const testScript = script + `
   buildExport, buildTrends, topSet, doExport, doExportData, runExport, buildPrompt, cycleCondition,
   sessionVolume, sessionAvgRest, itemsVolume,
   buildBackup, parseBackup, restoreBackupText, PLAN_SCHEMA, copyText,
+  // §208：备份提醒。口径（backupDue）必须是纯函数才能按天测；横幅与导出都要真跑。
+  doBackup, backupDue, backupNagText, renderBackupNag, snoozeBackup,
   renderBakRow, restoreBak, dropBak,
   buildTrendCharts, trendKind, sessionKind, normUnit, programOrder,
   startTimer, stopTimer, clearTimer, timerElapsedSec, resumeTimers, get timerFor(){ return timerFor; },

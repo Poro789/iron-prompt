@@ -254,6 +254,17 @@ const check = (name, ok, detail) => {
   check('C 点导出后有回执文案', await evaljs(`document.getElementById('export-msg').textContent.length > 0`));
   check('C 点导出后文本框里有内容', await evaljs(`document.getElementById('export-text').value.length > 100`));
 
+  /* 备份提醒（v0.9.148）：这份档案从没导出过备份，今日页必须出现提醒；点一键导出后收起。
+   * §208 在 DOM 桩里测过天数口径与显示切换；这里补的是真实接线——渲染出来的横幅、
+   * 委托按钮、以及 doBackup 在真浏览器里生成下载文件这条链。 */
+  await click('#hamburger-btn');
+  await click('#tab-today');
+  check('C 全新档案：今日页出现备份提醒', await evaljs(`document.getElementById('backup-nag').style.display !== 'none' && document.getElementById('backup-nag-text').textContent.length > 0`));
+  await click('[data-action="backupNow"]');
+  await sleep(300);
+  check('C 点「现在导出备份」：提醒收起并记下时间', await evaljs(`document.getElementById('backup-nag').style.display === 'none' && state.settings.lastBackupAt > 0`));
+  check('C 备份这条链不产生未捕获异常', await evaljs(`(window.__vcErr || 0) === 0`));
+
   // 还原日期，免得工具跑完把用户的本机数据停在 B 日
   await evaljs(`switchDay(${JSON.stringify(dayBefore)}); true`);
 

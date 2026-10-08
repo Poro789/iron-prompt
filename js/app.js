@@ -127,7 +127,7 @@
  * 持久化整体状态（localStorage LS_KEY 下的对象；migrate() 后字段必然齐全）。
  * @typedef {Object} AppState
  * @property {number} version
- * @property {{lastDay:'A'|'B',weightStep:number,restSec:number,restNote:string,warmupRestSec:number}} settings
+ * @property {{lastDay:'A'|'B',weightStep:number,restSec:number,restNote:string,warmupRestSec:number,lastBackupAt:number,backupSnoozeUntil:number}} settings 两个备份时间戳：lastBackupAt=上次导出全量备份的时刻（0=从没导出过），backupSnoozeUntil=提醒被推迟到什么时候（0=没推迟）
  * @property {{background:string}} profile
  * @property {{A:TrainItem[],B:TrainItem[]}} program
  * @property {{[id:string]:ExerciseDef}} exercises
@@ -142,14 +142,14 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.147';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.148';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 /** @type {Day[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
 const SEED = {
   version: 1,
-  settings: { lastDay: 'A', weightStep: 2.5, restSec: 90, restNote: '', warmupRestSec: 30 },
+  settings: { lastDay: 'A', weightStep: 2.5, restSec: 90, restNote: '', warmupRestSec: 30, lastBackupAt: 0, backupSnoozeUntil: 0 },
   profile: { background: '体态问题：X 型腿、肋骨外扩\n目标：增肌 + 改善体态\n（请补充：身高体重、训练水平、器械范围与上限）' },
   program: {
     A: [
@@ -350,6 +350,10 @@ function migrate(d){
   if(d.settings.lastDay !== 'A' && d.settings.lastDay !== 'B') d.settings.lastDay = 'A';
   if(typeof d.settings.weightStep !== 'number' || !(d.settings.weightStep > 0)) d.settings.weightStep = 2.5;
   else d.settings.weightStep = Math.min(100, d.settings.weightStep);   // 封顶：± 按钮按步进直加，1e9 的步进没有意义
+  /* 两个备份时间戳：不是数字（含 NaN）或为负就归 0，0 = 从没导出过 / 没推迟过。
+   * 手改备份里写个字符串会让 backupDue() 里的减法算出 NaN，比较恒为 false → 提醒永远不出现。 */
+  if(typeof d.settings.lastBackupAt !== 'number' || !(d.settings.lastBackupAt >= 0)) d.settings.lastBackupAt = 0;
+  if(typeof d.settings.backupSnoozeUntil !== 'number' || !(d.settings.backupSnoozeUntil >= 0)) d.settings.backupSnoozeUntil = 0;
   if(!Array.isArray(d.logs)) d.logs = [];
   /* 手工编辑/截断的备份里混进坏条目（null、缺 exercises）会让历史/趋势/导出整页崩。
    * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。
@@ -643,6 +647,9 @@ const ACTIONS = {
   toggleDrawer, closeDrawer, endSession, discardSession,
   doExport, doExportData, doImport, undoImport,
   doBackup, pickBackup, restoreBak, dropBak, clearAll,
+  // 今日页的备份提醒横幅：导出走同一个 doBackup，只是补一句 toast（设置页那条消息在别的视图里看不见）
+  backupNow: () => { doBackup(); toast('已生成备份文件，在浏览器下载里收好'); },
+  snoozeBackup,
   reeditSession, closeSummary, skipRest,
   pickDayA: () => { switchDay('A'); closeDrawer(); },
   pickDayB: () => { switchDay('B'); closeDrawer(); },
@@ -1179,6 +1186,7 @@ function renderToday(){
   $('discard-btn').style.display = sess ? '' : 'none';
   startClock();
   renderRestBar();
+  renderBackupNag();
 }
 
 /* 组内局部更新：只改一个输入框的值（保留焦点，不重建整屏） */
@@ -2691,6 +2699,49 @@ function parseBackup(text){
   }
   return { ok: true, state: st };
 }
+/* 备份提醒：数据只存在这台设备的浏览器里，唯一的迁移路径是手动导出。真正的风险不是「代码坏了」，
+ * 而是「换了新手机才想起来没备份」——那时历史已经没了。所以这里只补一件事：隔一阵子提醒一次，
+ * 并给一键导出。它不自动上传、不自动写文件，导出仍然是一次明确的点击（用户已确认只做这一档）。 */
+const BACKUP_NAG_DAYS = 14;      // 距上次导出超过这些天就提醒
+const BACKUP_SNOOZE_DAYS = 7;    // 「7 天后再提醒」的推迟量
+/** @param {number} now 毫秒时间戳 @returns {boolean} 现在是否该提醒导出备份（纯函数，不读时钟，方便按天测） */
+function backupDue(now){
+  const s = state.settings;
+  if(now < (s.backupSnoozeUntil || 0)) return false;
+  if(!s.lastBackupAt) return true;   // 这台设备从没导出过：正是最该提醒的情况
+  return now - s.lastBackupAt > BACKUP_NAG_DAYS * 864e5;
+}
+/** @param {number} now @returns {string} 提醒文案（含距上次导出多少天） */
+function backupNagText(now){
+  const t = state.settings.lastBackupAt;
+  if(!t) return '这台设备还没有导出过备份。训练记录只存在本机浏览器里，换设备或清数据之前请先存一份。';
+  const days = Math.max(1, Math.floor((now - t) / 864e5));
+  return `已经 ${days} 天没有导出备份了（上次 ${localDateStr(t)}）。记录只存在本机浏览器里，换设备或清数据之前请先存一份。`;
+}
+/* 今日页横幅 + 备份卡片里那行「上次导出」。两处读同一个口径，不会出现一边催一边不催。 */
+function renderBackupNag(){
+  const now = Date.now();
+  const nag = $('backup-nag');
+  if(nag){
+    const due = backupDue(now);
+    nag.style.display = due ? '' : 'none';
+    const tx = $('backup-nag-text');
+    if(tx) tx.textContent = due ? backupNagText(now) : '';
+  }
+  const last = $('backup-last');
+  if(last){
+    const t = state.settings.lastBackupAt;
+    last.textContent = t
+      ? `上次导出备份：${localDateStr(t)}（${Math.max(0, Math.floor((now - t) / 864e5))} 天前）。`
+      : '这台设备还没有导出过备份文件。';
+  }
+}
+function snoozeBackup(){
+  state.settings.backupSnoozeUntil = Date.now() + BACKUP_SNOOZE_DAYS * 864e5;
+  saveSoon();
+  renderBackupNag();
+  toast(`备份提醒已推迟 ${BACKUP_SNOOZE_DAYS} 天`);
+}
 function doBackup(){
   const data = buildBackup();
   const name = 'ironlog-backup-' + data.exportedAt + '.json';
@@ -2704,6 +2755,11 @@ function doBackup(){
   const msg = $('restore-msg');
   msg.className = 'import-msg ok';
   msg.textContent = `已生成 ${name}（${data.counts.logs} 条日志、${data.counts.exercises} 个动作）。换设备时把文件拷过去，再点「从备份文件恢复」。`;
+  /* 记下「导出过」这件事：提醒的口径就是它。下载动作本身可能失败（上面的 try/catch），
+   * 但失败时用户看得见消息，且下次还会提醒——宁多勿漏。 */
+  state.settings.lastBackupAt = Date.now();
+  saveSoon();
+  renderBackupNag();
 }
 /** @param {any} st 备份里的 state 原始对象（进 migrate 之前） */
 function applyRestoredState(st){
@@ -2784,6 +2840,7 @@ function renderSettings(){
   const undoBtn = $('undo-import');
   if(undoBtn) undoBtn.style.display = state.lastImport ? '' : 'none';
   renderBakRow();
+  renderBackupNag();
 }
 /* 设置页「动作个人备注」：编辑 state.exercises[id].personal（卡片上显示；导入计划时计划留空则保留本地值）。
  * 此前该字段只能靠 AI 计划写入，用户自己没有任何入口能记。 */
