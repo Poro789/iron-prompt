@@ -2,6 +2,14 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.145]
+### 变更
+- `index.html` 的 23 处内联 `onclick="fn()"` 全部去掉，改为 `data-action="名字"`；渲染出来的两处内联处理器（组间休息的「跳过」、状态切换按钮）同样改成 `data-action`（后者带 `data-day`）。
+- `js/app.js:635` 新增 `ACTIONS` 动作表：每一项都是对真实函数的引用（`toggleDrawer`、`doExport`…），复合动作（切日 + 关抽屉、切视图 + 关抽屉、确认是/否）登记成具名条目。派发复用**原本那个** document 级 click 监听（`js/app.js:656`），没有新增第二个监听器——先派发 `data-action`，再走原来的「点抽屉外即关抽屉」兜底，顺序与原先内联先于冒泡一致。
+- 为什么改：内联处理器是 HTML 里的字符串，类型检查看不见，改函数名只会静默失效（点了没反应）。进表以后改名、改签名、少传参数在编辑时就被 tsc 接住。
+- 测试同步：§143（`tests/p10-*.js`）从「内联名字在 app.js 里存在」升级为双向对齐——页面上出现的每个 `data-action` 必须在表里，表里每个名字必须在页面上有按钮（死条目也拦）；§181 的遮罩断言改盯 `data-action="closeDrawer"`；新增 §206（`tests/p13-*.js`）向真实注册的监听器派发一次点击，验证确认框返回对应布尔值、抽屉里的日期按钮切日并关抽屉、未登记的名字不抛异常。`tests/harness.js` 的 `__T` 桥接导出 `ACTIONS`，§172 的已知最大编号改到 206。
+- 验证：`npm run typecheck` 0 错误；`node tests/run.js` 1053 通过 / 0 失败（比上版多 38 条，全部来自 §143 扩写与 §206）；`tools/visual-check.js` 390px 各状态无水平溢出；另用一次性 CDP 脚本在真浏览器里对汉堡、日期按钮、视图标签、遮罩、状态按钮、导出按钮各派发一次真 `click`，14 项全过（含「状态：– → 状态：佳」的文案变化与导出回执）。
+
 ## [0.9.144]
 ### 变更
 - 关掉 `tsconfig.json` 的 `noImplicitAny: false`（类型闸门开满）：`js/app.js` 里 316 处隐式 any 全部补上 JSDoc 参数类型或显式标注，`npm run typecheck` 现在覆盖每个函数签名与每一处下标。动机：改字段名、改函数签名时错误在编辑时被接住，而不是靠运行时抛异常或测试跑过才发现。

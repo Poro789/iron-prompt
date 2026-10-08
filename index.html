@@ -18,26 +18,26 @@
 <header>
   <div class="wrap">
     <span class="ver" id="ver-badge"></span>
-    <button class="hamburger" id="hamburger-btn" aria-label="菜单" aria-expanded="false" aria-controls="drawer" onclick="toggleDrawer()">☰</button>
+    <button class="hamburger" id="hamburger-btn" aria-label="菜单" aria-expanded="false" aria-controls="drawer" data-action="toggleDrawer">☰</button>
   </div>
   <div class="daybar" id="daybar" aria-hidden="true"><div class="daybar-fill" id="daybar-fill" style="width:0%"></div></div>
 </header>
 
 <!-- 抽屉导航 -->
-<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<div class="drawer-overlay" id="drawer-overlay" data-action="closeDrawer"></div>
 <nav class="drawer" id="drawer" aria-label="主导航">
   <div class="drawer-header">
     <h1>Iron Log</h1>
-    <button class="drawer-close" onclick="closeDrawer()" aria-label="关闭菜单">✕</button>
+    <button class="drawer-close" data-action="closeDrawer" aria-label="关闭菜单">✕</button>
   </div>
   <div class="drawer-day" role="group" aria-label="训练日切换">
-    <button class="day-btn" id="day-btn-A" aria-pressed="true" onclick="switchDay('A');closeDrawer()">A 日<span class="dot"></span></button>
-    <button class="day-btn" id="day-btn-B" aria-pressed="false" onclick="switchDay('B');closeDrawer()">B 日<span class="dot"></span></button>
+    <button class="day-btn" id="day-btn-A" aria-pressed="true" data-action="pickDayA">A 日<span class="dot"></span></button>
+    <button class="day-btn" id="day-btn-B" aria-pressed="false" data-action="pickDayB">B 日<span class="dot"></span></button>
   </div>
   <div class="drawer-nav" role="tablist">
-    <button class="drawer-item active" id="tab-today" role="tab" aria-selected="true" aria-controls="view-today" onclick="switchView('today');closeDrawer()">今日训练</button>
-    <button class="drawer-item" id="tab-history" role="tab" aria-selected="false" aria-controls="view-history" onclick="switchView('history');closeDrawer()">历史 &amp; 导出</button>
-    <button class="drawer-item" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" onclick="switchView('settings');closeDrawer()">设置</button>
+    <button class="drawer-item active" id="tab-today" role="tab" aria-selected="true" aria-controls="view-today" data-action="viewToday">今日训练</button>
+    <button class="drawer-item" id="tab-history" role="tab" aria-selected="false" aria-controls="view-history" data-action="viewHistory">历史 &amp; 导出</button>
+    <button class="drawer-item" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" data-action="viewSettings">设置</button>
   </div>
 </nav>
 
@@ -47,8 +47,8 @@
   <section id="view-today" class="view active" role="tabpanel" aria-labelledby="tab-today">
     <div class="session-status" id="session-status" aria-live="polite"></div>
     <div id="ex-list"></div>
-    <button class="end-btn" id="end-btn" style="display:none" onclick="endSession()">结束训练</button>
-    <button class="discard-btn" id="discard-btn" style="display:none" onclick="discardSession()">放弃本次记录</button>
+    <button class="end-btn" id="end-btn" style="display:none" data-action="endSession">结束训练</button>
+    <button class="discard-btn" id="discard-btn" style="display:none" data-action="discardSession">放弃本次记录</button>
   </section>
 
   <!-- ============ 历史 & 导出 ============ -->
@@ -68,28 +68,28 @@
         </select>
       </div>
       <textarea id="export-text" class="import-box" readonly aria-label="导出文本（只读，可手动全选复制）" placeholder="点击生成后，导出的文本显示在这里（可手动全选复制）"></textarea>
-      <button class="import-btn" onclick="doExport()">生成并复制（含 prompt）</button>
-      <button class="discard-btn" style="margin-top:6px" onclick="doExportData()">仅复制数据（不含 prompt）</button>
+      <button class="import-btn" data-action="doExport">生成并复制（含 prompt）</button>
+      <button class="discard-btn" style="margin-top:6px" data-action="doExportData">仅复制数据（不含 prompt）</button>
       <div id="export-msg" class="import-msg" role="status"></div>
     </div>
     <div class="set-card">
       <h3>导入 AI 方案</h3>
       <p>粘贴 AI 返回的 JSON（容忍 ```json 包裹与多余逗号）。只更新 Program 与动作库，不动训练日志；个人注意事项字段保留。导入前会先列出会改什么，导入后可以撤销这一次。</p>
       <textarea id="import-text" class="import-box" aria-label="粘贴 AI 返回的方案 JSON" placeholder='{"type":"ai-plan","exercises":{...},"program":{"A":[...]}}'></textarea>
-      <button class="import-btn" onclick="doImport()">导入</button>
-      <button class="discard-btn" id="undo-import" style="display:none;margin-top:6px" onclick="undoImport()">撤销上次导入</button>
+      <button class="import-btn" data-action="doImport">导入</button>
+      <button class="discard-btn" id="undo-import" style="display:none;margin-top:6px" data-action="undoImport">撤销上次导入</button>
       <div id="import-msg" class="import-msg" role="status"></div>
     </div>
     <div class="set-card">
       <h3>备份与恢复</h3>
       <p>换设备、或清浏览器缓存之前：先「下载备份文件」。在新设备上打开本页面，用同一个文件恢复——日志、计划、动作库、进行中的记录、设置全部原样回来。上面「导出给 AI」只含最近 N 次，不能当备份用。</p>
-      <button class="import-btn" onclick="doBackup()">下载备份文件</button>
-      <button class="discard-btn" style="margin-top:6px" onclick="pickBackup()">从备份文件恢复</button>
+      <button class="import-btn" data-action="doBackup">下载备份文件</button>
+      <button class="discard-btn" style="margin-top:6px" data-action="pickBackup">从备份文件恢复</button>
       <input type="file" id="restore-file" accept=".json,application/json" hidden>
       <div id="bak-row" style="display:none">
         <p id="bak-hint"></p>
-        <button class="import-btn" onclick="restoreBak()">恢复救援副本</button>
-        <button class="discard-btn" style="margin-top:6px" onclick="dropBak()">删除救援副本</button>
+        <button class="import-btn" data-action="restoreBak">恢复救援副本</button>
+        <button class="discard-btn" style="margin-top:6px" data-action="dropBak">删除救援副本</button>
       </div>
       <div id="restore-msg" class="import-msg" role="status"></div>
     </div>
@@ -138,7 +138,7 @@
     <div class="set-card">
       <h3>危险区</h3>
       <p>清除全部数据（日志、计划、动作库、进行中的记录），不可恢复。</p>
-      <button class="danger-btn" onclick="clearAll()">清除全部数据</button>
+      <button class="danger-btn" data-action="clearAll">清除全部数据</button>
     </div>
   </section>
 
@@ -148,8 +148,8 @@
   <div class="summary-card">
     <h2 id="summary-title">训练完成</h2>
     <div id="summary-body"></div>
-    <button class="confirm-cancel" id="summary-reedit" style="display:none" onclick="reeditSession()">刚才记错了？改一下</button>
-    <button id="summary-close" onclick="closeSummary()">好的</button>
+    <button class="confirm-cancel" id="summary-reedit" style="display:none" data-action="reeditSession">刚才记错了？改一下</button>
+    <button id="summary-close" data-action="closeSummary">好的</button>
   </div>
 </div>
 
@@ -158,8 +158,8 @@
     <h2 id="confirm-title"></h2>
     <p id="confirm-desc"></p>
     <div class="confirm-actions">
-      <button class="confirm-cancel" onclick="answerConfirm(false)">取消</button>
-      <button class="confirm-ok" id="confirm-ok-btn" onclick="answerConfirm(true)">确定</button>
+      <button class="confirm-cancel" data-action="confirmNo">取消</button>
+      <button class="confirm-ok" id="confirm-ok-btn" data-action="confirmYes">确定</button>
     </div>
   </div>
 </div>

@@ -1,7 +1,7 @@
 {
   "name": "iron-log",
   "private": true,
-  "version": "0.9.144",
+  "version": "0.9.145",
   "description": "Iron Log —— 力量训练记录（纯前端，运行时零依赖；devDependencies 仅用于类型检查）",
   "scripts": {
     "test": "node tests/run.js",

@@ -1,4 +1,4 @@
-// Iron Log 逻辑测试 · 第 13 段（共 13 段）：§191–§205 SEED 动作无孤儿 / plan-B 夹具 / 产品闭环冒烟 / sw.js 可编译与生命周期 / fetch 策略钉测 / CSS 变量有定义 / ± 长按连发 / 完成按钮语义色 / 组进度细条 / 折叠行 ≥44px / 卡片底部可换行 / 页头进度线 / 下一动作预览 / RPE 占位 / 标题去编号
+// Iron Log 逻辑测试 · 第 13 段（共 13 段）：§191–§205 SEED 动作无孤儿 / plan-B 夹具 / 产品闭环冒烟 / sw.js 可编译与生命周期 / fetch 策略钉测 / CSS 变量有定义 / ± 长按连发 / 完成按钮语义色 / 组进度细条 / 折叠行 ≥44px / 卡片底部可换行 / 页头进度线 / 下一动作预览 / RPE 占位 / 标题去编号 / §206 data-action 点击派发
 // 本段由一次性脚本从 test-ironlog.js 机械拆出：断言与夹具逐字未改，只加了下面的壳。
 // 跑法：npm test（= node tests/run.js）。各段共用同一个 app 实例、状态连续流动，必须按序跑，不能单独跑某一段。
 const H = require('./harness.js');
@@ -423,5 +423,35 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
     check('205 分区行照常显示', /fs-section">2\. 主课段/.test(card205));
     T.state.sessions.A = sess205; T.state.drafts.A = draft205; T.state.program.A = prog205;
     delete T.state.exercises.ex205;
+  }
+  console.log('== 206. data-action 委托：点击真的走 ACTIONS（v0.9.145）==');
+  // v0.9.145 把 index.html 的 23 处内联 onclick 收进 app.js 的 ACTIONS 表 + 唯一的 document click 委托。
+  // §143 钉「名字在表里」、§181 钉「元素上挂着名字」，两者都测不到派发链路本身。
+  // 这里向真实注册的监听器派发一次点击：以后「点了没反应」在逻辑测试里就会现形，而不是只有真浏览器手点才发现。
+  {
+    const clickDoc206 = docHandlers.get('click');
+    check('206 文档级 click 监听只有一个（动作派发与抽屉兜底共用）', typeof clickDoc206 === 'function');
+    // 模拟真实冒泡：closest('[data-action]') 命中带 dataset.action 的按钮，其余选择器按调用方给的位置回答
+    const clickAction206 = (action, where) => clickDoc206({
+      target: { closest: sel => sel === '[data-action]' ? { dataset: { action } } : (where === sel ? {} : null) }
+    });
+    const p206a = T.askConfirm('确认206');
+    clickAction206('confirmYes');
+    check('206 点 confirmYes 让确认返回 true', (await p206a) === true);
+    const p206b = T.askConfirm('确认206b');
+    clickAction206('confirmNo');
+    check('206 点 confirmNo 让确认返回 false', (await p206b) === false);
+    // 抽屉内的复合动作（切日 + 关抽屉）：兜底对 .drawer 内的点击会直接返回，
+    // 所以「抽屉关了」只能来自表里的动作，不是兜底顺手关的。
+    const day206 = T.state.settings.lastDay, pos206 = T.curPos;
+    const drawer206 = document.getElementById('drawer');
+    T.toggleDrawer();
+    clickAction206('pickDayB', '.drawer');
+    check('206 抽屉里点日期按钮：切到 B 日', T.state.settings.lastDay === 'B');
+    check('206 同一个动作接着关掉抽屉', !drawer206.classList.contains('open'));
+    T.state.settings.lastDay = day206; T.curPos = pos206; T.render();
+    let threw206 = false;
+    try{ clickAction206('no_such_action'); }catch(e){ threw206 = true; }
+    check('206 未登记的动作不抛异常（表里没有就什么都不做）', !threw206);
   }
 };

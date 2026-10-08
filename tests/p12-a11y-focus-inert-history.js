@@ -79,7 +79,7 @@ const { card } = H.C;   // 上段产生的共享变量
     clickH176({ target: { closest: () => null } });
     check('176 点抽屉外：关闭', !drawer176.classList.contains('open'));
     T.toggleDrawer();
-    // 点抽屉内部（菜单项在 .drawer 里）→ 不误关，由各自的 onclick 处理
+    // 点抽屉内部（菜单项在 .drawer 里）→ 不误关，由各自的 data-action 动作处理
     clickH176({ target: { closest: sel => sel === '.drawer' ? {} : null } });
     check('176 点抽屉内部：不误关', drawer176.classList.contains('open'));
     // 点 header（汉堡）→ toggleDrawer 自己处理，这里不重复处理
@@ -164,8 +164,9 @@ const { card } = H.C;   // 上段产生的共享变量
     const css181 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
     const drawer181 = (css181.match(/\.drawer\{([^}]*)\}/) || ['', ''])[1];
     check('181 .drawer 滚动到尽头不带动背景页面', /overscroll-behavior:contain/.test(drawer181));
-    // 抽屉遮罩的关闭机制是 index.html 的内联 onclick——不是文档级监听（v0.9.126 只是兜底）。
-    check('181 遮罩存在且点击即 closeDrawer', /class="drawer-overlay"[^>]*onclick="closeDrawer\(\)"/.test(html));
+    // 抽屉遮罩的关闭机制是 index.html 上的 data-action="closeDrawer"——文档级监听只是兜底（v0.9.126）。
+    // v0.9.145 起内联 onclick 全部收进 app.js 的 ACTIONS 表；派发链路本身由 §206 跑真实监听器验证。
+    check('181 遮罩存在且带 closeDrawer 动作', /class="drawer-overlay"[^>]*data-action="closeDrawer"/.test(html));
     check('181 遮罩默认不接收点击（关闭状态不挡页面）', /\.drawer-overlay\{[^}]*pointer-events:none/.test(css181) && /\.drawer-overlay\.show\{[^}]*pointer-events:auto/.test(css181));
   }
   console.log('== 182. ± 步进下限：时长钳 0、次数钳 1（测试加固，无应用改动）==');
@@ -239,7 +240,7 @@ const { card } = H.C;   // 上段产生的共享变量
     runTimers();
   }
   console.log('== 185. 点抽屉外关闭的兜底监听（测试加固，无行为改动）==');
-  // js/app.js:484-489：遮罩 .drawer-overlay 的 onclick 是主路径（§181 已钉），
+  // 遮罩 .drawer-overlay 的 data-action="closeDrawer" 是主路径（§181 钉名字、§206 钉派发），
   // 文档级监听是遮罩失效时的兜底——此前没有任何测试直接调用过它。
   {
     const drawerEl185 = document.getElementById('drawer');

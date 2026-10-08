@@ -135,7 +135,7 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.144';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.145';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 /** @type {('A'|'B')[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
@@ -626,11 +626,43 @@ document.addEventListener('keydown', e => {
   // 关闭路径复用 closeDrawer（清 overlay、复位 aria-expanded、焦点还给汉堡按钮）。
   else if($('drawer').classList.contains('open')) closeDrawer();
 });
-/* 抽屉有 .drawer-overlay 遮罩（点击即 closeDrawer），但遮罩被移除/失效时 inert 后的页面会成死区。
- * 兜底：点抽屉与 header 之外的任何地方（含穿透 inert 到 body 的点击）即关抽屉；与遮罩的 onclick 幂等共存。 */
+/* 点击动作表：可点的动作全部登记在这里，HTML 与渲染里只留 data-action="名字"。
+ * 之前是 23 处内联 onclick="fn()"：那些字符串在类型检查之外，改函数名会静默失效（点了没反应，
+ * 只能靠 §143 那种正则扫描兜一下，且不校验参数）。这张表里每一项都是真引用——改名、改签名、
+ * 少传参数都会在编辑时被 tsc 接住。表里引用下面才声明的函数是安全的：函数声明会提升。
+ * 加新动作：在这里登记，别在 HTML 里写内联 on*，也别再加第二个 document 级 click 监听。 */
+/** @type {{[action:string]: (el: any) => void}} */
+const ACTIONS = {
+  toggleDrawer, closeDrawer, endSession, discardSession,
+  doExport, doExportData, doImport, undoImport,
+  doBackup, pickBackup, restoreBak, dropBak, clearAll,
+  reeditSession, closeSummary, skipRest,
+  pickDayA: () => { switchDay('A'); closeDrawer(); },
+  pickDayB: () => { switchDay('B'); closeDrawer(); },
+  viewToday: () => { switchView('today'); closeDrawer(); },
+  viewHistory: () => { switchView('history'); closeDrawer(); },
+  viewSettings: () => { switchView('settings'); closeDrawer(); },
+  confirmYes: () => answerConfirm(true),
+  confirmNo: () => answerConfirm(false),
+  // 带参数的动作：参数从 data-* 取，回来是 string，先收窄再进函数（parse, don't validate）。
+  cycleCondition: (/** @type {any} */ el) => {
+    const d = el.dataset.day;
+    if(d === 'A' || d === 'B') cycleCondition(d);
+  },
+};
+/* 抽屉有 .drawer-overlay 遮罩（data-action="closeDrawer"），但遮罩被移除/失效时 inert 后的页面会成死区。
+ * 兜底：点抽屉与 header 之外的任何地方（含穿透 inert 到 body 的点击）即关抽屉；与遮罩的动作幂等共存。
+ * 派发顺序：先动作、后兜底——动作里若已 closeDrawer，兜底看到未开就直接返回，与原先内联先于冒泡一致。 */
 document.addEventListener('click', e => {
-  if(!$('drawer').classList.contains('open')) return;
   const t = /** @type {Element|null} */ (e.target);
+  if(t && t.closest){
+    const el = /** @type {any} */ (t.closest('[data-action]'));
+    if(el){
+      const fn = ACTIONS[el.dataset.action];
+      if(fn) fn(el);
+    }
+  }
+  if(!$('drawer').classList.contains('open')) return;
   if(t && t.closest && (t.closest('.drawer') || t.closest('header'))) return;
   closeDrawer();
 });
@@ -1063,7 +1095,7 @@ function fullScreenHTML(day){
       <div class="fs-rest-bar" role="timer" aria-label="组间休息计时">
         <span class="rest-label">休息</span>
         <span class="rest-clock" id="rest-clock">${restClock}</span>
-        <button class="cond-btn" onclick="skipRest()">跳过</button>
+        <button class="cond-btn" data-action="skipRest">跳过</button>
       </div>` : ''}
       <div class="fs-top">
         <button class="fs-nav" data-act="prev" aria-label="上一组">‹</button>
@@ -1110,7 +1142,7 @@ function renderToday(){
   const sess = state.sessions[day];
   const status = $('session-status');
   const condVal = sess ? sess.condition : condDraft[day];
-  const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${esc(condVal ? (COND_LABEL[condVal] || '–') : '–')}</button>`;
+  const condBtn = `<button class="cond-btn" data-action="cycleCondition" data-day="${day}">状态：${esc(condVal ? (COND_LABEL[condVal] || '–') : '–')}</button>`;
   // 实时进度
   const items = getItems(day);
   const totalSets = items.reduce((s, it) => s + it.sets.length, 0);

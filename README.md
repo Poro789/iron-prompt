@@ -66,7 +66,7 @@ tests/p01…p13-*.js    逻辑测试按主题分 13 段（编号小节连续跨�
 tests/run.js          测试入口：按文件名顺序执行全部段（= npm test）
 ```
 
-运行时零构建零依赖：无打包器，`css`/`js` 直接外链，部署的就是仓库里的 `js/app.js`。类型检查用 JSDoc 注释 + `tsc --noEmit`（devDependency 只有 typescript，不产出文件），CI 在测试前把类型错误当失败拦下。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act）。
+运行时零构建零依赖：无打包器，`css`/`js` 直接外链，部署的就是仓库里的 `js/app.js`。类型检查用 JSDoc 注释 + `tsc --noEmit`（devDependency 只有 typescript，不产出文件），CI 在测试前把类型错误当失败拦下。测试用零依赖 DOM 桩直接加载 `js/app.js`，并按文本核对 `index.html` 的接线（id/data-act/data-action）。
 
 ## 开发
 

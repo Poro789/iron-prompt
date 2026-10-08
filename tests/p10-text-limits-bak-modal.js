@@ -289,14 +289,23 @@ const { sw, p, card, mk, tset } = H.C;   // 上段产生的共享变量
     T.state.sessions.A = null; delete T.state.exercises.e142; T.state.program.A = [];
   }
 
-  // §143：index.html 里所有 onclick="fn(...)" 内联处理器必须对应 app.js 里真实存在的函数。
-  // §131 只覆盖 data-act 委托；内联 onclick 拼错/改名会静默失效（点击无反应），这里补静态扫描。
+  // §143：页面上所有可点动作都写进 app.js 的 ACTIONS 表，HTML 与渲染里只留 data-action="名字"。
+  // §131 只覆盖 data-act 委托。v0.9.144 之前这里是内联 onclick="fn()"：改名会静默失效（点了没反应），
+  // 那时只能静态扫名字是否存在。换成表以后 tsc 已经接住改名与参数，这里补剩下的两半：
+  // 页面上出现的每个名字都在表里（否则点了无反应），表里没有用不到的条目（否则"删了功能忘了删名"看不出来）。
   {
-    const handlers143 = new Set();
-    const re143 = /onclick="([a-zA-Z_$][\w$]*)\s*\(/g;
-    let m143; while((m143 = re143.exec(html))) handlers143.add(m143[1]);
-    check('143 内联处理器扫描到足够多', handlers143.size >= 10);
-    for(const fn of handlers143) check(`143 ${fn} 在 app.js 里有定义`, new RegExp('function ' + fn + '\\s*\\(').test(script));
+    const names143 = new Set();
+    const re143 = /data-action="([a-zA-Z][\w]*)"/g;
+    let m143;
+    while((m143 = re143.exec(html))) names143.add(m143[1]);
+    // 应用自己拼出来的按钮（组间休息的「跳过」、状态切换）同样走这张表
+    while((m143 = re143.exec(script))) names143.add(m143[1]);
+    check('143 页面动作扫描到足够多', names143.size >= 15);
+    check('143 index.html 不再有内联 on* 处理器', !/ on[a-z]+="/.test(html));
+    const table143 = T.ACTIONS;
+    check('143 ACTIONS 表已导出到测试桥', !!table143);
+    for(const n of names143) check(`143 ${n} 已登记在 ACTIONS 表里`, typeof table143[n] === 'function');
+    for(const n of Object.keys(table143)) check(`143 表里的 ${n} 在页面上确有按钮`, names143.has(n));
   }
 
   // §144：sw.js 的更新机制必须保留——skipWaiting/clients.claim 让新版本在常驻打开的 PWA 里尽快生效，

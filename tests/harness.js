@@ -159,6 +159,8 @@ const testScript = script + `
   get openNotes(){ return openNotes; },
   startRestTimer, tickRest, finishRest, skipRest, resetRest, resumeClocks, askConfirm, answerConfirm,
   toggleDrawer, closeDrawer,
+  // §143/§206：点击动作表。页面里的按钮只写 data-action="名字"，测试要能核对名字是否真在表里。
+  get ACTIONS(){ return ACTIONS; },
   cycleDone, setDoneState: (day, exIdx, setIdx, val) => { const st = getItems(day)[exIdx].sets[setIdx]; if(st) st.done = val; }, nextPos, prevPos, get curPos(){ return curPos; },
   set curPos(v){ curPos = v; },
   localDateStr, fmtDate, trimSet, migrate, bindDrafts, clampPos, load,
