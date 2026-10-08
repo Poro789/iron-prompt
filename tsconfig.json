@@ -8,10 +8,9 @@
     "checkJs": true,
     "noEmit": true,
     "strict": true,
-    // 渐进收紧：隐式 any（事件回调参数、局部变量）暂不报错——存量约 368 处。
-    // 数据模型形状靠上面的 typedef + strict 的显式类型错误兜住；
-    // 后续补 JSDoc 时把这一项删掉即可全面收紧。
-    "noImplicitAny": false,
+    // 类型闸门开满（v0.9.144 起）：任何隐式 any 都算构建失败。
+    // 数据形状一律用 js/app.js 顶部的 typedef；DOM 事件对象按仓库约定标 any（不建模 DOM 类型）。
+    // 新增函数与回调必须自带 JSDoc 参数类型，别把这里改回 false。
     "skipLibCheck": true
   },
   "include": ["js/**/*.js"]

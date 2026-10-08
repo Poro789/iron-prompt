@@ -26,9 +26,12 @@
  * @property {number|null} reps
  * @property {number|null} duration 秒（时长类动作）
  * @property {number|null} rpe
- * @property {string} rpeLabel
+ * @property {string} [rpeLabel] RPE 的文字说明。只有 normalizeSet 的输出保证带（缺→''）；
+ *   草稿/加组新建的组不写这个字段，读取处一律按 falsy 处理。
  * @property {'L'|'R'|null} side 单侧动作侧别
  * @property {boolean} [done] 是否完成（会话/日志组）
+ * @property {number|null} [targetRpe] 计划给这一组的目标 RPE，只存在于草稿/会话的工作形状，结算时不落盘
+ * @property {string} [targetRpeLabel] 同上：目标 RPE 的文字标签
  * @property {number|null} [restAfter] 该组之后实际休息秒数（结算时写入）
  * @property {boolean} [isPR] 日志组仅在真破纪录时写，普通组不增加体积
  */
@@ -80,6 +83,26 @@
  */
 
 /**
+ * 趋势统计里的一次会话记录（buildTrends 的输出）。top 只保留可比较的四个数值
+ * （见 trimSet：done/restAfter/side 对分析没用，却会把导出里的 trends 撑大一倍）。
+ * @typedef {Object} TrendSession
+ * @property {string} date
+ * @property {string} [day] 归属日（旧日志可能缺）
+ * @property {{weight:number|null,reps:number|null,duration:number|null,rpe:number|null}} top 该次最好一组
+ * @property {number|null} avgRpe
+ * @property {number} volume 聚合容量（kg 口径）
+ * @property {number} sets 正式组数
+ */
+
+/**
+ * buildTrends 的产物：exerciseId → 该动作的趋势聚合（导出给 AI 与折线图共用）。
+ * @typedef {Object} TrendEntry
+ * @property {string} name
+ * @property {string} direction 'up'|'down'|'plateau'|'new'
+ * @property {TrendSession[]} sessions
+ */
+
+/**
  * 动作库条目（state.exercises 的值）。
  * @typedef {Object} ExerciseDef
  * @property {string} name
@@ -112,8 +135,9 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.143';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.144';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
+/** @type {('A'|'B')[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
 /* ---------------- 占位种子数据（导入 AI 方案后替换；旧格式由 migrate 归一化） ---------------- */
 const SEED = {
@@ -248,6 +272,7 @@ const SEED = {
 };
 
 /* ---------------- 归一化与迁移（旧格式 {sets:N, reps:'x-y'} → 逐组数组） ---------------- */
+/** @param {unknown} v @returns {number|null} */
 function numOrNull(v){
   if(v === null || v === undefined || v === '') return null;
   const n = Number(v);
@@ -256,6 +281,7 @@ function numOrNull(v){
   // 静默变成 null，刷新后「凭空消失」，不如归一时就归 null。上限与手动输入路径同口径（1e6）。
   return !Number.isFinite(n) || n < 0 || n > 1e6 ? null : n;
 }
+/** @param {any} s 外部原始组 @returns {SetEntry} */
 function normalizeSet(s){
   s = s || {};
   return {
@@ -269,6 +295,7 @@ function normalizeSet(s){
     side: s.side === 'L' || s.side === 'R' ? s.side : null
   };
 }
+/** @param {any} raw 外部原始动作条目 @returns {TrainItem} */
 function normalizeItem(raw){
   raw = raw || {};
   // section/rpeLabel 的截断上限兑现 PLAN_SCHEMA 的承诺（其余文本 1000 字）；
@@ -291,6 +318,7 @@ function normalizeItem(raw){
 }
 /* 已存日志/会话里的数值字段：手工编辑备份可能把重量写成字符串（"12"），
  * 容量与趋势的乘法会把 NaN 传染给整次训练；能转的转成数，转不了的归 null（等同未填）。 */
+/** @param {any[]} sets 原地归一，无返回值 */
 function coerceSetNums(sets){
   if(!Array.isArray(sets)) return;
   for(const s of sets){
@@ -320,10 +348,10 @@ function migrate(d){
    * 最低形状要求：对象 + exercises 是数组；其余字段缺了顶多显示空，不会崩。
    * 动作条目再筛一层：sets 不是数组的会在 reduce 时崩，直接丢弃该动作；
    * 组里的非数值字段顺手归一化（见 coerceSetNums）。 */
-  d.logs = d.logs.filter(l => l && typeof l === 'object' && Array.isArray(l.exercises));
-  d.logs.forEach(l => {
-    l.exercises = l.exercises.filter(it => it && typeof it === 'object' && Array.isArray(it.sets));
-    l.exercises.forEach(it => coerceSetNums(it.sets));
+  d.logs = d.logs.filter((/** @type {any} */ l) => l && typeof l === 'object' && Array.isArray(l.exercises));
+  d.logs.forEach((/** @type {any} */ l) => {
+    l.exercises = l.exercises.filter((/** @type {any} */ it) => it && typeof it === 'object' && Array.isArray(it.sets));
+    l.exercises.forEach((/** @type {any} */ it) => coerceSetNums(it.sets));
   });
   if(!d.profile) d.profile = { background: '' };
   /* profile 被手改成字符串（有人直接在备份里写背景）：保住内容，形状纠正 */
@@ -336,10 +364,10 @@ function migrate(d){
   if(!d.drafts || typeof d.drafts !== 'object') d.drafts = {};
   /* 草稿也可能被手工改过：缺 sets 的条目会让训练页渲染崩（筛掉后若与计划数量不符，
    * getItems 会整份重建草稿，等于自动修复）；字符串数值同日志一样归一化。 */
-  for(const dDay of ['A', 'B']){
+  for(const dDay of DAYS){
     if(Array.isArray(d.drafts[dDay])){
-      d.drafts[dDay] = d.drafts[dDay].filter(it => it && typeof it === 'object' && Array.isArray(it.sets));
-      d.drafts[dDay].forEach(it => coerceSetNums(it.sets));
+      d.drafts[dDay] = d.drafts[dDay].filter((/** @type {any} */ it) => it && typeof it === 'object' && Array.isArray(it.sets));
+      d.drafts[dDay].forEach((/** @type {any} */ it) => coerceSetNums(it.sets));
     }
   }
   if(!d.condDraft || typeof d.condDraft !== 'object') d.condDraft = { A: null, B: null };
@@ -359,7 +387,7 @@ function migrate(d){
   for(const k of Object.keys(d.exercises)){
     if(!d.exercises[k] || typeof d.exercises[k] !== 'object') d.exercises[k] = { name: k, mode: 'weight', unit: null };
   }
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     if(d.program && Array.isArray(d.program[day])){
       d.program[day] = d.program[day].map(normalizeItem);
     }
@@ -370,11 +398,11 @@ function migrate(d){
     if(d.sessions[day] && !Array.isArray(d.sessions[day].items)) d.sessions[day].items = [];
     if(d.sessions[day] && d.sessions[day].items){
       // sets 不是数组的条目和日志侧一样丢弃：renderToday/flatPos 直接 .length/.forEach，留着必崩
-      d.sessions[day].items = d.sessions[day].items.filter(it => it && typeof it === 'object' && Array.isArray(it.sets));
-      d.sessions[day].items.forEach(it => (it.sets || []).forEach(s => {
+      d.sessions[day].items = d.sessions[day].items.filter((/** @type {any} */ it) => it && typeof it === 'object' && Array.isArray(it.sets));
+      d.sessions[day].items.forEach((/** @type {any} */ it) => (it.sets || []).forEach((/** @type {any} */ s) => {
         if(s.done === null || s.done === undefined) s.done = false;
       }));
-      d.sessions[day].items.forEach(it => coerceSetNums(it.sets));
+      d.sessions[day].items.forEach((/** @type {any} */ it) => coerceSetNums(it.sets));
     }
   }
   return d;
@@ -448,14 +476,16 @@ window.addEventListener('pagehide', flushSave);
    类型检查靠数据模型 typedef 兜形状，不靠 DOM 元素类型。 */
 /** @type {(id: string) => any} */
 const $ = id => document.getElementById(id);
-const round1 = v => Math.round(v * 10) / 10;
-const round2 = v => Math.round(v * 100) / 100;   // 重量用 0.01：AI 计划/种子常有 11.35（=25lb）这种半档精度，round1 会把它显示成 11.3/11.4，和存的数据对不上
-const fmtW = v => (v === null || v === undefined || v === '') ? '' : String(round2(v));
+const round1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
+const round2 = (/** @type {number} */ v) => Math.round(v * 100) / 100;   // 重量用 0.01：AI 计划/种子常有 11.35（=25lb）这种半档精度，round1 会把它显示成 11.3/11.4，和存的数据对不上
+const fmtW = (/** @type {any} */ v) => (v === null || v === undefined || v === '') ? '' : String(round2(v));
 const WEEK = ['日','一','二','三','四','五','六'];
 /* 所有来自 localStorage / AI 导入的文本在拼进 innerHTML 前必须过 esc() */
-const esc = s => String(s).replace(/[&<>"']/g, c =>
-  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+/** @type {Record<string,string>} */
+const ESC_MAP = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+const esc = (/** @type {any} */ s) => String(s).replace(/[&<>"']/g, c => ESC_MAP[c]);
 
+/** @param {any} sec 秒数；非数值/负数显示破折号 @returns {string} */
 function fmtDuration(sec){
   if(!(sec >= 0)) return '—';   // 手工编辑/截断的日志可能缺 durationSec：显示 NaN:NaN:NaN 不如一个破折号
   sec = Math.max(0, Math.round(sec));
@@ -463,6 +493,7 @@ function fmtDuration(sec){
   const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
+/** @param {any} dateStr YYYY-MM-DD；格式不合返回「未知日期」 @returns {string} */
 function fmtDate(dateStr){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return '未知日期';
   const d = new Date(dateStr + 'T00:00:00');
@@ -473,31 +504,36 @@ function fmtDate(dateStr){
 }
 /* 本地日期串 YYYY-MM-DD。不能用 toISOString().slice(0,10)：那是 UTC，
  * 东八区凌晨 00:30 结束的训练会被记到前一天，历史与趋势的日期全部错位。 */
+/** @param {number} ts epoch ms @returns {string} 本地日期串 YYYY-MM-DD */
 function localDateStr(ts){
   const d = new Date(ts);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-const isDone = s => s.done === true;
+const isDone = (/** @type {any} */ s) => s.done === true;
 /* 聚合容量在界面上统一标 kg：lb 动作（拉力绳档位）先换算成 kg 再累加。
  * 不换算的话，一次训练里 20lb 的绳和 20kg 的哑铃会被当成一样重，总数没有统一含义。 */
 const LB_TO_KG = 0.45359237;
 /* items 形状（session/draft 的 items）与日志 entry.exercises 相同，容量统一走这里 */
+/** @param {any[]} items 计划项/会话项/日志动作条目（同构） @returns {number} kg */
 function itemsVolume(items){
   return items.reduce((sum, it) => {
     const k = normUnit(it.exerciseId) === 'lb' ? LB_TO_KG : 1;
-    return sum + it.sets.filter(isDone).reduce((s, st) => s + (st.weight || 0) * k * (st.reps || 0), 0);
+    return sum + it.sets.filter(isDone).reduce((/** @type {number} */ s, /** @type {any} */ st) => s + (st.weight || 0) * k * (st.reps || 0), 0);
   }, 0);
 }
+/** @param {{exercises:any[]}} entry @returns {number} kg */
 function sessionVolume(entry){
   return itemsVolume(entry.exercises);
 }
+/** @param {{exercises:any[]}} entry @returns {number} 已完成组数 */
 function sessionSets(entry){
   return entry.exercises.reduce((s, ex) => s + ex.sets.filter(isDone).length, 0);
 }
 /* 组间实际休息均值（秒）：restAfter 在每组休息结算时写入（跳过/换组/结束都会结算）。
  * 没有任何记录时返回 null，小结里就不显示这一行。 */
+/** @param {{exercises:{sets?:any[]}[]}} entry @returns {number|null} 秒 */
 function sessionAvgRest(entry){
-  const rs = [];
+  /** @type {number[]} */ const rs = [];
   for(const ex of entry.exercises) for(const st of (ex.sets || [])){
     if(typeof st.restAfter === 'number' && st.restAfter >= 0) rs.push(st.restAfter);
   }
@@ -513,6 +549,7 @@ function hideToast(){
   toastAction = null;
 }
 /* 第二个参数传函数时，提示条里多一个「撤销」按钮，并停留更久（6s） */
+/** @param {string} msg @param {(() => void)|null} [action] 传入时提示条带「撤销」按钮 */
 function toast(msg, action){
   const t = $('toast');
   if(typeof action !== 'function' && toastAction){
@@ -543,6 +580,7 @@ function toast(msg, action){
  */
 /** @type {((value: boolean) => void)|null} */ let confirmResolve = null;
 /** @type {HTMLElement|null} */ let modalOpener = null; // 打开模态时的焦点来源，关闭后归还
+/** @param {{title:string,desc?:string,okLabel?:string}} opts @returns {Promise<boolean>} */
 function askConfirm(opts){
   $('confirm-title').textContent = opts.title;
   $('confirm-desc').textContent = opts.desc || '';
@@ -553,6 +591,7 @@ function askConfirm(opts){
   $('confirm-ok-btn').focus(); // 焦点进对话框：背景 inert 后焦点原本会掉到 body
   return new Promise(res => { confirmResolve = res; });
 }
+/** @param {boolean} ok */
 function answerConfirm(ok){
   $('confirm-overlay').classList.remove('show');
   setBackdropInert(false);
@@ -565,6 +604,7 @@ function answerConfirm(ok){
  * 遮罩只挡指针（display:flex），键盘原本是完全穿透的：小结开着时按 Tab+Enter
  * 能在背后凭空开一次「进行中」；确认框开着时能触发背景按钮，甚至嵌套两个确认
  * 让第一个 Promise 永不 resolve。 */
+/** @param {boolean} on 强制把背景设为 inert */
 function setBackdropInert(on){
   /* 状态复算：模态打开时背景全部（含抽屉）inert；只有抽屉打开时仅 main inert——
    * 被遮罩盖住的内容控件不该进 Tab 序列，但 header 保留可用，汉堡还能点回来关抽屉。 */
@@ -602,6 +642,7 @@ function scrollToTop(){
   const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   window.scrollTo({ top: 0, behavior: rm ? 'auto' : 'smooth' });
 }
+/** @param {'today'|'history'|'settings'} v */
 function switchView(v){
   currentView = v;
   ['today','history','settings'].forEach(x => {
@@ -657,8 +698,8 @@ window.addEventListener('popstate', () => {
 /* ---------------- 今日训练 ----------------
  * 草稿（未确认任何一组前的预填数据、当日状态选择）存在 state 里而不是内存变量：
  * 训练中刷新页面 / 浏览器被系统回收，输入过的数值不再凭空消失。 */
-let draft = {};      // 指向 state.drafts（见下），保留局部名只为可读性
-let condDraft = {};  // 指向 state.condDraft
+/** @type {{[day:string]:TrainItem[]}} */ let draft = {};      // 指向 state.drafts（见下），保留局部名只为可读性
+/** @type {{[day:string]:string|null}} */ let condDraft = {};  // 指向 state.condDraft
 function bindDrafts(){
   draft = state.drafts;
   condDraft = state.condDraft;
@@ -666,7 +707,9 @@ function bindDrafts(){
 bindDrafts();
 
 const COND_ORDER = [null, '佳', '一般', '差'];
+/** @type {{[k:string]:string}} */
 const COND_LABEL = { '佳': '佳', '一般': '一般', '差': '差' };
+/** @param {'A'|'B'} day 循环「未填→佳→一般→差→未填」 */
 function cycleCondition(day){
   const cur = state.sessions[day] ? state.sessions[day].condition : condDraft[day];
   const next = COND_ORDER[(COND_ORDER.indexOf(cur) + 1) % COND_ORDER.length];
@@ -678,6 +721,7 @@ function cycleCondition(day){
 
 function curDay(){ return state.settings.lastDay; }
 
+/** @param {'A'|'B'} d 切换 A/B 日 */
 function switchDay(d){
   state.settings.lastDay = d;
   curPos = state.ui.curPos[d] || 0;   // A/B 各记各的位置，切回来不用重找
@@ -696,11 +740,13 @@ function switchDay(d){
 /* 当前模式会显示/使用的指标。预填与「沿用上次」只填这些：
  * 动作从计时改成重量后，旧 duration 若被悄悄带进新组，界面上看不见，
  * 但历史详情会优先读 duration 显示成「45 秒」而不是「60kg×10」。 */
+/** @param {string} mode ExerciseDef.mode @returns {string[]} 该模式会填写的数值字段名 */
 function modeFields(mode){
   if(mode === 'time') return ['duration'];
   if(mode === 'bodyweight') return ['reps'];
   return ['weight', 'reps'];
 }
+/** @param {string} exerciseId @returns {{weight:number|null,reps:number|null,duration:number|null,date:string|null}} */
 function lastValues(exerciseId){
   const ex = state.exercises[exerciseId];
   const mode = (ex && ex.mode) || 'weight';
@@ -721,6 +767,7 @@ function lastValues(exerciseId){
  *    会把远离纪录的数值误标成 PR（历史 100、上次 50、这次 60 不是纪录）。
  * 2) 本次会话里同动作的其他已完成正式组——刚确认过 85，再确认 52 不算破纪录。
  * 没有任何历史记录时不算 PR（与「上次」显示一致，不给第一组刷徽章）。 */
+/** @param {'A'|'B'} day @param {number} exIdx @param {number} setIdx @param {string} exerciseId @returns {boolean} */
 function detectPR(day, exIdx, setIdx, exerciseId){
   const ex = state.exercises[exerciseId];
   const mode = (ex && ex.mode) || 'weight';
@@ -749,6 +796,7 @@ function detectPR(day, exIdx, setIdx, exerciseId){
 
 /* 卡片上的「上次」一行：训练中决定「要不要加」，前提是看得见上次做到了多少。
  * 点一下就把上次的数值填进这一组，省掉照着记忆打字。热身组不显示（它的目标本来就比正式组低）。 */
+/** @param {number} exIdx @param {number} setIdx @param {string} exId @param {ExerciseDef} ex @param {SetEntry} set @returns {string} HTML */
 function lastHintHTML(exIdx, setIdx, exId, ex, set){
   if(set.type === 'warmup') return '';
   const lv = lastValues(exId);
@@ -771,6 +819,7 @@ function lastHintHTML(exIdx, setIdx, exId, ex, set){
 }
 
 /* 当前日期的可编辑 items：有进行中记录用记录，否则用草稿（计划规格优先，上次数值兜底） */
+/** @param {'A'|'B'} day @returns {TrainItem[]} 可编辑的当前 items（进行中记录 > 草稿 > 计划+上次） */
 function getItems(day){
   if(state.sessions[day]) return state.sessions[day].items;
   /* 草稿现在会存盘，所以要先确认它和当前计划还对得上：动作序列不一致（计划被改过、
@@ -806,6 +855,7 @@ function getItems(day){
 }
 
 /* 首次确认一组时，把草稿提升为正式的进行中记录 */
+/** @param {'A'|'B'} day */
 function startSessionIfNeeded(day){
   if(!state.sessions[day]){
     state.sessions[day] = { startedAt: Date.now(), items: getItems(day), condition: condDraft[day] || null };
@@ -815,6 +865,7 @@ function startSessionIfNeeded(day){
 }
 
 /* 卡片右上角目标标签：如 "热身 1 + 2 × 10" / "4 × 30s" */
+/** @param {TrainItem} item @returns {string} 卡片右上角目标标签 */
 function targetLabel(item){
   let work = item.sets.filter(s => s.type !== 'warmup');
   const warmOnly = !work.length;
@@ -823,12 +874,12 @@ function targetLabel(item){
   let core;
   if(work.length && work.every(s => s.duration != null)){
     // reduce 求极值而不是 Math.min(...)：组数大时展开实参会撞 V8 参数上限（RangeError）
-    const dmin = work.reduce((m, s) => Math.min(m, s.duration), Infinity);
-    const dmax = work.reduce((m, s) => Math.max(m, s.duration), -Infinity);
+    const dmin = work.reduce((m, s) => Math.min(m, /** @type {number} */ (s.duration)), Infinity);
+    const dmax = work.reduce((m, s) => Math.max(m, /** @type {number} */ (s.duration)), -Infinity);
     core = work.length + ' × ' + (dmin === dmax ? dmin : dmin + '-' + dmax) + 's';
   }else if(work.length && work.every(s => s.reps != null)){
-    const rmin = work.reduce((m, s) => Math.min(m, s.reps), Infinity);
-    const rmax = work.reduce((m, s) => Math.max(m, s.reps), -Infinity);
+    const rmin = work.reduce((m, s) => Math.min(m, /** @type {number} */ (s.reps)), Infinity);
+    const rmax = work.reduce((m, s) => Math.max(m, /** @type {number} */ (s.reps)), -Infinity);
     core = work.length + ' × ' + (rmin === rmax ? rmin : rmin + '-' + rmax);
   }else if(item.repsRange){
     core = work.length + ' × ' + item.repsRange;
@@ -845,20 +896,23 @@ function targetLabel(item){
  * 由用户点「下一组」继续——点的时候把实际休息用时记进该组的 restAfter。
  */
 let curPos = state.ui.curPos[curDay()] || 0;  // 当前 (exIdx, setIdx) 扁平化位置，从上次停下的地方继续
-let openNotes = {};  // 已展开的"要点/避坑"详情，key = day:exIdx
+/** @type {{[k:string]:boolean}} */ let openNotes = {};  // 已展开的"要点/避坑"详情，key = day:exIdx
 
+/** @param {'A'|'B'} day @returns {{exIdx:number,setIdx:number}[]} 当前 items 的扁平组位置表 */
 function flatPos(day){
   const items = getItems(day);
-  const pos = [];
+  /** @type {{exIdx:number,setIdx:number}[]} */ const pos = [];
   items.forEach((it, exIdx) => it.sets.forEach((s, setIdx) => pos.push({ exIdx, setIdx })));
   return pos;
 }
+/** @param {'A'|'B'} day @param {{exIdx:number,setIdx:number}} p @returns {{ex:ExerciseDef|null,item:TrainItem|null,set:SetEntry|null}} */
 function posLabel(day, p){
   const items = getItems(day);
   const it = items[p.exIdx];
   if(!it) return { ex: null, item: null, set: null };
   return { ex: state.exercises[it.exerciseId], item: it, set: it.sets[p.setIdx] };
 }
+/** @param {'A'|'B'} day @returns {number} 夹到合法范围内的 curPos */
 function clampPos(day){
   const n = flatPos(day).length;
   if(!n) return 0;
@@ -867,16 +921,19 @@ function clampPos(day){
   if(state.ui.curPos[day] !== curPos){ state.ui.curPos[day] = curPos; saveSoon(); }
   return curPos;
 }
+/** @param {'A'|'B'} day */
 function nextPos(day){
   const n = flatPos(day).length;
   if(!n) return;
   curPos = (curPos + 1) % n;
 }
+/** @param {'A'|'B'} day */
 function prevPos(day){
   const n = flatPos(day).length;
   if(!n) return;
   curPos = (curPos - 1 + n) % n;
 }
+/** @param {'A'|'B'} day @param {number} exIdx @param {number} setIdx ○↔✓ 二态切换 */
 function cycleDone(day, exIdx, setIdx){
   const set = getItems(day)[exIdx].sets[setIdx];
   if(!set) return;
@@ -897,6 +954,7 @@ function cycleDone(day, exIdx, setIdx){
 /* 已确认的组改了数字：PR 徽章必须跟着重算。
  * 确认 105 拿到 🔥 后改成 90，🔥 还挂着；确认 90 后 ± 加到 105 却没有 🔥——
  * 两个方向都会让徽章和真实表现脱钩。未确认的组不重算（确认时才判定）。 */
+/** @param {'A'|'B'} day @param {number} exIdx @param {number} setIdx */
 function refreshPR(day, exIdx, setIdx){
   const item = getItems(day)[exIdx];
   const set = item && item.sets[setIdx];
@@ -906,9 +964,10 @@ function refreshPR(day, exIdx, setIdx){
 /* 按模式生成输入框 + ± 步进按钮。
  * 训练中改数值最常见的动作是「比上次加 2.5kg」「少做 1 个」，键盘输入是这套流程里最烦的一步：
  * weight 用设置里的重量步进，reps ±1，时长 ±5 秒；精确值仍然可以直接打字。 */
+/** @param {number} exIdx @param {number} setIdx @param {SetEntry} st @param {ExerciseDef} ex @returns {string} HTML */
 function setInputsHTML(exIdx, setIdx, st, ex){
-  const d = f => `data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}"`;
-  const step = (f, dir, label) => `<button class="fs-step" data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}" data-act="step" data-dir="${dir}" aria-label="${label}">${dir < 0 ? '−' : '＋'}</button>`;
+  const d = (/** @type {string} */ f) => `data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}"`;
+  const step = (/** @type {string} */ f, /** @type {number} */ dir, /** @type {string} */ label) => `<button class="fs-step" data-ex="${exIdx}" data-set="${setIdx}" data-f="${f}" data-act="step" data-dir="${dir}" aria-label="${label}">${dir < 0 ? '−' : '＋'}</button>`;
   const mode = ex.mode || 'weight';
   if(mode === 'time'){
     /* 表归属另一日时（罕见：恢复后视图与归属不同日）别把它的读数画进当前卡片 */
@@ -925,6 +984,7 @@ function setInputsHTML(exIdx, setIdx, st, ex){
   return `<span class="val-group">${step('weight', -1, '重量减少 ' + ws + ' ' + unitLbl)}<input class="fs-input" ${d('weight')} inputmode="decimal" enterkeyhint="next" value="${fmtW(st.weight)}" aria-label="重量（${unitLbl}）"><span class="fs-unit">${unitLbl}</span>${step('weight', 1, '重量增加 ' + ws + ' ' + unitLbl)}</span>
     <span class="val-group">${step('reps', -1, '次数减少 1')}<input class="fs-input" ${d('reps')} inputmode="numeric" enterkeyhint="done" value="${st.reps ?? ''}" aria-label="次数"><span class="fs-unit">次</span>${step('reps', 1, '次数增加 1')}</span>`;
 }
+/** @param {'A'|'B'} day @returns {string} 全屏「一次一组」卡片的 HTML */
 function fullScreenHTML(day){
   const program = state.program[day] || [];
   if(!program.length) return '<div class="empty-hint">该日暂无动作，等待导入训练计划。</div>';
@@ -1050,7 +1110,7 @@ function renderToday(){
   const sess = state.sessions[day];
   const status = $('session-status');
   const condVal = sess ? sess.condition : condDraft[day];
-  const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${esc(COND_LABEL[condVal] || '–')}</button>`;
+  const condBtn = `<button class="cond-btn" onclick="cycleCondition('${day}')">状态：${esc(condVal ? (COND_LABEL[condVal] || '–') : '–')}</button>`;
   // 实时进度
   const items = getItems(day);
   const totalSets = items.reduce((s, it) => s + it.sets.length, 0);
@@ -1071,7 +1131,7 @@ function renderToday(){
 
   const list = $('ex-list');
   list.innerHTML = fullScreenHTML(day);
-  list.querySelectorAll('details[data-notes]').forEach(d => {
+  list.querySelectorAll('details[data-notes]').forEach((/** @type {HTMLDetailsElement} */ d) => {
     d.addEventListener('toggle', () => { openNotes[day + ':' + d.dataset.notes] = d.open; });
   });
 
@@ -1082,6 +1142,7 @@ function renderToday(){
 }
 
 /* 组内局部更新：只改一个输入框的值（保留焦点，不重建整屏） */
+/** @param {number} exIdx @param {number} setIdx @param {string} f 字段名（weight/reps/duration） @param {string} val @returns {boolean} 目标输入框是否存在 */
 function patchValue(exIdx, setIdx, f, val){
   const inp = /** @type {HTMLInputElement|null} */ (document.querySelector(`#ex-list input[data-f="${f}"][data-ex="${exIdx}"][data-set="${setIdx}"]`));
   if(!inp) return false;
@@ -1089,6 +1150,7 @@ function patchValue(exIdx, setIdx, f, val){
   return true;
 }
 /* 组内局部更新：只替换 RPE 值（保留输入焦点）；其余变化走全量渲染 */
+/** @param {number} exIdx @param {number} setIdx @returns {boolean} */
 function patchRpe(exIdx, setIdx){
   const day = curDay();
   const item = getItems(day)[exIdx];
@@ -1096,7 +1158,7 @@ function patchRpe(exIdx, setIdx){
   // 限定在卡片容器内：全页 querySelector('.rpe-val') 会命中别的视图里的同名元素
   const val = document.querySelector(`#ex-list .rpe-val`);
   if(!val) return false;
-  val.textContent = item.sets[setIdx].rpe ?? '–';
+  val.textContent = String(item.sets[setIdx].rpe ?? '–');
   val.classList.remove('ghost');   // 已记值：去掉占位弱化样式（v0.9.139）
   return true;
 }
@@ -1108,6 +1170,7 @@ function patchRpe(exIdx, setIdx){
  * 轻点（没触发连发）仍走原 click 路径，行为与旧版完全一致。 */
 /** @type {number|null} */ let holdTimer = null, holdFires = 0, holdSeq = 0;
 function endHold(){ holdSeq++; if(holdTimer !== null){ clearTimeout(holdTimer); holdTimer = null; } }
+/** @param {any} e click 事件（仓库不建模 DOM 事件类型；e.holdStep 是连发手势自己加的标记） */
 function exClick(e){
   if(!e.holdStep && holdFires){ holdFires = 0; return; }
   const btn = e.target.closest('button[data-act]');
@@ -1213,7 +1276,7 @@ function exClick(e){
 
   if(act === 'step'){
     // ± 步进：重量按设置里的步进，次数 ±1，时长 ±5 秒；下限 0（次数下限 1），上限与手输同规矩 1e6
-    const f = btn.dataset.f;
+    const f = /** @type {'weight'|'reps'|'duration'} */ (btn.dataset.f);
     const dir = +btn.dataset.dir;
     const inc = f === 'weight' ? state.settings.weightStep : (f === 'duration' ? 5 : 1);
     const next = Math.min(1e6, Math.max(f === 'reps' ? 1 : 0, f === 'weight' ? round2((Number(set[f]) || 0) + dir * inc) : Math.round((Number(set[f]) || 0) + dir * inc)));
@@ -1223,7 +1286,7 @@ function exClick(e){
     saveSoon();
     // PR 状态变了：🔥 徽章在 .fs-sub 里，patchValue 只改输入框，必须整卡重画才看得见变化
     if(set.done === true && (set.isPR === true) !== wasPR){ renderToday(); return; }
-    if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : next)) renderToday();
+    if(!patchValue(exIdx, setIdx, f, f === 'weight' ? fmtW(next) : String(next))) renderToday();
     return;
   }
 
@@ -1284,7 +1347,7 @@ $('ex-list').addEventListener('click', exClick);
 /* 按住连发的触发端：只认 ± 步进和 RPE 步进按钮；多指触摸只认主指针。
  * 连发用 setTimeout 链而不是 setInterval：间隔要逐步缩短（加速），且每次步进后
  * 卡片可能局部更新，链式定时器天然跟着最新状态走。 */
-$('ex-list').addEventListener('pointerdown', e => {
+$('ex-list').addEventListener('pointerdown', (/** @type {any} */ e) => {
   if(e.isPrimary === false) return;
   const btn = e.target && e.target.closest && e.target.closest('button.fs-step, button.rpe-btn');
   if(!btn) return;
@@ -1304,7 +1367,7 @@ $('ex-list').addEventListener('pointerup', endHold);
 $('ex-list').addEventListener('pointercancel', endHold);
 
 /* 直接输入（change：失焦或回车时提交）：数值 / 动作备注 */
-$('ex-list').addEventListener('change', e => {
+$('ex-list').addEventListener('change', (/** @type {any} */ e) => {
   const inp = e.target.closest('input');
   if(!inp) return;
   const day = curDay();
@@ -1333,7 +1396,7 @@ $('ex-list').addEventListener('change', e => {
    * 存进 state 后输入框显示「Infinity」、容量「∞」、假 PR，
    * 而且 JSON.stringify(Infinity)=null——导出/备份里静默变没填。
    * 有限但荒谬的巨数（1e302）同样只会制造假 PR：超过 1e6 一律按非法值处理。 */
-  const fin = x => Number.isFinite(x) && x <= 1e6 ? x : null;
+  const fin = (/** @type {number} */ x) => Number.isFinite(x) && x <= 1e6 ? x : null;
   if(inp.dataset.f === 'weight'){
     set.weight = fin(Math.max(0, round2(v)));
   }else if(inp.dataset.f === 'duration'){
@@ -1356,7 +1419,7 @@ $('ex-list').addEventListener('change', e => {
 /* 回车推进流（桌面/PWA 常见）：重量框回车 → 跳到次数框；次数/时长框回车 → 完成这一组。
  * 先按 change 委托同一路径提交当前输入，再跳转或完成——否则 Enter 抢在失焦提交前，
  * 完成的是旧值。移动端数字键盘通常显示「下一项」，不触发 Enter，不会添乱。 */
-$('ex-list').addEventListener('keydown', e => {
+$('ex-list').addEventListener('keydown', (/** @type {any} */ e) => {
   if(e.key !== 'Enter') return;
   // 模态打开时不推进训练（inert 之外的双保险：老浏览器不认 inert）
   if($('confirm-overlay').classList.contains('show') || $('summary-overlay').classList.contains('show')) return;
@@ -1375,12 +1438,12 @@ $('ex-list').addEventListener('keydown', e => {
 
 /* 滑动切组（touch 手势：左滑=下一组，右滑=上一组） */
 let touchStartX = 0, touchStartY = 0;
-$('ex-list').addEventListener('touchstart', e => {
+$('ex-list').addEventListener('touchstart', (/** @type {any} */ e) => {
   if(e.touches.length !== 1) return;
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
-$('ex-list').addEventListener('touchend', e => {
+$('ex-list').addEventListener('touchend', (/** @type {any} */ e) => {
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   if(Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return; // 水平滑动且幅度够
@@ -1392,7 +1455,7 @@ $('ex-list').addEventListener('touchend', e => {
 
 /* 历史里的「删除这次记录」：清掉试训或填错的整次记录，6 秒内在提示条里可撤销。
  * 「改一下」：把旧记录放回编辑态（改数值不改变它发生在哪一天）。 */
-$('hist-list').addEventListener('click', async e => {
+$('hist-list').addEventListener('click', async (/** @type {any} */ e) => {
   const btn = e.target.closest('button[data-act="dellog"], button[data-act="reeditlog"]');
   if(!btn) return;
   const ts = Number(btn.dataset.ts);
@@ -1447,7 +1510,7 @@ $('hist-list').addEventListener('click', async e => {
 });
 
 /* 提示条上的按钮 */
-$('toast').addEventListener('click', e => {
+$('toast').addEventListener('click', (/** @type {any} */ e) => {
   if(!e.target.closest('button[data-act="undo"]')) return;
   const fn = toastAction;
   hideToast();
@@ -1460,6 +1523,7 @@ $('toast').addEventListener('click', e => {
 /** @type {{day:'A'|'B',entry:LogEntry,items:TrainItem[],startedAt:number,condition:string|null}|null} */ let lastEnded = null;
 
 /* 日志按 startedAt 保持时间序：正常结束插在末尾；「改一下」的旧记录按原时间戳回到原位 */
+/** @param {LogEntry} entry 按 startedAt 插入，保持时间序 */
 function insertLog(entry){
   const ins = state.logs.findIndex(l => (l.startedAt ?? 0) > (entry.startedAt ?? 0));
   if(ins >= 0) state.logs.splice(ins, 0, entry); else state.logs.push(entry);
@@ -1478,6 +1542,7 @@ function endSession(){
       exerciseId: it.exerciseId,
       note: (it.note || '').trim() || null,
       sets: it.sets.map(s => {
+        /** @type {LogSet} */
         const o = {
           weight: s.weight ?? null, reps: s.reps ?? null,
           duration: s.duration ?? null, rpe: s.rpe ?? null,
@@ -1557,6 +1622,7 @@ async function discardSession(){
   });
 }
 
+/** @param {LogEntry} entry 刚结算的那次记录 */
 function showSummary(entry){
   const vol = Math.round(sessionVolume(entry));
   /* 本次会话破掉的 PR 组数（isPR 只在确认/改数字时按全历史严格比较写入） */
@@ -1632,6 +1698,7 @@ let restDone = false;
 /** @type {{exIdx:number,setIdx:number}|null} */ let restForPos = null;  // {exIdx, setIdx} 触发休息的组
 /** @type {'A'|'B'|null} */ let restForDay = null;  // 触发休息的日：换日后结算也要写回原来那一日的 items
 
+/** @param {{exIdx:number,setIdx:number}|undefined} [atPos] 触发休息的组；缺省用当前浏览位置 */
 function startRestTimer(atPos){
   // 热身组用更短的休息时长（拉伸等动作本身有时长，计时器照常走完即可）
   const at = atPos || flatPos(curDay())[curPos];
@@ -1754,6 +1821,7 @@ function timerInputEl(){
   return document.querySelector('#ex-list .fs-input[data-ex="' + timerFor.exIdx + '"][data-set="' + timerFor.setIdx + '"][data-f="duration"]');
 }
 function stopTimerTicker(){ if(timerTicker){ clearInterval(timerTicker); timerTicker = null; } }
+/** @param {number} exIdx @param {number} setIdx 秒表归属的组 */
 function startTimer(exIdx, setIdx){
   timerFor = { exIdx, setIdx };
   timerForDay = curDay();
@@ -1806,9 +1874,13 @@ function resumeTimers(){
 /* ---------------- 历史 & 导出 ---------------- */
 /* 趋势折线图：按指标分组（kg / 秒 / 次 不能共用一条 Y 轴），X=该动作被记录的次数，Y=最好一组的主指标 */
 const TREND_COLORS = ['#4f8cff', '#3fb96f', '#e0a030', '#e05252', '#9b6dff'];
+/** @type {{[k:string]:string}} */
 const TREND_KIND_LABEL = { weight: '重量（kg）', duration: '时长（秒）', reps: '次数' };
+/** @type {{[k:string]:string}} */
 const TREND_DIR = { up: '↑ 上升', down: '↓ 下降', plateau: '→ 持平', new: '· 新出现' };
+/** @param {any} s TrendSession @returns {number} 该次的主指标值 */
 const trendMetric = s => s.top.weight != null ? s.top.weight : (s.top.duration != null ? s.top.duration : (s.top.reps || 0));
+/** @param {{sessions:{top?:any}[]}} t @returns {'weight'|'duration'|'reps'} */
 function trendKind(t){
   /* 与 trendMetric 严格同序（weight 优先）：混合组（既有权重又有残留时长）
    * 若这里先判 duration，会把动作分到「时长」图里却按 kg 画点、图例念 kg——单位和数值打架。 */
@@ -1820,8 +1892,11 @@ function trendKind(t){
 /* 单次会话自己的指标类型（与 trendMetric/trendKind 严格同序：weight 先）。
  * 动作改过类型（导入方案改了 time→weight 之类）时，历史里会混着秒和 kg；
  * 折线图只画与当前类型同指标的记录，秒不会被画进重量轴。导出/方向判定不受影响。 */
+/** @param {any} s TrendSession @returns {'weight'|'duration'|'reps'} */
 const sessionKind = s => s.top.weight != null ? 'weight' : (s.top.duration != null ? 'duration' : 'reps');
+/** @param {number} v @param {string} kind @returns {string} */
 function trendValText(v, kind){ return kind === 'weight' ? fmtW(v) : String(Math.round(v)); }
+/** @param {string} id @param {string} kind @returns {string} 单位文本 */
 function trendUnit(id, kind){
   if(kind !== 'weight') return kind === 'duration' ? '秒' : '次';
   // 与分组标题、历史详情同口径：weight 类动作单位缺失按 kg 念，别出现「标题 kg、图例没单位」
@@ -1830,6 +1905,7 @@ function trendUnit(id, kind){
 /* 单位归一：大小写/空格不敏感（AI 方案可能写 "LB"），同义词 lbs/pound(s) 归到 lb
  * ——与 itemsVolume 同口径；换算判定与分组标题必须用同一个归一，否则 'lbs' 会
  * 被判成「另一种单位」触发混用换算，却又不属于换算白名单，原值被标成 kg。 */
+/** @param {string} id exerciseId @returns {string} 归一后的单位（''=未设置） */
 function normUnit(id){
   let u = String((state.exercises[id] || {}).unit || '').trim().toLowerCase();
   if(u === 'lbs' || u === 'pound' || u === 'pounds') u = 'lb';
@@ -1837,22 +1913,25 @@ function normUnit(id){
 }
 /* 单位混用的重量组：lb 先换算成 kg 再上同一条 Y 轴（与容量汇总同一口径）。
  * 单位一致的组保持原单位绘制，不换算。conv 只在混用组里为 true。 */
+/** @param {string} id @param {boolean} conv 该组是否单位混用 @returns {number} */
 function trendConvFactor(id, conv){
   return conv && normUnit(id) === 'lb' ? LB_TO_KG : 1;
 }
 /* 动作在计划里出现的先后顺序：用来稳定选线（练得一样多的时候按训练顺序排） */
+/** @returns {{[id:string]:number}} 动作在计划里出现的先后顺序 */
 function programOrder(){
-  const order = {};
-  ['A', 'B'].forEach(day => (state.program[day] || []).forEach(p => {
+  /** @type {{[id:string]:number}} */ const order = {};
+  DAYS.forEach(day => (state.program[day] || []).forEach(p => {
     if(!(p.exerciseId in order)) order[p.exerciseId] = Object.keys(order).length;
   }));
   return order;
 }
+/** @param {Array<[string, TrendEntry]>} entries @param {string} kind @param {string|undefined} label 读屏用的图标题（缺省按指标类型生成） @param {boolean} conv @returns {string} SVG HTML */
 function trendChartSVG(entries, kind, label, conv){
   const W = 320, H = 120, PAD = { t: 14, r: 10, b: 20, l: 34 };
   const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
-  const allPts = [];
-  const val = (id, s) => trendMetric(s) * trendConvFactor(id, conv);
+  /** @type {number[]} */ const allPts = [];
+  const val = (/** @type {string} */ id, /** @type {TrendSession} */ s) => trendMetric(s) * trendConvFactor(id, conv);
   entries.forEach(([id, t]) => t.sessions.forEach(s => allPts.push(val(id, s))));
   const lo = Math.min(...allPts), hi = Math.max(...allPts);
   const yMin = kind === 'reps' ? Math.max(0, lo - 1) : lo * 0.9;
@@ -1860,8 +1939,8 @@ function trendChartSVG(entries, kind, label, conv){
   const yRange = (yMax - yMin) || 1;
   const maxLen = Math.max(...entries.map(([, t]) => t.sessions.length));
   const xStep = maxLen > 1 ? pw / (maxLen - 1) : pw;
-  const yScale = v => PAD.t + ph - ((v - yMin) / yRange) * ph;
-  const xAt = i => PAD.l + i * xStep;
+  const yScale = (/** @type {number} */ v) => PAD.t + ph - ((v - yMin) / yRange) * ph;
+  const xAt = (/** @type {number} */ i) => PAD.l + i * xStep;
   // 三条水平网格线 + 左侧刻度（读得出“这条线大概是多少”）
   let grid = '';
   [yMin, (yMin + yMax) / 2, yMax].forEach(v => {
@@ -1881,6 +1960,7 @@ function trendChartSVG(entries, kind, label, conv){
   }).join('');
   return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${label || TREND_KIND_LABEL[kind]}趋势图">${grid}${axis}${lines}</svg></div>`;
 }
+/** @param {Array<[string, TrendEntry]>} entries @param {boolean} conv @returns {string} HTML */
 function trendLegend(entries, conv){
   return '<div class="trend-legend">' + entries.map(([id, t], li) => {
     const last = t.sessions[t.sessions.length - 1];
@@ -1895,6 +1975,7 @@ function trendLegend(entries, conv){
       + `<span class="lg-dir ${esc(t.direction || 'new')}">${dir} · ${t.sessions.length} 次</span></div>`;
   }).join('') + '</div>';
 }
+/** @param {{[id:string]:TrendEntry}} trends @param {number} [maxLines] @returns {string} HTML */
 function buildTrendCharts(trends, maxLines){
   /* 先按「当前类型」过滤掉改类型之前的旧指标记录（秒画进重量轴会画出假飙升），
    * 过滤后不足 2 点的线不画（单点没有趋势可言）。 */
@@ -1906,7 +1987,7 @@ function buildTrendCharts(trends, maxLines){
     return '<div class="trend-empty">趋势要同一个动作至少记录 2 次。<br>再练两次，这里就会出现折线。</div>';
   }
   const order = programOrder();
-  const groups = {};
+  const groups = /** @type {{[k:string]:Array<[string, any]>}} */ ({});
   usable.forEach(([id, t]) => {
     const k = trendKind(t);
     (groups[k] = groups[k] || []).push([id, t]);
@@ -1973,6 +2054,7 @@ function renderHistory(){
  * 合并：exercises 按 id 合并（personal 按「非空优先」：计划里写了会替换，留空则保留本地值）；program 按日整体替换；
  *       日志不动；有进行中记录的日禁止导入。
  * ------------------------------------------------------------------ */
+/** @param {string} t @returns {string} 去掉 AI 常包的 ``` 围栏 */
 function stripFences(t){
   t = t.trim();
   if(t.includes('```')){
@@ -1991,6 +2073,7 @@ function stripFences(t){
   if(a !== -1 && b > a) return t.slice(a, b + 1);
   return t;
 }
+/** @param {any} d 待导入的方案对象 @returns {string|null} 校验失败的说明；null=通过 */
 function validatePlan(d){
   if(!d || typeof d !== 'object' || Array.isArray(d)) return '顶层必须是 JSON 对象';
   if(!d.exercises || typeof d.exercises !== 'object' || Array.isArray(d.exercises)) return '缺少 exercises 字段（对象）';
@@ -2009,7 +2092,7 @@ function validatePlan(d){
     if(ex.unit != null && typeof ex.unit !== 'string')
       return `exercises.${id}.unit 必须是 kg / lb / null`;
   }
-  const days = ['A','B'].filter(day => d.program[day] !== undefined);
+  const days = DAYS.filter(day => d.program[day] !== undefined);
   if(!days.length) return 'program 必须包含 A 或 B（数组）';
   /* 本应用只有 A/B 两日循环：多余的日（AI 幻觉出 C 日三分化）会被后面的
    * ['A','B'] 循环静默丢掉，用户看到「导入成功」却发现没变——当场拒绝说清楚。 */
@@ -2046,6 +2129,7 @@ function validatePlan(d){
 /* 导入会改变某动作的类型/单位吗？（exercises map 是全局套用的：只含另一日的导入
  * 也能改到正在记录的动作。会话的字段是按旧 mode 填的，之后按新 mode 念会张冠李戴：
  * 10kg×10 的残留字段在历史里显示成「30 秒」、趋势把旧单位数值画进新单位轴。） */
+/** @param {any} d 待导入方案 @param {string} id exerciseId @returns {string|null} 该动作指标口径变化的提示 */
 function metricChange(d, id){
   const ex = d.exercises[id];
   if(!ex) return null;
@@ -2058,12 +2142,13 @@ function metricChange(d, id){
   return null;
 }
 /* 有进行中记录的日不能换计划（组数据会对不上） */
+/** @param {any} d 待导入方案 @returns {string|null} 冲突说明；null=无冲突 */
 function planSessionConflict(d){
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     if(d.program[day] !== undefined && state.sessions[day])
       return `${day} 日有进行中的记录，请先结束或放弃后再导入`;
   }
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     const sess = state.sessions[day];
     if(!sess) continue;
     for(const id of new Set(sess.items.map(it => it.exerciseId))){
@@ -2073,6 +2158,7 @@ function planSessionConflict(d){
   }
   return null;
 }
+/** @param {any} d 已通过 validatePlan 的方案 @returns {{ok:true,summary:string}|{ok:false,error:string}} */
 function applyPlan(d){
   const conflict = planSessionConflict(d);
   if(conflict) return { ok:false, error:conflict };
@@ -2080,9 +2166,10 @@ function applyPlan(d){
   /* 文本字段按 UI 同口径封顶：输入框的 maxlength 拦不住导入这条路——
    * AI 写 5000 字的 personal 会直接盖过用户 500 字的备注（下面按「AI 非空优先」合并），
    * 长 tips 还会撑爆布局并吃光 localStorage 配额。导入侧必须自己收口。 */
-  const clip = (v, n) => { const s = v == null ? '' : String(v); return s.length > n ? s.slice(0, n) : s; };
+  const clip = (/** @type {any} */ v, /** @type {number} */ n) => { const s = v == null ? '' : String(v); return s.length > n ? s.slice(0, n) : s; };
   for(const [id, ex] of Object.entries(d.exercises)){
     // 同样只认自有属性：'constructor' 之类作 id 时，原型链上的继承值会冒充「旧定义」混进合并。
+    /** @type {Partial<ExerciseDef>} */
     const old = Object.prototype.hasOwnProperty.call(state.exercises, id) ? state.exercises[id] : {};
     state.exercises[id] = {
       name: clip(ex.name || old.name || id, 80),
@@ -2098,7 +2185,7 @@ function applyPlan(d){
     exCount++;
   }
   const daySummary = [];
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     if(d.program[day] === undefined) continue;
     // 秒表还挂在旧草稿上跑：草稿即将被删掉重建，这块表没有可写的归属了，直接丢掉
     // （按表的归属日判断，不是当前查看的日——导入把视图切去另一日时也要清对表）
@@ -2129,6 +2216,7 @@ function applyPlan(d){
   render();
   return { ok:true, summary:`导入完成：${daySummary.join('，')}；动作库 ${exCount} 项` };
 }
+/** @param {string} text 用户粘贴的内容 @returns {{ok:true,data:any}|{ok:false,error:string}} */
 function parsePlanInput(text){
   const t = stripFences(String(text || ''));
   // 先原样解析：尾逗号修复会连字符串里的「, }」一起删逗号，只作失败后的兜底重试
@@ -2140,18 +2228,19 @@ function parsePlanInput(text){
     const seg = t.slice(s, e + 1);
     attempts.push(seg, seg.replace(/,\s*([}\]])/g, '$1'));
   }
-  let data, lastErr;
+  /** @type {any} */ let data, /** @type {any} */ lastErr = null;
   for(const a of attempts){
     try{ data = JSON.parse(a); break; }
     catch(err){ lastErr = err; }
   }
   if(data === undefined){
-    return { ok:false, error:'JSON 解析失败——请检查是否完整粘贴、引号与逗号是否配对（' + lastErr.message + '）' };
+    return { ok:false, error:'JSON 解析失败——请检查是否完整粘贴、引号与逗号是否配对（' + ((lastErr && lastErr.message) || '未知错误') + '）' };
   }
   const verr = validatePlan(data);
   if(verr) return { ok:false, error:'校验失败：' + verr };
   return { ok:true, data };
 }
+/** @param {string} text 用户粘贴的 AI 方案 @returns {{ok:true,summary:string}|{ok:false,error:string}} 同步返回（确认在 applyPlan 内部完成） */
 function importPlan(text){
   const p = parsePlanInput(text);
   if(!p.ok) return p;
@@ -2170,7 +2259,7 @@ function undoImport(){
   if(!snap){ toast('没有可撤销的导入'); return; }
   // 与 applyPlan 同政策：有进行中记录时不换计划。会话的组是按导入后的计划生成的，
   // 换回旧计划会让分区/编号对不上号，还会白白把进度位置清零。
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     if(state.sessions[day]){ toast(`${day} 日有进行中的记录，请先结束或放弃后再撤销`); return; }
   }
   // 同 applyPlan：挂在被丢弃草稿上的秒表要先丢掉，否则换回旧计划时会把秒表读数写进不相干的组。
@@ -2194,7 +2283,7 @@ function undoImport(){
   }
   state.exercises = mergedEx;
   state.lastImport = null;
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     if(restForDay === day && !state.sessions[day]) resetRest();   // 同 applyPlan：两日草稿都要查
     delete draft[day];          // 草稿是按刚导入的计划生成的，一起丢掉
     state.ui.curPos[day] = 0;   // 旧位置在新计划里未必存在
@@ -2206,17 +2295,19 @@ function undoImport(){
   renderSettings();
   toast('已恢复到导入前的方案' + (undoDraftDirty ? '（已丢弃未确认草稿）' : ''));
 }
+/** @param {any[]} arr @param {number} [n] 最多列出几项，缺省 4 @returns {string} 顿号连接的列表，超出则标注省略数量 */
 function listCut(arr, n){
   n = n || 4;
   return arr.length > n ? arr.slice(0, n).join('、') + `…等 ${arr.length} 项` : arr.join('、');
 }
 /* 导入前说清「会改什么」：AI 一句话就能换掉整份计划，看不出来就只能事后后悔。
  * 只列增减与目标变化，各列表最多 4 项。 */
+/** @param {any} d 待导入方案 @returns {string} 给用户看的 diff 文本 */
 function planDiffText(d){
-  const oldName = id => (state.exercises[id] && state.exercises[id].name) || id;
-  const newName = id => (d.exercises[id] && d.exercises[id].name) || id;
+  const oldName = (/** @type {string} */ id) => (state.exercises[id] && state.exercises[id].name) || id;
+  const newName = (/** @type {string} */ id) => (d.exercises[id] && d.exercises[id].name) || id;
   const lines = [];
-  for(const day of ['A','B']){
+  for(const day of DAYS){
     if(!Array.isArray(d.program[day])) continue;
     const before = state.program[day] || [];
     const after = d.program[day].map(normalizeItem);
@@ -2279,26 +2370,30 @@ async function doImport(){
  *   program + exercises + 最近 N 次日志 + 逐动作趋势（top 组 / 平均 RPE / 方向）
  * 输出与导入格式兼容（program/exercises 原样），AI 可基于它生成 type: ai-plan 的新方案。
  * ------------------------------------------------------------------ */
+/** @param {LogSet[]} sets 已筛过正式组的日志组 @returns {any} 该次「最好一组」（没有任何数值时退化成 {reps:null}） */
 function topSet(sets){
   const withW = sets.filter(s => s.weight != null);
   if(withW.length) return withW.reduce((a,b) =>
-    (b.weight > a.weight || (b.weight === a.weight && (b.reps||0) > (a.reps||0))) ? b : a);
+    ((b.weight||0) > (a.weight||0) || ((b.weight||0) === (a.weight||0) && (b.reps||0) > (a.reps||0))) ? b : a);
   const withD = sets.filter(s => s.duration != null);
-  if(withD.length) return withD.reduce((a,b) => b.duration > a.duration ? b : a);
-  return sets.reduce((a,b) => (b.reps||0) > (a.reps||0) ? b : a, { reps: null });
+  if(withD.length) return withD.reduce((a,b) => (b.duration||0) > (a.duration||0) ? b : a);
+  return sets.reduce((a,b) => (b.reps||0) > (a.reps||0) ? b : a, /** @type {any} */ ({ reps: null }));
 }
 /* 趋势里的 top 只留能比较的四个数值：done/restAfter/side 对分析没用，
  * 但会把导出里最大的一块（trends）撑大一倍。 */
+/** @param {LogSet} s @returns {{weight:number|null,reps:number|null,duration:number|null,rpe:number|null}} */
 function trimSet(s){
   return { weight: s.weight ?? null, reps: s.reps ?? null,
            duration: s.duration ?? null, rpe: s.rpe ?? null };
 }
+/** @param {any[]} sets @returns {number|null} */
 function avgRpe(sets){
   const rs = sets.map(s => s.rpe).filter(v => v != null);
   return rs.length ? round1(rs.reduce((a,b) => a + b, 0) / rs.length) : null;
 }
+/** @param {LogEntry[]} logs @returns {{[id:string]:TrendEntry}} 按动作聚合的趋势（导出与折线图共用） */
 function buildTrends(logs){
-  const byEx = {};
+  /** @type {{[id:string]:TrendSession[]}} */ const byEx = {};
   for(const entry of logs){
     for(const ex of entry.exercises){
       // 趋势只统计正式组：热身组的重量/RPE 天然偏低，混进来会把「最好一组」和平均强度拉歪，
@@ -2317,8 +2412,8 @@ function buildTrends(logs){
       });
     }
   }
-  const metric = t => t.weight != null ? t.weight : (t.duration != null ? t.duration : t.reps);
-  const trends = {};
+  const metric = (/** @type {any} */ t) => t.weight != null ? t.weight : (t.duration != null ? t.duration : t.reps);
+  /** @type {{[id:string]:TrendEntry}} */ const trends = {};
   for(const [id, list] of Object.entries(byEx)){
     let direction = 'new';
     /* 只在与当前指标同类型的记录上判定方向——与折线图过滤（buildTrendCharts）同一口径。
@@ -2332,7 +2427,7 @@ function buildTrends(logs){
       // 会话数 >= 6 时再加「近3次 vs 前3次」校验，避免「涨上去后停滞」被误判为 up
       const first = metric(same[0].top), last = metric(same[same.length-1].top);
       const half = Math.ceil(same.length / 2);
-      const mean = a => a.reduce((s, t) => s + (metric(t.top) || 0), 0) / a.length;
+      const mean = (/** @type {any[]} */ a) => a.reduce((s, t) => s + (metric(t.top) || 0), 0) / a.length;
       const late = mean(same.slice(same.length - half)) - mean(same.slice(0, half));
       const recent3 = same.length >= 6 ? mean(same.slice(-3)) - mean(same.slice(0, 3)) : null;
       const d = last - first;
@@ -2343,6 +2438,7 @@ function buildTrends(logs){
   }
   return trends;
 }
+/** @param {number} n 带出的最近记录数 @returns {{type:string,version:number,generatedAt:string,settings:any,program:any,exercises:{[id:string]:ExerciseDef},recentLogs:LogEntry[],trends:{[id:string]:TrendEntry},trendsSpan:number}} */
 function buildExport(n){
   n = Math.max(1, Math.round(Number(n)) || 4);
   const logs = state.logs.slice(-n);
@@ -2350,8 +2446,8 @@ function buildExport(n){
   const trendLogs = state.logs.slice(-TREND_WINDOW);
   // 空数组的日（用户手动清空过）不写进导出：导入规则本来就拒绝空数组日，
   // 写出去反而让用户粘回自己的导出时被拒。不写 = 导入不动那个日，语义一致。
-  const program = {};
-  for(const day of ['A','B']) if(Array.isArray(state.program[day]) && state.program[day].length) program[day] = state.program[day];
+  /** @type {{[day:string]:TrainItem[]}} */ const program = {};
+  for(const day of DAYS) if(Array.isArray(state.program[day]) && state.program[day].length) program[day] = state.program[day];
   return {
     type: 'ironlog-export',
     version: 1,
@@ -2364,6 +2460,7 @@ function buildExport(n){
     trendsSpan: trendLogs.length
   };
 }
+/** @param {string} t @returns {Promise<boolean>} 是否复制成功 */
 async function copyText(t){
   try{
     if(navigator && navigator.clipboard && navigator.clipboard.writeText){
@@ -2419,6 +2516,7 @@ const PLAN_SCHEMA = `{
 - program 至少要写一个日：如果你判断无需调整，就把当前某一日的计划原样写回，空的 program 会被拒绝
 - 文本字段（name/muscles/tips/pitfalls/tempo/alternatives/personal/rpeLabel/section）请保持精炼：超过上限（名称 80 字、个人注意 500 字、其余 1000 字）的内容会在导入时被截断，截半的句子会丢掉意思`;
 
+/** @param {{recentLogs:LogEntry[],trendsSpan:number}} data buildExport 的产物 @returns {string} 给 AI 的提示词 */
 function buildPrompt(data){
   const logs = data.recentLogs;
   const span = logs.length
@@ -2446,6 +2544,7 @@ ${fence}
 ${PLAN_SCHEMA}`;
 }
 
+/** @param {boolean} withPrompt 是否带分析提示词 */
 function runExport(withPrompt){
   const n = parseInt($('export-n').value, 10) || 4;
   const data = buildExport(n);
@@ -2478,6 +2577,7 @@ function buildBackup(){
     state: JSON.parse(JSON.stringify(state))
   };
 }
+/** @param {string} text 备份文件内容 @returns {{ok:true,state:any}|{ok:false,error:string}} */
 function parseBackup(text){
   let d;
   try{ d = JSON.parse(text); }catch(e){ return { ok: false, error: '不是有效 JSON（文件被截断或选错了文件）' }; }
@@ -2503,6 +2603,7 @@ function doBackup(){
   msg.className = 'import-msg ok';
   msg.textContent = `已生成 ${name}（${data.counts.logs} 条日志、${data.counts.exercises} 个动作）。换设备时把文件拷过去，再点「从备份文件恢复」。`;
 }
+/** @param {any} st 备份里的 state 原始对象（进 migrate 之前） */
 function applyRestoredState(st){
   state = migrate(st);
   bindDrafts();                        // draft/condDraft 是指向旧 state 的别名，换 state 必须重新绑定
@@ -2513,6 +2614,7 @@ function applyRestoredState(st){
   flushSave();
   render();
 }
+/** @param {string} text 备份文件内容 @returns {Promise<boolean>} 是否已恢复 */
 async function restoreBackupText(text){
   const msg = $('restore-msg');
   const r = parseBackup(text);
@@ -2531,7 +2633,7 @@ async function restoreBackupText(text){
   return true;
 }
 function pickBackup(){ $('restore-file').click(); }
-$('restore-file').addEventListener('change', async e => {
+$('restore-file').addEventListener('change', async (/** @type {any} */ e) => {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';                 // 清空，允许连续选同一个文件
   if(!f) return;
@@ -2593,15 +2695,15 @@ function renderPersonalPicker(){
     `<option value="${esc(id)}"${id === personalExId ? ' selected' : ''}>${esc(state.exercises[id].name || id)}</option>`).join('');
   $('personal-note').value = personalExId ? (state.exercises[personalExId].personal || '') : '';
 }
-$('personal-ex').addEventListener('change', e => { personalExId = e.target.value; renderPersonalPicker(); });
-$('personal-note').addEventListener('change', e => {
+$('personal-ex').addEventListener('change', (/** @type {any} */ e) => { personalExId = e.target.value; renderPersonalPicker(); });
+$('personal-note').addEventListener('change', (/** @type {any} */ e) => {
   if(!personalExId || !state.exercises[personalExId]) return;
   state.exercises[personalExId].personal = e.target.value.trim().slice(0, 500);   // 封顶与动作备注一致：超长文本写爆配额会连累全部持久化
   e.target.value = state.exercises[personalExId].personal;
   save();
   toast(state.exercises[personalExId].personal ? '个人备注已保存' : '个人备注已清除');
 });
-$('weight-step').addEventListener('change', e => {
+$('weight-step').addEventListener('change', (/** @type {any} */ e) => {
   const v = parseFloat(e.target.value);
   /* 精度用 round2 与重量输入一致：1.25 是现实里最常见的微片档，
    * round1 会把它改成 1.3，步进从此永远加不出 1.25。 */
@@ -2612,28 +2714,28 @@ $('weight-step').addEventListener('change', e => {
   save();
   toast('重量步进：' + state.settings.weightStep);   // 步进是数字，按各动作自己的单位生效，不写死 kg
 });
-$('rest-sec').addEventListener('change', e => {
+$('rest-sec').addEventListener('change', (/** @type {any} */ e) => {
   const v = Math.round(parseFloat(e.target.value));
   state.settings.restSec = (isNaN(v) || v < 0) ? 90 : Math.min(1800, v);
   e.target.value = state.settings.restSec;
   flushSave();
   toast(state.settings.restSec > 0 ? `正式组间休息：${state.settings.restSec} 秒` : '正式组间休息已关闭');
 });
-$('warmup-rest-sec').addEventListener('change', e => {
+$('warmup-rest-sec').addEventListener('change', (/** @type {any} */ e) => {
   const v = Math.round(parseFloat(e.target.value));
   state.settings.warmupRestSec = (isNaN(v) || v < 0) ? 30 : Math.min(1800, v);
   e.target.value = state.settings.warmupRestSec;
   flushSave();
   toast(state.settings.warmupRestSec > 0 ? `热身组间休息：${state.settings.warmupRestSec} 秒` : '热身组间休息已关闭');
 });
-$('rest-note').addEventListener('change', e => {
+$('rest-note').addEventListener('change', (/** @type {any} */ e) => {
   // 自由文本：给 AI 的休息约束说明（时段限制之类），随导出的 settings 一起走
   state.settings.restNote = e.target.value.trim().slice(0, 200);
   e.target.value = state.settings.restNote;
   save();
   toast(state.settings.restNote ? '休息说明已保存' : '休息说明已清除');
 });
-$('profile-bg').addEventListener('change', e => {
+$('profile-bg').addEventListener('change', (/** @type {any} */ e) => {
   state.profile.background = e.target.value.slice(0, 2000);   // 背景是最长的自由文本，封顶防配额写爆
   save();
   toast('训练备注已保存');

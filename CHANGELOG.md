@@ -2,6 +2,15 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.144]
+### 变更
+- 关掉 `tsconfig.json` 的 `noImplicitAny: false`（类型闸门开满）：`js/app.js` 里 316 处隐式 any 全部补上 JSDoc 参数类型或显式标注，`npm run typecheck` 现在覆盖每个函数签名与每一处下标。动机：改字段名、改函数签名时错误在编辑时被接住，而不是靠运行时抛异常或测试跑过才发现。
+- 新增 typedef `TrendSession` / `TrendEntry`（趋势聚合的形状，之前只在注释里口头描述）；`SetEntry` 补上 `targetRpe` / `targetRpeLabel`（草稿与会话的工作形状确实带这两个字段），并把 `rpeLabel` 改为可选——只有 `normalizeSet()` 的输出保证带它，草稿新建的组不写，之前的必填声明是错的。
+- 新增 `DAYS = ['A','B']` 常量（类型 `('A'|'B')[]`）：原先 11 处 `for(const day of ['A','B'])` 字面量把 `day` 摊成 `string`，`state.sessions[day]`、`state.program[day]` 一类下标全都落在类型之外。
+- 类型闸门顺手暴露并修掉三处真问题（可见行为不变）：`esc()` 的映射表改成具名 `ESC_MAP`（原来在对象字面量上用任意 string 下标，tsc 判为「无匹配重载」）；`parsePlanInput()` 在候选串为空时会读 `lastErr.message` 抛 TypeError（粘贴内容为空时「解析失败」的说明反而崩掉），现在退化成「未知错误」；`patchRpe()` 把 number 直接写进 `textContent`（现按 `String()` 写，输出一致）。
+- 其余为等价改写：`String(next)` 传入 `patchValue`、`topSet` 的极值比较加 `||0` 兜底（前置 `.every(!=null)` 已保证非空）、状态标签取值加 `condVal ? … : '–'` 短路（原来 `COND_LABEL[null]` 靠 undefined 落到 `'–'`）。
+- 验证：`npm run typecheck` 通过（0 错误）；`node tests/run.js` 1015 通过 / 0 失败（与改动前一致）；`tools/visual-check.js` 390px 无水平溢出。运行时产物仍是单个未构建的 `js/app.js`。
+
 ## [0.9.143]
 ### 变更
 - 逻辑测试从单文件 `test-ironlog.js`（4754 行）按主题拆成 `tests/p01…p13-*.js` 十三段 + `tests/run.js` 入口（`npm test`）。断言与夹具逐字未改：拆分前后 `check()` 调用点都是 983 处、小节标题都是 187 个、通过用例都是 1015 条 / 0 失败，并逐行对账确认十三段正文与原文一致（只加了加载壳与跨段共享变量 `H.C`）。动机不是仓库形态好看，而是定位与审阅：改导入逻辑时能直接定位到那一段，diff 也只落在一个文件里。运行时产物零变化，`js/app.js` 仍是单个经典脚本。
