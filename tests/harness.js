@@ -28,6 +28,7 @@ function makeEl(id){
     removeAttribute(k){ delete this.attrs[k]; }, getAttribute(k){ return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; },
     // 记录所有元素的事件回调（委托容器另有覆盖），供设置页 change 处理测试直接派发
     addEventListener(type, fn){ handlers.set(id + '|' + type, fn); },
+    click(){ const fn = handlers.get(id + '|click'); if(fn) fn({ target: this }); },
     querySelectorAll(){ return []; },
     replaceWith(){}, focus(){}, select(){}, setSelectionRange(){}
   };
@@ -124,6 +125,15 @@ const historyStub = {              // 极简历史栈：pushState 入栈，back(
   get state(){ return this.stack[this.stack.length - 1]; }
 };
 global.window = { addEventListener(t, fn){ windowHandlers.set(t, fn); }, scrollTo(){}, AudioContext: null, history: historyStub };
+if(typeof global.URL === 'undefined' || !global.URL.createObjectURL){
+  global.URL = {
+    createObjectURL: () => 'blob:mock-url',
+    revokeObjectURL: () => {}
+  };
+} else {
+  if(!global.URL.createObjectURL) global.URL.createObjectURL = () => 'blob:mock-url';
+  if(!global.URL.revokeObjectURL) global.URL.revokeObjectURL = () => {};
+}
 Object.defineProperty(globalThis, 'navigator', {
   value: { clipboard: { writeText: async t => { globalThis.copied = t; } } },
   configurable: true, writable: true

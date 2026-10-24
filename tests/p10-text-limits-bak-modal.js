@@ -404,14 +404,24 @@ const { sw, p, card, mk, tset } = H.C;   // 上段产生的共享变量
     if(prevMM149) global.window.matchMedia = prevMM149;
   }
 
-  // §150：深色主题声明完整——:root 必须有 color-scheme:dark（原生控件跟随主题），
-  // 且 theme-color 与 --bg 一致（状态栏融合，两处改了其一必须同步另一处）。
+  // §150：两套主题都声明完整——深色 :root 与浅色块各自必须有 color-scheme，
+  // 且 index.html 的两条 theme-color 各自与那一套的 --bg 一致（状态栏融合；v0.9.152 起按主题各一条）。
+  // 原先只有一条 theme-color：浅色系统下工具栏仍是深色，页面与工具栏之间一条明显的接缝。
   {
     const css150 = require('fs').readFileSync('css/style.css', 'utf8');
-    check('150 :root 声明 color-scheme:dark', /:root\{[^}]*color-scheme:\s*dark/.test(css150));
-    const bg150 = (css150.match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
-    const tc150 = (html.match(/name="theme-color" content="([^"]+)"/) || [])[1];
-    check('150 theme-color 与 --bg 一致', !!bg150 && !!tc150 && tc150.toLowerCase() === bg150.toLowerCase());
+    check('150 深色 :root 声明 color-scheme:dark', /:root\{[^}]*color-scheme:\s*dark/.test(css150));
+    const light150 = /@media \(prefers-color-scheme: light\)\s*\{\s*:root\{([^}]*)\}/.exec(css150);
+    check('150 浅色块声明 color-scheme:light', !!light150 && /color-scheme:\s*light/.test(light150[1]));
+    const bgOf150 = (body) => (body.match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+    const darkBg150 = bgOf150((css150.match(/:root\{([^}]*)\}/) || ['', ''])[1]);
+    const lightBg150 = light150 ? bgOf150(light150[1]) : undefined;
+    const tc150 = (media) => (html.match(new RegExp('name="theme-color" media="' + media + '" content="([^"]+)"')) || [])[1];
+    const darkTc150 = tc150('\\(prefers-color-scheme: dark\\)');
+    const lightTc150 = tc150('\\(prefers-color-scheme: light\\)');
+    check('150 深色 theme-color 与深色 --bg 一致', !!darkBg150 && !!darkTc150 && darkTc150.toLowerCase() === darkBg150.toLowerCase());
+    check('150 浅色 theme-color 与浅色 --bg 一致', !!lightBg150 && !!lightTc150 && lightTc150.toLowerCase() === lightBg150.toLowerCase());
+    check('150 没有留下不区分主题的 theme-color（会盖住上面两条）',
+      !/<meta name="theme-color" content=/.test(html));
   }
 
   // §151：文件恢复选完必须清空 file input 的 value——否则「再选同一个文件」

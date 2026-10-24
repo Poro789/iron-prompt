@@ -1,4 +1,4 @@
-// Iron Log 逻辑测试 · 第 13 段（共 13 段）：§191–§205 SEED 动作无孤儿 / plan-B 夹具 / 产品闭环冒烟 / sw.js 可编译与生命周期 / fetch 策略钉测 / CSS 变量有定义 / ± 长按连发 / 完成按钮语义色 / 组进度细条 / 折叠行 ≥44px / 卡片底部可换行 / 页头进度线 / 下一动作预览 / RPE 占位 / 标题去编号 / §206 data-action 点击派发 / §207 exClick 三层 act 表 / §208 备份提醒
+// Iron Log 逻辑测试 · 第 13 段（共 13 段）：§191–§205 SEED 动作无孤儿 / plan-B 夹具 / 产品闭环冒烟 / sw.js 可编译与生命周期 / fetch 策略钉测 / CSS 变量有定义 / ± 长按连发 / 完成按钮语义色 / 组进度细条 / 折叠行 ≥44px / 卡片底部可换行 / 页头进度线 / 下一动作预览 / RPE 占位 / 标题去编号 / §206 data-action 点击派发 / §207 exClick 三层 act 表 / §208 备份提醒 / §209 资源 ?v= 三处一致
 // 本段由一次性脚本从 test-ironlog.js 机械拆出：断言与夹具逐字未改，只加了下面的壳。
 // 跑法：npm test（= node tests/run.js）。各段共用同一个 app 实例、状态连续流动，必须按序跑，不能单独跑某一段。
 const H = require('./harness.js');
@@ -197,7 +197,9 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
   {
     const css196 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
     const defs196 = new Set([...css196.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m => m[1]));
-    const uses196 = new Set([...(css196 + html + script).matchAll(/var\((--[a-z0-9-]+)/g)].map(m => m[1]));
+    // 引用要先去掉 CSS 注释：v0.9.152 起调色板的注释里会写「只引用 --trend-1…5」这种说明文字，
+    // 不剥掉就被当成一条真引用，报出「未定义：--trend-」。定义仍然扫全文。
+    const uses196 = new Set([...(css196.replace(/\/\*[\s\S]*?\*\//g, '') + html + script).matchAll(/var\((--[a-z0-9-]+)/g)].map(m => m[1]));
     check('196 变量定义扫描非空（防恒真）', defs196.size >= 8 && uses196.size >= 8);
     const undef196 = [...uses196].filter(u => !defs196.has(u));
     check('196 所有 var() 引用的变量都在 style.css 定义' + (undef196.length ? '（未定义：' + undef196.join(', ') + '）' : ''), undef196.length === 0);
@@ -256,7 +258,7 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
     const undone198 = (css198.match(/\.fs-done\.undone\{([^}]*)\}/) || ['', ''])[1];
     const done198 = (css198.match(/\.fs-done\.done\{([^}]*)\}/) || ['', ''])[1];
     check('198 未完成按钮不用红色（红色只留给破坏性操作）', !!undone198 && !/var\(--red\)/.test(undone198));
-    check('198 完成态是绿色实底', !!done198 && /background:var\(--green\)/.test(done198));
+    check('198 完成态是绿色实底', !!done198 && /background:var\(--green-fill\)/.test(done198));   // v0.9.151：语义没变（绿实底=完成），换成白字压得住的那一档
     const saveProg198 = T.state.program, saveEx198 = T.state.exercises, saveDay198 = T.state.settings.lastDay, savePos198 = T.curPos, saveSess198 = T.state.sessions;
     T.state.settings.lastDay = 'A'; T.curPos = 0;
     T.state.sessions = {};
@@ -562,5 +564,119 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
 
     s208.lastBackupAt = saved208.lastBackupAt; s208.backupSnoozeUntil = saved208.backupSnoozeUntil;
     T.renderBackupNag();
+  }
+  console.log('== 209. 资源 ?v= 与 APP_VERSION 三处一致（P0-1 缓存错配，v0.9.149）==');
+  // 防的是哪一次真实回归：sw.js 让导航走网络、同源资源走「缓存优先 + 后台更新」，所以部署后的第一次打开
+  // 可能出现「新 index.html + 旧 app.js」。凡是同时动过 data-action 名字和 ACTIONS 表的改动（v0.9.145 那种），
+  // 这一次访问就是点了没反应——而 §143 的静态双向对齐只测源码，测不到这种运行时错配。
+  // 修法是给页面的资源引用加 ?v=：版本一变 URL 就变，旧 service worker 的缓存里没有这个键，只能走网络。
+  // 前提是三处一致（index.html ↔ sw.js 的 SHELL ↔ CI 的改写）。缓存键含查询串，
+  // 所以 index.html 与 SHELL 必须逐字相同，否则预缓存命不中，离线就打不开外壳。
+  {
+    const html209 = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    const sw209 = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
+    const ci209 = fs.readFileSync(path.join(__dirname, '.github/workflows/deploy.yml'), 'utf8');
+    const esc209 = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const refVer209 = (file, url) => {
+      const m = new RegExp('["\']' + esc209(url) + '\\?v=([0-9.]+)["\']').exec(file);
+      return m ? m[1] : null;
+    };
+    check('209 index.html 里 style.css 带 ?v= 且等于 APP_VERSION', refVer209(html209, 'css/style.css') === T.APP_VERSION);
+    check('209 index.html 里 app.js 带 ?v= 且等于 APP_VERSION', refVer209(html209, 'js/app.js') === T.APP_VERSION);
+    // SHELL 的键带 ./ 前缀；两处不一致 = 预缓存白装
+    check('209 sw.js 的 SHELL 用同样的 ?v= 预缓存 css/js',
+      refVer209(sw209, './css/style.css') === T.APP_VERSION && refVer209(sw209, './js/app.js') === T.APP_VERSION);
+    check('209 index.html 里没有留下不带 ?v= 的 css/js 引用',
+      !/<link rel="stylesheet" href="css\/style\.css">/.test(html209)
+      && !/<script src="js\/app\.js"/.test(html209));
+    // CI 那步是人忘了改时的兜底：它必须真的存在，且同时改写两个 dist 文件
+    const stampLine209 = (ci209.match(/^.*\?v=\$VER.*$/m) || [''])[0];
+    check('209 CI 打戳步骤会改写 dist/index.html 与 dist/sw.js 的 ?v=',
+      /APP_VERSION = '\\K/.test(ci209) && /dist\/index\.html/.test(stampLine209) && /dist\/sw\.js/.test(stampLine209));
+  }
+  console.log('== 210. 白字实底按钮只能用 -fill 那一档（v0.9.151 对比度）==');
+  // 防的是哪一次真实回归：visual-check 的 D 项第一次跑就抓到「白字压 --accent」只有 3.22:1、
+  // 「白字压 --green」2.51:1——而且中招的正是最常被点的两个按钮（结束训练 .end-btn、完成这组 .fs-done.done）。
+  // 更麻烦的是这类实心按钮里有几个只在交互之后才出现（完成态、秒表运行、模态按钮），浏览器闸门按状态审计看不到它们。
+  // 所以这条必须在静态里钉住：同一个声明块里「白字 + 不是 -fill 的语义色背景」不允许出现，
+  // 并且三个 -fill 档对白色本身必须 ≥4.5:1（钉的是实际色值，不只是 token 名字）。
+  // 已知盖不住的一种：白字是跨块继承来的（如 .confirm-ok 只写背景，白字来自 .summary-card button）——
+  // 那类要靠 visual-check 把模态开成一轮审计来兜（已记在 TODO 里）。
+  {
+    const css210 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    const lum210 = (c) => { const f = (v) => { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+    const hex210 = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const ratio210 = (a, b) => { const l1 = lum210(a), l2 = lum210(b), hi = Math.max(l1, l2), lo = Math.min(l1, l2); return (hi + 0.05) / (lo + 0.05); };
+    const root210 = (css210.match(/:root\{([^}]*)\}/) || ['', ''])[1];
+    ['accent-fill', 'green-fill', 'red-fill'].forEach((tok) => {
+      const m = new RegExp('--' + tok + ':\\s*(#[0-9a-fA-F]{6})').exec(root210);
+      const got = m ? ratio210(hex210(m[1]), [255, 255, 255]) : 0;
+      check('210 ' + tok + ' 存在且白字压它 ≥4.5:1（实测 ' + got.toFixed(2) + ':1）', !!m && got >= 4.5);
+    });
+    // 扁平扫描：@media 里的规则会作为各自的块被扫到，不需要解析嵌套
+    const bad210 = [];
+    for (const m of css210.matchAll(/([^{}\/]+)\{([^{}]*)\}/g)) {
+      const sel = m[1].trim().replace(/\s+/g, ' '), decl = m[2];
+      if (/color:\s*#fff/i.test(decl) && /background:\s*var\(--(accent|green|red)\)/.test(decl)) bad210.push(sel);
+    }
+    check('210 没有「白字 + 非 -fill 语义色背景」的声明块', bad210.length === 0, bad210.join(' | '));
+    // 占位符颜色只在一条基础规则上写（和 44px 那条同一个做法）：原先只有 .fs-exnote 有，其余五处全是浏览器默认灰 3.46:1
+    const ph210 = [...css210.matchAll(/([^{}/]*)::placeholder\s*\{([^{}]*)\}/g)];
+    check('210 placeholder 颜色只写在一条基础规则上',
+      ph210.length === 1 && ph210[0][1].trim() === 'input::placeholder,textarea' && /color:var\(--muted\)/.test(ph210[0][2]),
+      '实际 ' + ph210.length + ' 条：' + ph210.map((m) => m[1].trim()).join(' | '));
+  }
+  console.log('== 211. 浅色主题：两套调色板必须同形、且各自达标（v0.9.152）==');
+  // 防的是哪一次真实回归：加 @media 块最容易出的三种事故——
+  // ① 只写了一半 token：没写的那些在浅色下仍是深色值，页面变成「半个浅色主题」，而且没人会当场发现；
+  // ② 深色下刚好合格的色值换到浅色又不达标（同一个灰压深底 5.2:1、压白底只有 3.4:1）；
+  // ③ 规则里写死的十六进制：这次就抓到 .trend-title/.lg-dir/.trend-empty 写死 #8b93a3（压白面板 3.4:1）、
+  //    .lg-dir.up/.down 写死 #3fb96f/#e05252（压白 2.5/3.8:1）、提示条写死 #2a2f3a（浅色下是「深底配深色文字」）。
+  // 所以这里不钉颜色名字，钉的是「两套都完整 + 各自实测达标 + 除调色板外没有写死的颜色」。
+  {
+    const css211 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
+    // 亮度/对比度算式与 §210 各写一份：测试段之间不共享局部函数，harness 只放桩与桥接
+    const lum211 = (c) => { const f = (v) => { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+    const hex211 = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const ratio211 = (a, b) => { const l1 = lum211(hex211(a)), l2 = lum211(hex211(b)), hi = Math.max(l1, l2), lo = Math.min(l1, l2); return (hi + 0.05) / (lo + 0.05); };
+    const dark211 = (css211.match(/:root\{([^}]*)\}/) || ['', ''])[1];
+    const lightM211 = /@media \(prefers-color-scheme: light\)\s*\{\s*:root\{([^}]*)\}/.exec(css211);
+    check('211 存在浅色块，且块内只覆写 :root 变量（不改选择器、不加 class、不碰结构）', !!lightM211);
+    const pal211 = (body) => { /** @type {{[k:string]:string}} */ const o = {}; for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) o[m[1]] = m[2]; return o; };
+    const D211 = pal211(dark211), L211 = pal211(lightM211 ? lightM211[1] : '');
+    const miss211 = Object.keys(D211).filter((k) => !(k in L211));
+    check('211 浅色块覆盖深色 :root 的每一个颜色变量（缺一个就是半个浅色主题）', miss211.length === 0 && Object.keys(L211).length > 0,
+      '浅色缺：' + miss211.join(' '));
+    // 数值判据：文字类 4.5:1（浅色正文按 TODO 要求 ≥7:1），图形类（趋势折线）3:1
+    const badText211 = [], badFill211 = [], badTrend211 = [];
+    for (const [name, P] of [['深色', D211], ['浅色', L211]]) {
+      if (!P['--bg'] || !P['--text']) continue;
+      const t = ratio211(P['--text'], P['--bg']);
+      check('211 ' + name + '正文压背景 ≥7:1（实测 ' + t.toFixed(2) + ':1）', t >= 7);
+      ['--muted', '--accent', '--green', '--red'].forEach((tok) => {
+        const r = ratio211(P[tok], P['--panel']);
+        if (r < 4.5) badText211.push(name + ' ' + tok + ' ' + r.toFixed(2));
+      });
+      ['accent-fill', 'green-fill', 'red-fill'].forEach((tok) => {
+        const r = ratio211('#ffffff', P['--' + tok]);
+        if (r < 4.5) badFill211.push(name + ' --' + tok + ' ' + r.toFixed(2));
+      });
+      [1, 2, 3, 4, 5].forEach((i) => {
+        const r = ratio211(P['--trend-' + i], P['--panel']);
+        if (r < 3) badTrend211.push(name + ' --trend-' + i + ' ' + r.toFixed(2));
+      });
+    }
+    check('211 两套主题下次要/语义文字压面板都 ≥4.5:1', badText211.length === 0, badText211.join(' | '));
+    check('211 两套主题下白字压 -fill 都 ≥4.5:1', badFill211.length === 0, badFill211.join(' | '));
+    check('211 两套主题下趋势折线压面板都 ≥3:1（图形判据）', badTrend211.length === 0, badTrend211.join(' | '));
+    // 调色板之外不许出现写死的十六进制：#fff 是唯一例外（白字压 -fill 由 §210 管）。
+    // 后面不接 - 或字母，是为了不把 #import-text、#add-btn 这类 id 选择器当成颜色。
+    const outside211 = [];
+    const stripped211 = css211.replace(/:root\{[^}]*\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    stripped211.split('\n').forEach((line, i) => {
+      const hits = line.match(/#[0-9a-fA-F]{3,8}(?![-\w])/g);
+      if (hits) hits.forEach((h) => { if (!/^#(fff|ffffff)$/i.test(h)) outside211.push((i + 1) + ':' + h); });
+    });
+    check('211 调色板之外没有写死的颜色（#fff 除外）', outside211.length === 0, outside211.join(' '));
   }
 };

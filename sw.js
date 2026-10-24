@@ -1,9 +1,11 @@
 /* Iron Log service worker —— 离线优先缓存应用外壳
  * 版本串由构建时 sed 替换（见 .github/workflows/deploy.yml），与 APP_VERSION 联动，
  * 版本一变缓存即失效，避免移动端长期跑旧副本。
+ * SHELL 里 css/js 的 ?v= 同样由那一步改写，必须与 index.html 里的引用逐字一致：
+ * 缓存键含查询串，两边不一致时预缓存命中不了，离线就加载不到外壳。
  */
-const CACHE = 'ironlog-v0.9.148';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './css/style.css', './js/app.js'];
+const CACHE = 'ironlog-v0.9.152';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './css/style.css?v=0.9.152', './js/app.js?v=0.9.152'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

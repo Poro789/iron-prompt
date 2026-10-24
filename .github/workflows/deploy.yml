@@ -77,14 +77,19 @@ jobs:
           cp css/style.css dist/css/
           cp js/app.js dist/js/
 
-      # 缓存失效联动：sw.js 的 CACHE 版本串跟随 js/app.js 里的 APP_VERSION
-      - name: Stamp service worker version
+      # 缓存失效联动：sw.js 的 CACHE 版本串 + 资源的 ?v= 参数都跟随 js/app.js 里的 APP_VERSION。
+      # ?v= 是给「导航走网络、资源走缓存」这条策略兜底的：新 index.html 一定请求新 URL，
+      # 旧 service worker 的缓存里没有这个键，就不可能拿到上一版的 app.js（P0-1）。
+      - name: Stamp asset versions
         run: |
           VER=$(grep -oP "APP_VERSION = '\K[0-9.]+" js/app.js)
           test -n "$VER" || { echo "APP_VERSION not found in js/app.js" >&2; exit 1; }
           echo "sw cache version -> ironlog-v$VER"
           sed -i "s/ironlog-v[0-9.]*/ironlog-v$VER/" dist/sw.js
           grep -n "const CACHE" dist/sw.js
+          sed -i -E "s#((\./)?(css/style\.css|js/app\.js))\?v=[0-9.]+#\1?v=$VER#g" dist/index.html dist/sw.js
+          echo "asset ?v= -> $VER"
+          grep -nF "?v=$VER" dist/index.html dist/sw.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

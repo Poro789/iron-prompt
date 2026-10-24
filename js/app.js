@@ -142,7 +142,7 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.148';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 会用它给 sw.js 打缓存版本戳
+const APP_VERSION = '0.9.152';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 用它给 sw.js 的缓存名和 css/js 的 ?v= 打戳（§209 钉三处一致）
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 /** @type {Day[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
@@ -1983,7 +1983,10 @@ function resumeTimers(){
 
 /* ---------------- 历史 & 导出 ---------------- */
 /* 趋势折线图：按指标分组（kg / 秒 / 次 不能共用一条 Y 轴），X=该动作被记录的次数，Y=最好一组的主指标 */
-const TREND_COLORS = ['#4f8cff', '#3fb96f', '#e0a030', '#e05252', '#9b6dff'];
+/* 折线的颜色不在这里——它跟着主题走，写在 css/style.css 的 --trend-1…--trend-5
+   （深色 :root 一套，浅色 @media 一套）。这里只发序号：SVG 的表现属性里不能用 var()，
+   所以颜色一律写进 style。tests/p03 里那条「数值不再用折线颜色画在图上」的断言只匹配 <text fill="#…">，不受影响。 */
+const TREND_VARS = ['--trend-1', '--trend-2', '--trend-3', '--trend-4', '--trend-5'];
 /** @type {{[k:string]:string}} */
 const TREND_KIND_LABEL = { weight: '重量（kg）', duration: '时长（秒）', reps: '次数' };
 /** @type {{[k:string]:string}} */
@@ -2052,21 +2055,23 @@ function trendChartSVG(entries, kind, label, conv){
   const yScale = (/** @type {number} */ v) => PAD.t + ph - ((v - yMin) / yRange) * ph;
   const xAt = (/** @type {number} */ i) => PAD.l + i * xStep;
   // 三条水平网格线 + 左侧刻度（读得出“这条线大概是多少”）
+  // 网格与刻度一律 currentColor：容器的 color 由 css 的 .trend-chart svg{color:var(--muted)} 给，
+  // 于是浅色主题下它们自动换成深灰（写死 #8b93a3 时压白面板只有 3.4:1）。
   let grid = '';
   [yMin, (yMin + yMax) / 2, yMax].forEach(v => {
     const y = yScale(v).toFixed(1);
-    grid += `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="rgba(139,147,163,.18)" stroke-width="1"/>
-      <text x="${PAD.l - 5}" y="${(+y + 3).toFixed(1)}" font-size="9" fill="#8b93a3" text-anchor="end">${trendValText(v, kind)}</text>`;
+    grid += `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="currentColor" stroke-opacity=".18" stroke-width="1"/>
+      <text x="${PAD.l - 5}" y="${(+y + 3).toFixed(1)}" font-size="9" fill="currentColor" text-anchor="end">${trendValText(v, kind)}</text>`;
   });
   // X 轴说明：横轴是每个动作各自被记录的次数，不是同一天的刻度，所以只标两端含义
-  const axis = `<text x="${PAD.l}" y="${H - 6}" font-size="9" fill="#8b93a3">最早</text>
-    <text x="${W - PAD.r}" y="${H - 6}" font-size="9" fill="#8b93a3" text-anchor="end">最近</text>`;
+  const axis = `<text x="${PAD.l}" y="${H - 6}" font-size="9" fill="currentColor">最早</text>
+    <text x="${W - PAD.r}" y="${H - 6}" font-size="9" fill="currentColor" text-anchor="end">最近</text>`;
   const lines = entries.map(([id, t], li) => {
-    const c = TREND_COLORS[li % TREND_COLORS.length];
+    const tv = TREND_VARS[li % TREND_VARS.length];
     const pts = t.sessions.map((s, i) => `${xAt(i).toFixed(1)},${yScale(val(id, s)).toFixed(1)}`).join(' ');
     const last = t.sessions[t.sessions.length - 1];
-    return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>
-      <circle cx="${xAt(t.sessions.length - 1).toFixed(1)}" cy="${yScale(val(id, last)).toFixed(1)}" r="2.5" fill="${c}"/>`;
+    return `<polyline points="${pts}" style="fill:none;stroke:var(${tv})" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${xAt(t.sessions.length - 1).toFixed(1)}" cy="${yScale(val(id, last)).toFixed(1)}" r="2.5" style="fill:var(${tv})"/>`;
   }).join('');
   return `<div class="trend-chart"><svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${label || TREND_KIND_LABEL[kind]}趋势图">${grid}${axis}${lines}</svg></div>`;
 }
@@ -2079,7 +2084,8 @@ function trendLegend(entries, conv){
     const kind = trendKind(t);
     const v = trendMetric(last) * trendConvFactor(id, conv);
     const u = conv ? 'kg' : trendUnit(id, kind);
-    return `<div class="lg-row"><span class="lg-swatch" style="background:${TREND_COLORS[li % TREND_COLORS.length]}"></span>`
+    const tv = TREND_VARS[li % TREND_VARS.length];
+    return `<div class="lg-row"><span class="lg-swatch" style="background:var(${tv})"></span>`
       + `<span class="lg-name">${esc(name)}</span>`
       + `<b class="lg-val">${trendValText(v, kind)} ${esc(u)}</b>`
       + `<span class="lg-dir ${esc(t.direction || 'new')}">${dir} · ${t.sessions.length} 次</span></div>`;

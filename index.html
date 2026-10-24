@@ -3,14 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<!-- 状态栏/浏览器工具栏的底色：按系统偏好各给一条，两条必须分别等于 css 里那一套的 --bg（§150 钉这个一致性）。
+     只写一条的话，浅色系统下工具栏还是深色，页面和工具栏之间会有一条明显的接缝。 -->
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1115">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f6f9">
 <title>Iron Log · 力量训练记录</title>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=0.9.152">
 
 </head><body>
 <noscript><p style="padding:24px;font-size:16px">Iron Log 需要在浏览器设置中启用 JavaScript 才能使用。</p></noscript>
@@ -171,7 +174,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div><script src="js/app.js" defer></script>
+<div class="toast" id="toast" role="status" aria-live="polite"></div><script src="js/app.js?v=0.9.152" defer></script>
 
 </body>
 </html>

@@ -276,8 +276,10 @@ const { planText, r, items, gt, prompt } = H.C;   // 上段产生的共享变量
 
   console.log('== 16. P2 拆分与趋势窗口 ==');
   check('index.html 无内联脚本/样式', !/<script>/.test(html) && !/<style>/.test(html));
-  check('index.html 引用外链资源', html.includes('href="css/style.css"') && html.includes('src="js/app.js"'));
-  check('app.js 用 defer 加载', html.includes('<script src="js/app.js" defer>'));
+  // 原语：样式与逻辑必须是外链、逻辑要 defer（不许内联）。P0-1 起外链带 ?v= 版本参数，
+  // 所以这里只钉「外链 + defer」这两件事本身，版本参数的一致性由 §209 逐字守。
+  check('index.html 引用外链资源', /href="css\/style\.css(\?v=[0-9.]+)?"/.test(html) && /src="js\/app\.js(\?v=[0-9.]+)?"/.test(html));
+  check('app.js 用 defer 加载', /<script src="js\/app\.js\?v=[0-9.]+" defer>/.test(html));
   check('TREND_WINDOW 常量存在', T.TREND_WINDOW === 12);
   check('导出含 trendsSpan', typeof T.buildExport(2).trendsSpan === 'number');
 

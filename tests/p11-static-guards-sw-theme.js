@@ -113,7 +113,8 @@ const { manifest, sw, p, card, mk } = H.C;   // 上段产生的共享变量
     const entries = [...sw162.matchAll(/'(\.\/[^']*)'/g)].map(m => m[1]);
     check('162 能解析出 SHELL 清单', entries.length >= 9);
     check('162 SHELL 每一条都存在于磁盘', entries.every(p => {
-      const rel = p === './' ? '.' : p.slice(2);
+      // P0-1：SHELL 里 css/js 的 ?v= 是缓存键的一部分，磁盘上没有查询串，比对前先去掉
+      const rel = (p === './' ? '.' : p.slice(2)).replace(/\?.*$/, '');
       return fs.existsSync(path.join(__dirname, rel));
     }));
     check('162 离线回退依赖的 ./index.html 在 SHELL 里', entries.includes('./index.html'));
@@ -137,14 +138,17 @@ const { manifest, sw, p, card, mk } = H.C;   // 上段产生的共享变量
     if(nav163prev) Object.defineProperty(globalThis, 'navigator', nav163prev); else delete globalThis.navigator;
   }
   console.log('== 164. 启动屏/状态栏/浏览器壳颜色一致（测试加固，无应用改动）==');
-  // §150 钉过 meta theme-color == --bg；这里补齐 manifest 的两个颜色字段：
+  // §150 钉过 meta theme-color == 那一套主题的 --bg；这里补齐 manifest 的两个颜色字段：
   // background_color 决定 PWA 启动屏底色，theme_color 决定状态栏——改一处忘另一处会闪色差。
+  // v0.9.152 起页面有两套主题，但 webmanifest 规范里没有「按主题的配色」，只有这一个值：
+  // 所以它钉的是深色那套的 --bg（安装/启动屏按深色走），浅色下的工具栏由 index.html 那条带 media 的 theme-color 负责。
+  // 取 --bg 一律从 :root 块里取，不靠「文件里第一个 --bg」——顺序一变就会钉错。
   {
     const man164 = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8'));
     const css164 = fs.readFileSync(path.join(__dirname, 'css/style.css'), 'utf8');
-    const bg164 = (css164.match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
-    check('164 manifest background_color 与 --bg 一致', !!bg164 && String(man164.background_color).toLowerCase() === bg164.toLowerCase());
-    check('164 manifest theme_color 与 --bg 一致', !!bg164 && String(man164.theme_color).toLowerCase() === bg164.toLowerCase());
+    const bg164 = ((css164.match(/:root\{([^}]*)\}/) || ['', ''])[1].match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+    check('164 manifest background_color 与深色 --bg 一致', !!bg164 && String(man164.background_color).toLowerCase() === bg164.toLowerCase());
+    check('164 manifest theme_color 与深色 --bg 一致', !!bg164 && String(man164.theme_color).toLowerCase() === bg164.toLowerCase());
   }
   console.log('== 165. 训练背景未填写时提示词要求 AI 先问（测试加固，无应用改动）==');
   // buildPrompt 对空背景输出「（未填写背景，请先问我）」（js/app.js:2214）——
@@ -246,6 +250,6 @@ const { manifest, sw, p, card, mk } = H.C;   // 上段产生的共享变量
     const nums = [...self172.matchAll(/console\.log\(['"`]== (\d+)\./g)].map(m => Number(m[1]));
     check('172 小节编号无重复且严格递增', nums.length > 100 && nums.every((n, i) => i === 0 || n > nums[i - 1]));
     // 加新小节时这一行也要改：它钉的是「已知最大编号」，漏改说明新小节加在了没人看见的地方。
-    check('172 最后一个编号就是本节', nums[nums.length - 1] === 208);
+    check('172 最后一个编号就是本节', nums[nums.length - 1] === 211);
   }
 };

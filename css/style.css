@@ -2,6 +2,30 @@
   color-scheme:dark; /* 原生控件（下拉弹层、滚动条、自动填充）跟随深色主题 */
   --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#262b36;
   --text:#e6e9ef; --muted:#8b93a3; --accent:#4f8cff; --green:#3fb96f; --red:#e05252;
+  /* 实心按钮（白字压色块）专用的一档，比上面三个暗：白字压 --accent/--green/--red 实测只有
+     3.22 / 2.51 / 3.82，过不了 visual-check D 项的 4.5:1（v0.9.151 补）。
+     上面三个仍作「文字/边框/进度条」用——文字压面板是 4.5–5.4:1，把 --accent 本身调暗反而会把那些拉下去。 */
+  --accent-fill:#2f6fd0; --green-fill:#1f7a48; --red-fill:#c23a3a;
+  /* 趋势图折线的系列色（js/app.js 只写 var(--trend-N)）：深色下就是原先那套亮色，一字未改；
+     浅色下的另一套在下面的 media 块里。放在 :root 里是为了让「颜色只有这一处」。 */
+  --trend-1:#4f8cff; --trend-2:#3fb96f; --trend-3:#e0a030; --trend-4:#e05252; --trend-5:#9b6dff;
+}
+/* 浅色主题（v0.9.152）：系统偏好浅色时只换这套变量——不动任何选择器、不加 class、不碰结构，
+   所以浅色下的版式、字号、间距、触达尺寸与深色完全一致，只有颜色不同。
+   判据：--text 压 --bg 16.9:1（TODO 要求 ≥7:1）；次要文字压三层背景 ≥6.2:1；
+   文字用的 --accent/--green/--red 压 --panel ≥6.2:1；白字压三个 -fill ≥6.2:1。
+   浅色下 -fill 与文字色取同值（它们本来就够暗），仍保留两个名字，免得规则要分叉。
+   两套值由 tests §150/§211 钉着；改任何一边都要同步 index.html 的两条 theme-color。 */
+@media (prefers-color-scheme: light){
+  :root{
+    color-scheme:light; /* 原生控件（下拉弹层、滚动条、自动填充）跟随浅色主题 */
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#e9edf3; --border:#d3d9e2;
+    --text:#111519; --muted:#4e5765; --accent:#1a5fb8; --green:#116b3d; --red:#b32f2f;
+    --accent-fill:#1a5fb8; --green-fill:#116b3d; --red-fill:#b32f2f;
+    /* 趋势图折线的系列色（js/app.js 的 TREND_COLORS 只写 var(--trend-N)，颜色在这里）：
+       图形类内容按 WCAG 1.4.11 的 3:1 判；浅色下原先那套亮色压白面板只有 2.3–3.8:1，看不见。 */
+    --trend-1:#2f6fd0; --trend-2:#1f7a48; --trend-3:#a06a12; --trend-4:#c23a3a; --trend-5:#7a4fd0;
+  }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -20,6 +44,9 @@ button{font-family:inherit;touch-action:manipulation;cursor:pointer}
  * 不参与渲染的控件（如恢复备份用的 input[type=file] 是 display:none）审计会跳过。 */
 button,input,select,textarea,summary{min-height:44px}
 input,textarea{font-family:inherit}
+/* 占位符走 --muted（压 panel2 实测 5.16:1）。不写就落到浏览器默认灰 rgb(117,117,117)，实测 3.46:1。
+ * 和 44px 那条一样写在基础规则上：原先只有 .fs-exnote 有，其余五处全是默认灰。 */
+input::placeholder,textarea::placeholder{color:var(--muted)}
 .wrap{max-width:640px;margin:0 auto;padding:0 12px}
 
 /* ---------------- 顶栏（版本号居中 + 汉堡右） ---------------- */
@@ -63,7 +90,7 @@ header .ver{color:var(--muted);font-size:12px}
   position:relative;height:44px;border-radius:10px;border:1px solid var(--border);
   background:var(--panel2);color:var(--muted);font-size:15px;font-weight:700;
 }
-.drawer-day .day-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.drawer-day .day-btn.active{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff}
 .drawer-day .day-btn .dot{
   position:absolute;top:6px;right:8px;width:7px;height:7px;border-radius:50%;
   background:var(--green);display:none;
@@ -152,6 +179,7 @@ header .ver{color:var(--muted);font-size:12px}
 .fs-values{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 .fs-input{
   width:110px;height:64px;text-align:center;font-size:30px;font-weight:700;
+  font-variant-numeric:tabular-nums;   /* 页面上其余显示数字的地方都已有；iOS 的系统字体默认是比例数字，不写会跳 */
   background:var(--panel2);border:1px solid var(--border);border-radius:14px;color:var(--text);
   -moz-appearance:textfield;
 }
@@ -174,7 +202,7 @@ header .ver{color:var(--muted);font-size:12px}
   width:72px;height:64px;border-radius:14px;border:1px solid var(--border);
   background:var(--panel2);color:var(--text);font-size:16px;font-weight:600;
 }
-.fs-timer.running{background:var(--accent);border-color:var(--accent);color:#fff}
+.fs-timer.running{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff}
 .fs-timer:active{background:var(--border)}
 /* RPE */
 .rpe-row{display:flex;align-items:center;justify-content:center;gap:8px}
@@ -196,7 +224,7 @@ header .ver{color:var(--muted);font-size:12px}
   background:none;color:var(--text);font-size:19px;font-weight:700;letter-spacing:1px;
 }
 .fs-done:active{transform:scale(.98)}
-.fs-done.done{background:var(--green);border-color:var(--green);color:#fff}
+.fs-done.done{background:var(--green-fill);border-color:var(--green-fill);color:#fff}
 .fs-done.undone{background:none;border-color:var(--muted);color:var(--text)}
 /* 底部：加组 + 动作备注 */
 /* 底部按钮行（v0.9.136 修复）：多组动作时「加一组+删最后一组+备注」三件并排，
@@ -209,7 +237,6 @@ header .ver{color:var(--muted);font-size:12px}
   flex:1 1 160px;min-width:0;height:40px;padding:0 12px;font-size:16px;background:none;   /* 16px：iOS 上小于 16px 的输入框聚焦会把整页放大 */
   border:1px solid var(--border);border-radius:10px;color:var(--text);
 }
-.fs-exnote::placeholder{color:var(--muted)}
 /* 跳过此动作 */
 .skip-ex{
   width:100%;height:40px;margin-top:10px;border-radius:10px;
@@ -230,7 +257,7 @@ header .ver{color:var(--muted);font-size:12px}
 
 .end-btn{
   width:100%;height:52px;margin-top:16px;border:none;border-radius:12px;
-  background:var(--green);color:#fff;font-size:17px;font-weight:700;
+  background:var(--green-fill);color:#fff;font-size:17px;font-weight:700;
 }
 .discard-btn{
   width:100%;height:36px;margin-top:8px;border:none;background:none;
@@ -241,18 +268,18 @@ header .ver{color:var(--muted);font-size:12px}
 
 /* ---------------- 历史 ---------------- */
 .trend-block{margin-bottom:14px}
-.trend-title{font-size:12px;color:#8b93a3;letter-spacing:.04em;text-transform:uppercase;margin:2px 0 6px}
+.trend-title{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin:2px 0 6px}
 .trend-chart{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px}
-.trend-chart svg{width:100%;height:auto;display:block}
+.trend-chart svg{width:100%;height:auto;display:block;color:var(--muted)} /* 网格与刻度用 currentColor，跟着 --muted 走 */
 .trend-legend{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
 .lg-row{display:flex;align-items:center;gap:8px;font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
 .lg-swatch{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
 .lg-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lg-val{font-variant-numeric:tabular-nums}
-.lg-dir{flex:0 0 auto;font-size:12px;color:#8b93a3}
-.lg-dir.up{color:#3fb96f}
-.lg-dir.down{color:#e05252}
-.trend-empty{background:var(--panel);border:1px dashed var(--border);border-radius:12px;padding:14px;color:#8b93a3;font-size:13px;line-height:1.6;margin-bottom:12px}
+.lg-dir{flex:0 0 auto;font-size:12px;color:var(--muted)}
+.lg-dir.up{color:var(--green)}
+.lg-dir.down{color:var(--red)}
+.trend-empty{background:var(--panel);border:1px dashed var(--border);border-radius:12px;padding:14px;color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:12px}
 .hist-item{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
 .hist-item summary{list-style:none;cursor:pointer;padding:12px;display:flex;align-items:center;gap:8px}
 .hist-item summary::-webkit-details-marker{display:none}
@@ -306,7 +333,7 @@ header .ver{color:var(--muted);font-size:12px}
 #import-text{font-size:16px}
 .import-btn{
   width:100%;height:44px;margin-top:8px;border:none;border-radius:10px;
-  background:var(--accent);color:#fff;font-size:15px;font-weight:700;
+  background:var(--accent-fill);color:#fff;font-size:15px;font-weight:700;
 }
 .import-msg{font-size:12px;margin-top:8px;white-space:pre-wrap;word-break:break-all}
 .import-msg.err{color:var(--red)}
@@ -330,25 +357,40 @@ header .ver{color:var(--muted);font-size:12px}
 .summary-card p{color:var(--muted);font-size:14px;margin:0;white-space:pre-line} /* 描述可能多行：导入前列出的改动 */
 .summary-card button{
   width:100%;height:46px;margin-top:16px;border:none;border-radius:10px;
-  background:var(--accent);color:#fff;font-size:15px;font-weight:700;
+  background:var(--accent-fill);color:#fff;font-size:15px;font-weight:700;
 }
 .confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .confirm-actions button{margin-top:16px}
 .confirm-cancel{background:var(--panel2)!important;color:var(--muted)!important;border:1px solid var(--border)!important}
-.confirm-ok{background:var(--red)!important}
+.confirm-ok{background:var(--red-fill)!important}
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom));
-  z-index:60;background:#2a2f3a;border:1px solid var(--border);color:var(--text);
+  z-index:60;background:var(--panel2);border:1px solid var(--border);color:var(--text);
   padding:8px 16px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;
   transition:opacity .2s;max-width:90vw;
 }
 .toast.show{opacity:1}
 /* 带按钮的提示条才接收点击（普通提示不挡住下面的控件） */
 .toast.with-act{pointer-events:auto}
-.toast .toast-act{margin-left:10px;padding:4px 10px;background:var(--panel2);
+/* 原先提示条写死 #2a2f3a、按钮写死 --panel2：浅色下会变成「浅字压浅底」。
+   两者都改用面板层（提示条 panel2、按钮 panel），深浅两套下都是「深一档压浅一档」的同一种层次，不用再开一份色值。 */
+.toast .toast-act{margin-left:10px;padding:4px 10px;background:var(--panel);
   border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px}
 /* 系统「减弱动态效果」开启时去掉过渡/动画（抽屉滑动、提示条淡入、进度条滑动）；
    JS 侧的平滑滚动由 scrollToTop() 同步判断 */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition:none!important;animation:none!important}
+}
+
+/* ---------------- 宽屏/平板/桌面适配（渐进增强） ---------------- */
+@media (min-width: 768px){
+  .wrap{max-width:800px;padding:0 24px}
+  /* 今日卡片保持专注视窗宽度，避免宽屏下操作跨度过大 */
+  #view-today .fs-card{max-width:560px;margin-left:auto;margin-right:auto}
+  #view-today .session-status,
+  #view-today .warn-inline,
+  #view-today .end-btn,
+  #view-today .discard-btn{max-width:560px;margin-left:auto;margin-right:auto}
+  /* 历史与设置卡片在大屏下排版更舒展 */
+  .set-card{padding:18px 20px}
 }
