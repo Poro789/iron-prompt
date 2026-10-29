@@ -4,8 +4,8 @@
  * SHELL 里 css/js 的 ?v= 同样由那一步改写，必须与 index.html 里的引用逐字一致：
  * 缓存键含查询串，两边不一致时预缓存命中不了，离线就加载不到外壳。
  */
-const CACHE = 'ironlog-v0.9.152';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './css/style.css?v=0.9.152', './js/app.js?v=0.9.152'];
+const CACHE = 'ironlog-v0.9.153';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './css/style.css?v=0.9.153', './js/app.js?v=0.9.153'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

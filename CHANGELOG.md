@@ -2,6 +2,15 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.153]
+### 修复
+- **备份文件名从「只到日期」改成精确到秒**（`js/app.js` 新增 `backupStamp()`，`doBackup` 用它拼 `ironlog-backup-YYYY-MM-DD-HHMMSS.json`）。日期只到天，同一天第二次导出就是同名，浏览器会静默存成 `ironlog-backup-2026-10-24 (1).json`、`" (2)"`……这不是设想出来的风险：用户的下载夹里真堆了 20 个这种副本，而备份是换设备的唯一路径——一堆 `(1)(2)` 里没人判断得出哪个最新，也就敢留全部或一个都不敢留。时间戳按**本地时区**，理由同 `localDateStr`（UTC 会把凌晨的导出记到前一天的名字上）。备份内容里的 `exportedAt` 仍是 `YYYY-MM-DD`（现有测试钉着它的格式：`tests/p03-conventions-dates-pr-export.js:185`；恢复只读 `state`，不看文件名）。
+### 变更
+- `tools/visual-check.js` 不再往用户的下载夹写文件：开头把下载目录重定向到 `.visual/downloads`（每次先清空，所以「出现了备份文件」一定是本轮下载的），走 `Page.setDownloadBehavior`（页面会话上最窄的接口），被拒则退回 `Browser.setDownloadBehavior`。C 段末尾新增一条断言：那个文件必须出现在 `.visual/downloads`，且名字匹配 `^ironlog-backup-\d{4}-\d{2}-\d{2}-\d{6}\.json$`——同一条既钉「重定向真的生效」，也钉「文件名精确到秒」，两件都不靠注释兜。
+- 测试 **§212**（3 条）：临时换掉 `document.createElement` 桩，抓出 `doBackup` 真建的那个 `<a>`，断言 ① 它写进 `a.download` 的名字精确到秒；② 名字里那段时间按本地时区解析后等于 `settings.lastBackupAt`（实现改用 UTC 就偏 8 小时，这条红）；③ 文件名日期段与备份内容里的 `exportedAt` 是同一天（否则「文件叫 10-29、里面写 10-28」会把人误导到错的那份）。§172 的「已知最大编号」跟着改到 212。
+- 版本升到 0.9.153（`js/app.js:145` + `package.json` + `index.html` 两处 `?v=` + `sw.js` 的 `CACHE`/`SHELL`）。
+- 验证：`npm run typecheck` 0 错误；`node tests/run.js` **1104 通过 / 0 失败**（上版 1101，+3：§212）；`node tools/visual-check.js 390` **109 项通过 / 0 失败**（上版 108，+1：备份文件落在 `.visual/downloads`）。本轮实测生成的是 `.visual/downloads/ironlog-backup-2026-10-29-082840.json`，用户的下载夹没有新增文件。
+
 ## [0.9.152]
 ### 新增
 - **浅色主题**（TODO 的 P0-2）。做法就是 `css/style.css` 里在 `:root` 后面加一个 `@media (prefers-color-scheme: light){ :root{…} }` 块：**只换变量**——不动任何选择器、不加 class、不碰结构，所以浅色下的版式、字号、间距、44px 触达与深色完全一致，差别只有颜色。浅色那套的实测：正文压背景 **16.94:1**（TODO 要求 ≥7:1）、次要/语义文字压面板 **5.3–6.6:1**、白字压三个 `-fill` **6.2:1**。浅色下 `-fill` 与文字色取同一个值（它们本来就够暗），但仍保留两个名字，免得规则要分叉。

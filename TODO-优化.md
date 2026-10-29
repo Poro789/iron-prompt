@@ -2,10 +2,10 @@
 
 给新窗口的交接文档。生成于 2026-10-23 那次「技能生态评估」会话，所有条目都对着本机实际代码核过（文件:行号都是当时读到的位置，动手前先复核一遍）。
 
-当前状态：`APP_VERSION = 0.9.152`（`js/app.js:145`）。**已完成：P0-1（v0.9.149）、P1-3（v0.9.150）、P1-4（已测量，不做）、P1-5（D 项，v0.9.150）+ D 项抓出的对比度（v0.9.151）、P0-2（浅色主题，v0.9.152）。**
-**三条闸门全绿：typecheck 0 错；`npm test` 1101 通过 / 0 失败；`node tools/visual-check.js 390` 108 项通过 / 0 失败（七个状态 + 两个模态，各 × A/B/D × dark/light，外加 F 项钉「浅色真的生效」）。** 改动都未提交，在工作区。
+当前状态：`APP_VERSION = 0.9.153`（`js/app.js:145`）。**已完成：P0-1（v0.9.149）、P1-3（v0.9.150）、P1-4（已测量，不做）、P1-5（D 项，v0.9.150）+ D 项抓出的对比度（v0.9.151）、P0-2（浅色主题，v0.9.152）、备份文件名精确到秒 + 闸门不再污染下载夹（v0.9.153）。**
+**三条闸门全绿：typecheck 0 错；`npm test` 1104 通过 / 0 失败；`node tools/visual-check.js 390` 109 项通过 / 0 失败（七个状态 + 两个模态，各 × A/B/D × dark/light，外加 F 项钉「浅色真的生效」、C 段末尾钉「备份文件落在 `.visual/downloads`、名字精确到秒」）。**
 剩余待办：P2-6（跨设备同步，文档自己建议 12 月后再做）。
-截图：`.visual/base-149/`（P0-1 前）、`.visual/before-contrast/`（对比度修复前）、`.visual/after-151/`，以及 `.visual/vc-390-*.png`（深色）与 `.visual/vc-390-*-light.png`（浅色）——都不入库。仓库规模（v0.9.152）：`index.html` 180 行、`css/style.css` 396 行、`js/app.js` 2944 行、`tests/p01…p13` 共 13 段（`p13` 682 行）、`tools/visual-check.js` 418 行。
+截图：`.visual/base-149/`（P0-1 前）、`.visual/before-contrast/`（对比度修复前）、`.visual/after-151/`，以及 `.visual/vc-390-*.png`（深色）与 `.visual/vc-390-*-light.png`（浅色）——都不入库。v0.9.153 起 C 段那次真下载的备份也在 `.visual/downloads/`（以前会落到用户的系统下载夹）。仓库规模（v0.9.153）：`index.html` 180 行、`css/style.css` 396 行、`js/app.js` 2954 行、`tests/p01…p13` 共 13 段（`p13` 719 行）、`tools/visual-check.js` 476 行。
 
 ## 怎么开始
 

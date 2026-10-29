@@ -42,7 +42,7 @@ node tools/visual-check.js 390   # 真实浏览器闸门：A 水平溢出 + B �
 ## 不要读、不要改
 
 - `archive/` —— v1（IronPrompt Pro）的完整归档，已在 `.gitignore` 里，不入库。旧版代码在 git 历史里（至 v1.3.1）。
-- `.visual/` —— `tools/visual-check.js` 生成的截图产物，不入库。
+- `.visual/` —— `tools/visual-check.js` 生成的截图产物，不入库。v0.9.153 起 C 段那次真下载的备份也落在 `.visual/downloads/`（`Page.setDownloadBehavior` 重定向）——以前它会把测试桩丢进用户的系统下载夹，攒出了 20 个 `ironlog-backup-… (1).json`。
 - `node_modules/` —— 只有 typescript（类型检查用）。
 
 ## 测试的写法

@@ -39,6 +39,13 @@ if (!browser) {
 
 const outDir = path.join(ROOT, '.visual');
 fs.mkdirSync(outDir, { recursive: true });
+/* 下载落点（v0.9.153）：C 段真点「现在导出备份」，浏览器默认会把文件丢进系统的下载夹——
+ * 跑一次闸门就在用户的 Downloads 里堆一个 ironlog-backup-*.json（那里真攒过 20 个测试桩备份）。
+ * 重定向到 .visual/downloads（不入库）：不动用户目录，同时这个文件正好用来核对备份的文件名。
+ * 每次先清空：这样「出现了备份文件」就是本轮真的下载了，不是上一轮留下的。 */
+const dlDir = path.join(outDir, 'downloads');
+fs.rmSync(dlDir, { recursive: true, force: true });
+fs.mkdirSync(dlDir, { recursive: true });
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'iron-vc-'));
 const url = 'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/');
 // Linux（CI 容器）里 Chrome 的 setuid sandbox 常不可用；Windows 不需要这两个开关。
@@ -130,6 +137,10 @@ const CONTRAST_SCAN = `(() => {
   const pend = new Map();
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } };
   const send = (method, params = {}) => new Promise(res => { const id = ++mid; pend.set(id, res); ws.send(JSON.stringify({ id, method, params })); });
+  // 把下载定向到 .visual/downloads。页面会话上的 Page 域命令是最窄的接口（只影响这个标签页），
+  // 它被拒就退回 Browser 域——两者都失败时后面那条「备份文件出现了吗」会红，不会静默污染下载夹。
+  const dlResp = await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: dlDir });
+  if (dlResp.error) await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dlDir });
   const evaljs = async expression => {
     const m = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
     if (m.result.exceptionDetails) throw new Error('页面求值失败: ' + JSON.stringify(m.result.exceptionDetails.exception && m.result.exceptionDetails.exception.description || m.result.exceptionDetails.text));
@@ -371,6 +382,17 @@ const CONTRAST_SCAN = `(() => {
   await sleep(300);
   check('C 点「现在导出备份」：提醒收起并记下时间', await evaljs(`document.getElementById('backup-nag').style.display === 'none' && state.settings.lastBackupAt > 0`));
   check('C 备份这条链不产生未捕获异常', await evaljs(`(window.__vcErr || 0) === 0`));
+
+  /* 下载真的落在 .visual/downloads、且名字精确到秒（v0.9.153）。这条同时钉两件事：
+   * ① 重定向真的生效——闸门不再往用户的下载夹丢文件（开头清空过，所以出现的文件必是本轮的）；
+   * ② 备份名带 HHMMSS：只到日期时同一天第二次导出会被浏览器静默存成 " (1)"、" (2)"，
+   *    换设备时看不出哪个是最新的——真实下载夹里就因此堆过 20 个这样的副本。 */
+  let bakName = '';
+  for (let i = 0; i < 20 && !bakName; i++) {
+    bakName = fs.readdirSync(dlDir).find(f => /^ironlog-backup-\d{4}-\d{2}-\d{2}-\d{6}\.json$/.test(f)) || '';
+    if (!bakName) await sleep(250);
+  }
+  check('C 备份文件落在 .visual/downloads，文件名精确到秒' + (bakName ? '：' + bakName : ''), !!bakName);
 
   /* E) 两个模态各开一轮审计（P1-5 的收尾，v0.9.152）：C 段以前从不点开确认框和小结，
    * 所以上一版对比度修复里的 `.confirm-ok`、`.summary-card button` 是「同机制所以大概也超标」推出来的，

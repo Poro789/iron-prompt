@@ -679,4 +679,41 @@ const { r, items, before, sw, p } = H.C;   // 上段产生的共享变量
     });
     check('211 调色板之外没有写死的颜色（#fff 除外）', outside211.length === 0, outside211.join(' '));
   }
+
+  /* ============================================================
+   * 212. 备份文件名精确到秒（v0.9.153）
+   * 防的是真实事故：名字只到日期（'ironlog-backup-' + exportedAt），同一天第二次导出就是同名，
+   * 浏览器静默存成 "ironlog-backup-2026-10-24 (1).json"、" (2)"……用户的下载夹因此堆了 20 个这种
+   * 副本，而备份是换设备的唯一路径——一堆 (1)(2) 里没人能判断哪个最新，也不敢删旧的。
+   * 断言的是 doBackup 真正写进 a.download 的名字，不是某个没人调的辅助函数：
+   * 临时换掉 document.createElement 桩，抓出它建的那个 <a>（harness 只放桩与桥接，不动它）。
+   * ============================================================ */
+  console.log('== 212. 备份文件名精确到秒：同一天导两次不会撞名（v0.9.153）==');
+  {
+    /** @type {any} */ const doc212 = globalThis.document;
+    /** @type {any[]} */ const made212 = [];
+    const realCreate212 = doc212.createElement.bind(doc212);
+    doc212.createElement = (/** @type {string} */ tag) => { const el = realCreate212(tag); made212.push(el); return el; };
+    let name212 = '';
+    try {
+      T.doBackup();
+      const a212 = made212.find((e) => e.download);
+      name212 = a212 ? String(a212.download) : '';
+    } finally {
+      doc212.createElement = realCreate212;
+    }
+    check('212 备份名精确到秒 ironlog-backup-YYYY-MM-DD-HHMMSS.json（实测 ' + name212 + '）',
+      /^ironlog-backup-\d{4}-\d{2}-\d{2}-\d{6}\.json$/.test(name212));
+    const m212 = /^ironlog-backup-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})\.json$/.exec(name212);
+    // 名字里那段时间必须就是导出的那一刻：按本地时区解析后与 lastBackupAt 对得上（差不到 2 秒）。
+    // 若实现改用 UTC，本地解析会偏 8 小时，这条就红——和 localDateStr 的理由同一个（§见那里）。
+    const local212 = m212 ? new Date(Number(m212[1]), Number(m212[2]) - 1, Number(m212[3]),
+      Number(m212[4]), Number(m212[5]), Number(m212[6])).getTime() : NaN;
+    const ts212 = T.state.settings.lastBackupAt;
+    check('212 名字里的时间等于导出的那一刻（本地时区，不是 UTC）',
+      Number.isFinite(local212) && Math.abs(local212 - ts212) < 2000);
+    // 日期段与备份内容里的 exportedAt 必须是同一天：否则「文件叫 10-25、里面写 10-24」会误导排序。
+    check('212 文件名日期段与备份的 exportedAt 一致',
+      !!m212 && m212[1] + '-' + m212[2] + '-' + m212[3] === T.localDateStr(ts212));
+  }
 };

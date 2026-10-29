@@ -142,7 +142,7 @@
  */
 
 const LS_KEY = 'ironlog.v1';
-const APP_VERSION = '0.9.152';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 用它给 sw.js 的缓存名和 css/js 的 ?v= 打戳（§209 钉三处一致）
+const APP_VERSION = '0.9.153';   // 唯一版本源：页头徽章与「关于」卡片都从这里渲染；CI 用它给 sw.js 的缓存名和 css/js 的 ?v= 打戳（§209 钉三处一致）
 const TREND_WINDOW = 12;       // 趋势计算回看的训练次数（导出原始日志仍只带用户选的 N 次）
 /** @type {Day[]} */ const DAYS = ['A', 'B'];   // 计划与会话只有 A/B 两日；类型闸门靠它把 day 收成 'A'|'B'（必须定义在 migrate 之前）
 
@@ -2748,9 +2748,19 @@ function snoozeBackup(){
   renderBackupNag();
   toast(`备份提醒已推迟 ${BACKUP_SNOOZE_DAYS} 天`);
 }
+/* 备份文件名精确到秒。只到日期时，同一天第二次导出就是同名，浏览器静默存成
+ * "ironlog-backup-2026-10-24 (1).json"、" (2)"……而这份文件是换设备的唯一路径——
+ * 一堆带 (1)(2) 的副本里没人能看出哪个是最新的，也就没法放心地拷走旧的。
+ * 时间戳按本地时区，理由同 localDateStr：UTC 会把凌晨的导出记到前一天的名字上。 */
+/** @param {number} ts epoch ms @returns {string} 文件名时间戳 YYYY-MM-DD-HHMMSS（本地时区） */
+function backupStamp(ts){
+  const d = new Date(ts);
+  const p = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return localDateStr(ts) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
 function doBackup(){
   const data = buildBackup();
-  const name = 'ironlog-backup-' + data.exportedAt + '.json';
+  const name = 'ironlog-backup-' + backupStamp(Date.now()) + '.json';
   try{
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
